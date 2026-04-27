@@ -1,3 +1,5 @@
+//nest promt issue where it seems like i cant attack when the enemy is, we should be able to attack at the same time. when that occurs within a window (have it be equal to the attack interval (also attacks should only land when attack interval is over)) [left click within parry window in range of enemy strike (parry window of the last attacker used, otherwise cancel attack and parry)]In parry window parry, cancel and knock back both attackers also there should be collision between players, show hit boxes of attack and for players as well, when right up against one another, attacks should still land address all of these issues
+
 const ARENA_WIDTH = 900;
 const ARENA_HEIGHT = 500;
 const GRAVITY = 0.6;

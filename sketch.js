@@ -17,7 +17,7 @@ let cameraZoom = 1;
 let cameraX = 0;
 let cameraY = 0;
 
-function setup() {
+function setup() {//test
   createCanvas(ARENA_WIDTH, ARENA_HEIGHT);
   document.oncontextmenu = () => false;
   initBattle();

@@ -6,7 +6,7 @@ function updateDamageNumbers(dt) {
     return !num.finished;
   });
 }
-
+//test
 function drawDamageNumbers() {
   damageNumbers.forEach((num) => num.draw());
 }

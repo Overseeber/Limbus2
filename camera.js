@@ -9,7 +9,7 @@ function beginCamera() {
   scale(cameraZoom);
   translate(-cameraX, -cameraY);
 }
-
+//test
 function endCamera() {
   pop();
 }

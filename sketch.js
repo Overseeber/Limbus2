@@ -38,6 +38,7 @@ function initBattle() {
   battleTimer = 0;
   player.reset();
   enemy.reset();
+  damageNumbers = [];
 }
 
 function draw() {

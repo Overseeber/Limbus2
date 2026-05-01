@@ -108,7 +108,7 @@ function drawDashCharges(fighter, x, y, width) {
 
 function drawParryCharges(fighter, x, y, width) {
   const count = fighter.parryCount;
-  const total = 5;
+  const total = 3;
   const spacing = 10;
   const startX = x + (width - (total - 1) * spacing) / 2;
   for (let i = 0; i < total; i++) {

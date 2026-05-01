@@ -52,14 +52,17 @@ class Fighter {
     this.parryIndicator = 0;
     this.dashAttacked = false;
     this.evadeRequested = false;
-    this.parryCount = 5;
+    this.parryCount = 3;
     this.parryTimer = 0;
     this.parryStunTimer = 0;
     this.ai = {
       moveLeft: false,
       moveRight: false,
+      moveUp: false,
+      moveDown: false,
       attack: false,
       defend: false,
+      evade: false,
     };
     this.name = 'John Limbus';
     this.title = 'glory to limbus company';
@@ -158,7 +161,7 @@ class Fighter {
       this.combo = 0;
     }
 
-    if (this.parryTimer <= 0 && this.parryCount < 5) {
+    if (this.parryTimer <= 0 && this.parryCount < 3) {
       this.parryCount += 1;
       this.parryTimer = 10;
     }
@@ -200,16 +203,46 @@ class Fighter {
 
   updateAIControls(opponent) {
     const distance = opponent.pos.x - this.pos.x;
+    const absDistance = abs(distance);
+    
+    // Basic movement
     this.ai.moveLeft = distance < -80;
     this.ai.moveRight = distance > 80;
-    this.ai.moveUp = random() < 0.003 && abs(distance) < 220;
+    this.ai.moveUp = random() < 0.003 && absDistance < 220;
     this.ai.moveDown = false;
-    this.ai.attack = abs(distance) < 120 && this.attackTimer <= 0;
-    this.ai.defend = random() < 0.01;
+    
+    // Check if opponent is about to attack (strikeActive with parryWindow)
+    const opponentAttacking = opponent.strikeActive && opponent.parryWindow > 0;
+    const opponentInRange = absDistance < 150;
+    
+    // Evade when opponent is attacking and in range
+    if (opponentAttacking && opponentInRange && this.evadeTimer <= 0 && !this.isEvading) {
+      this.ai.evade = true;
+      this.requestEvade();
+      return;
+    }
+    this.ai.evade = false;
+    
+    // Block when opponent is in attack range
+    if (opponentInRange && this.parryCount > 0) {
+      this.ai.defend = random() < 0.03;
+    } else {
+      this.ai.defend = false;
+    }
+    
+    // Dash attack when in close range
+    if (absDistance < 100 && this.dashCharges > 0 && this.attackTimer <= 0 && random() < 0.01) {
+      this.startDash();
+    }
+    
+    // Regular attack when in range and not on cooldown
+    this.ai.attack = absDistance < 120 && this.attackTimer <= 0 && !opponentAttacking;
+    
     if (this.ai.attack) {
       this.requestAttack();
       this.releaseAttack(false);
     }
+    
     if (this.ai.defend) {
       this.requestGuard();
     } else {
@@ -343,6 +376,13 @@ class Fighter {
   }
 
   executeAttack(opponent, ignoreParry = false) {
+    // If attacker has no parry count, interrupt their attack (it goes through as if they didn't attack)
+    if (!ignoreParry && this.parryCount <= 0) {
+      this.state = 'idle';
+      this.strikeActive = false;
+      return;
+    }
+
     const attackType = this.chargeAttack ? 'heavy' : 'light';
     this.state = 'attack';
     this.strikeActive = true;
@@ -408,6 +448,7 @@ class Fighter {
     this.attackTimer = this.attackInterval;
     attacker.attackTimer = attacker.attackInterval;
     this.combo = max(0, this.combo - 1);
+    // Only the defender (parrier) loses parry count, not the attacker
     this.parryCount -= 1;
     attacker.parryStunTimer = 0.2;
     this.parryStunTimer = 0.2;
@@ -472,7 +513,7 @@ class Fighter {
     if (this.combo > 5) {
       this.addStatus('Charge', 1, 1);
     }
-    this.parryCount = min(5, this.parryCount + 1);
+    this.parryCount = min(3, this.parryCount + 1);
   }
 
   addCombo(attacker) {

@@ -126,6 +126,19 @@ class Fighter {
     this.title = character.title;
     this.weapon = this.characterKey === 'VALENCINA' ? 'La Spada di Palermo' : 'bus';
     this.baseDamage = character.baseDamage;
+    
+    // Set controls for player
+    if (!this.isAI) {
+      this.controls = {
+        left: 'a',
+        right: 'd',
+        up: 'w',
+        down: 's',
+        evade: 'e',
+      };
+    } else {
+      this.controls = null;
+    }
   }
 
   isDead() {

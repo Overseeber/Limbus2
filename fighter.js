@@ -217,7 +217,7 @@ class Fighter {
         // During recovery phase, bar stays at 0
         this.stagger = 0;
       } else {
-        // Full recovery - exit staggered state
+        // Full recovery - automatically exit staggered state
         this.state = 'idle';
       }
     }
@@ -434,11 +434,16 @@ class Fighter {
       this.attackRelease = false;
     }
 
-    if (this.isGuarding) {
+    if (this.isGuarding && !this.attackRequest) {
       this.state = 'guard';
       if (this.ai.defend && random() < 0.02) {
         this.isCountering = true;
       }
+    }
+    
+    // Cancel guard when attack is requested
+    if (this.attackRequest && this.isGuarding) {
+      this.releaseGuard();
     }
 
     if (this.strikeActive && this.parryWindow <= 0) {
@@ -519,6 +524,9 @@ class Fighter {
   executeSlamAttack(opponent) {
     // Only usable in mid-air
     if (this.onGround()) return;
+    
+    // Cancel guard state when starting slam attack
+    this.releaseGuard();
     
     this.isSlamAttacking = true;
     this.state = 'slam';

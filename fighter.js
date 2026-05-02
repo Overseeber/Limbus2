@@ -856,7 +856,7 @@ class Fighter {
     if (this.hitOpponent(opponent, this.calcAttackBox(this.attackRange))) {
       const finalDamage = this.calculateDamage(this.attackDamage, opponent);
       opponent.receiveHit(finalDamage, this, this.attackKnockback);
-      this.onSuccessfulHit(finalDamage);
+      this.onSuccessfulHit(finalDamage, opponent);
     }
   }
 
@@ -996,7 +996,7 @@ class Fighter {
     this.addCombo(attacker);
   }
 
-  onSuccessfulHit(damage) {
+  onSuccessfulHit(damage, opponent) {
     this.lastAttackHit = true;
     this.comboTimer = this.comboTimeout;
     this.combo += 1;
@@ -1006,7 +1006,7 @@ class Fighter {
     this.parryCount = min(3, this.parryCount + 1);
     
     // Valencina's on-hit effects: inflict burn and tremor
-    if (this.characterKey === 'VALENCINA') {
+    if (this.characterKey === 'VALENCINA' && opponent) {
       // Inflict 2 burn potency and count
       opponent.addStatus('Burn', 2, 2);
       // Inflict 2 tremor potency and count

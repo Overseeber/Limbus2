@@ -139,6 +139,9 @@ class Fighter {
     } else {
       this.controls = null;
     }
+    
+    // Set jump strength
+    this.jumpStrength = -12;
   }
 
   isDead() {

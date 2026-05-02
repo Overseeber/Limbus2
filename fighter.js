@@ -203,7 +203,7 @@ class Fighter {
       this.strikeActive = false;
     }
 
-    if (this.state === 'staggered' && this.staggerTimer <= 0) {
+    if (this.state === 'staggered' && this.staggerTimer <= 0 && this.staggerRecoveryTimer <= 0) {
       // Start recovery timer when stagger period ends
       this.staggerRecoveryTimer = this.staggerLength; // 5 seconds recovery
     }
@@ -258,6 +258,17 @@ class Fighter {
   }
 
   updateAIControls(opponent) {
+    // Don't act if enemy is staggered
+    if (this.state === 'staggered') {
+      this.ai.moveLeft = false;
+      this.ai.moveRight = false;
+      this.ai.moveUp = false;
+      this.ai.moveDown = false;
+      this.ai.attack = false;
+      this.ai.defend = false;
+      return;
+    }
+    
     const distance = opponent.pos.x - this.pos.x;
     const absDistance = abs(distance);
     
@@ -690,7 +701,7 @@ class Fighter {
       this.staggerTimer = 0.18;
     }
     
-    // Only add stagger if not already staggered
+    // Only add stagger if not already staggered (applies to both players and enemies)
     if (this.state !== 'staggered') {
       this.stagger += amount * 1.2;
       this.staggerRecoveryTimer = 0;

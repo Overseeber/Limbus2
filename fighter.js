@@ -282,8 +282,8 @@ class Fighter {
       this.startDash();
     }
     
-    // Regular attack when in range and not on cooldown
-    this.ai.attack = absDistance < 120 && this.attackTimer <= 0 && !opponentAttacking;
+    // Regular attack when in range and not on cooldown and opponent is not staggered
+    this.ai.attack = absDistance < 120 && this.attackTimer <= 0 && !opponentAttacking && opponent.state !== 'staggered';
     
     if (this.ai.attack) {
       this.requestAttack();
@@ -303,8 +303,7 @@ class Fighter {
       this.state === 'parry' ||
       this.state === 'parried' ||
       this.state === 'staggered' ||
-      this.parryStunTimer > 0 ||
-      (this.state === 'attack' && this.attackTimer > 0)
+      this.parryStunTimer > 0
     ) {
       return;
     }
@@ -434,7 +433,7 @@ class Fighter {
       this.attackRelease = false;
     }
 
-    if (this.isGuarding && !this.attackRequest) {
+    if (this.isGuarding && this.state !== 'staggered') {
       this.state = 'guard';
       if (this.ai.defend && random() < 0.02) {
         this.isCountering = true;

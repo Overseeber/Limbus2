@@ -208,10 +208,18 @@ class Fighter {
       this.staggerRecoveryTimer = this.staggerLength; // 5 seconds recovery
     }
 
-    // Reset stagger bar and state after recovery timer ends
-    if (this.state === 'staggered' && this.staggerTimer <= 0 && this.staggerRecoveryTimer <= 0) {
-      this.state = 'idle';
-      this.stagger = 0; // Reset stagger bar after recovery period ends
+    // Make stagger bar lower as visual timer during stagger period
+    if (this.state === 'staggered') {
+      if (this.staggerTimer > 0) {
+        // During stagger phase, bar lowers from max to 0 over stagger duration
+        this.stagger = map(this.staggerTimer, 0, this.staggerLength, 0, this.staggerThreshold);
+      } else if (this.staggerRecoveryTimer > 0) {
+        // During recovery phase, bar stays at 0
+        this.stagger = 0;
+      } else {
+        // Full recovery - exit staggered state
+        this.state = 'idle';
+      }
     }
 
     if (this.state === 'hit' && this.staggerTimer <= 0) {
@@ -541,7 +549,10 @@ class Fighter {
     const distance = dist(opponent.pos.x, opponent.pos.y, this.slamLandingHitbox.x, this.slamLandingHitbox.y);
     if (distance <= this.slamLandingHitbox.radius) {
       opponent.receiveHit(finalDamage, this, 20);
-      opponent.stagger += staggerDamage;
+      // Only add stagger damage if opponent is not already staggered
+      if (opponent.state !== 'staggered') {
+        opponent.stagger += staggerDamage;
+      }
       spawnDamageNumber(finalDamage, opponent.pos.copy(), this.facing, false);
       
       // Ground slams build combo counter
@@ -671,8 +682,11 @@ class Fighter {
       this.staggerTimer = 0.18;
     }
     
-    this.stagger += amount * 1.2;
-    this.staggerRecoveryTimer = 0;
+    // Only add stagger if not already staggered
+    if (this.state !== 'staggered') {
+      this.stagger += amount * 1.2;
+      this.staggerRecoveryTimer = 0;
+    }
     
     const strength = max(1, amount * 0.05);
     const awayFromAttacker = this.pos.x < attacker.pos.x ? -1 : 1;

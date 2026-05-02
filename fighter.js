@@ -43,6 +43,8 @@ class Fighter {
     this.attackCounter = 0;
     this.attackCounterDisplay = 0;
     this.attackCounterTimer = 0;
+    this.staggeredDisplay = 0;
+    this.staggeredDisplayTimer = 0;
     this.statuses = [];
     this.remainingSlide = 0;
     this.isDucking = false;
@@ -176,6 +178,7 @@ class Fighter {
     this.comboTimer = max(0, this.comboTimer - dt);
     this.hitCooldown = max(0, this.hitCooldown - dt);
     this.attackCounterTimer = max(0, this.attackCounterTimer - dt);
+    this.staggeredDisplayTimer = max(0, this.staggeredDisplayTimer - dt);
 
     if (this.comboTimer <= 0) {
       this.combo = 0;
@@ -618,6 +621,9 @@ class Fighter {
   calculateDamage(base, opponent) {
     let damage = base;
     
+    // Scale with combo counter
+    damage += this.combo * 2;
+    
     // 3-hit combo system: 100%, 100%, 200% damage
     if (this.attackCounter === 3) {
       damage *= 2.0; // 200% damage on third hit
@@ -672,8 +678,10 @@ class Fighter {
     if (this.stagger >= this.staggerThreshold) {
       this.state = 'staggered';
       this.staggerTimer = this.staggerLength;
-      this.stagger = 0;
+      this.stagger = this.staggerThreshold; // Keep bar maxed during stagger
       this.staggerRecoveryTimer = 0;
+      this.staggeredDisplay = 1; // Show staggered text
+      this.staggeredDisplayTimer = 2.0; // Show for 2 seconds
     }
 
     this.consumeStatusOnHit();
@@ -919,6 +927,18 @@ class Fighter {
       stroke(0, map(this.attackCounterTimer, 0, 1, 0, 255));
       strokeWeight(2);
       text(`Attack ${this.attackCounterDisplay}`, this.pos.x, this.pos.y - 100);
+      pop();
+    }
+
+    // Draw staggered display
+    if (this.staggeredDisplayTimer > 0 && this.staggeredDisplay > 0) {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(28);
+      fill(255, 100, 100, map(this.staggeredDisplayTimer, 0, 2, 0, 255));
+      stroke(0, map(this.staggeredDisplayTimer, 0, 2, 0, 255));
+      strokeWeight(3);
+      text('STAGGERED', this.pos.x, this.pos.y - 130);
       pop();
     }
   }

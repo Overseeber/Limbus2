@@ -141,7 +141,7 @@ class Fighter {
     }
     
     // Set jump strength
-    this.jumpStrength = -12;
+    this.jumpStrength = -20;
   }
 
   isDead() {
@@ -176,7 +176,9 @@ class Fighter {
     
     // Valencina's Time to Hunt ability (Q key)
     if (keyLower === 'q' && this.characterKey === 'VALENCINA') {
-      this.useTimeToHunt();
+      // Note: We need to pass the opponent, but it's not available here
+      // This will need to be handled in the update loop
+      console.log("Time to Hunt called - needs opponent parameter");
     }
     
     // Valencina's Disposial ultimate ability (E key) 
@@ -233,23 +235,21 @@ class Fighter {
     this.vel.y = -3;
   }
 
-  useTimeToHunt() {
+  useTimeToHunt(opponent) {
     if (this.timeToHuntCooldown > 0 || this.characterKey !== 'VALENCINA') {
       return;
     }
     
-    // Set target speed to 1
-    const originalSpeed = this.speed;
-    this.speed = 1;
-    
-    // Inflict Game Target status
-    this.addStatus('Game Target', 1, 1);
-    
-    // Duration: 5 hits or 10 seconds
-    const gameTargetStatus = this.statuses.find((s) => s.type === 'Game Target');
-    if (gameTargetStatus) {
-      gameTargetStatus.duration = 5; // 5 hits
-      gameTargetStatus.timer = 10; // 10 seconds
+    // Inflict Game Target status on enemy
+    if (opponent) {
+      opponent.addStatus('Game Target', 1, 1);
+      
+      // Duration: 5 hits or 10 seconds
+      const gameTargetStatus = opponent.statuses.find((s) => s.type === 'Game Target');
+      if (gameTargetStatus) {
+        gameTargetStatus.duration = 5; // 5 hits
+        gameTargetStatus.timer = 10; // 10 seconds
+      }
     }
     
     this.timeToHuntCooldown = 5; // 5 second cooldown
@@ -1162,7 +1162,7 @@ class Fighter {
     
     // Apply Burn status damage (lose 1 count per second)
     const burnStatus = this.statuses.find((s) => s.type === 'Burn');
-    if (burnStatus && burnStatus.count > 0) {
+    if (burnStatus && burnStatus.count > 0 && burnStatus.timer <= 0) {
       const burnDamage = burnStatus.potency * burnStatus.count;
       this.hp -= burnDamage;
       spawnDamageNumber(burnDamage, this.pos.copy(), 1, false); // Show as self-damage
@@ -1182,7 +1182,7 @@ class Fighter {
 
     // Apply Rupture status (lose 1 count on hit, damage on consumption)
     const ruptureStatus = this.statuses.find((s) => s.type === 'Rupture');
-    if (ruptureStatus && ruptureStatus.count > 0) {
+    if (ruptureStatus && ruptureStatus.count > 0 && ruptureStatus.timer <= 0) {
       const ruptureDamage = ruptureStatus.potency * ruptureStatus.count;
       this.hp -= ruptureDamage;
       ruptureStatus.count -= 1; // Consume 1 count
@@ -1200,9 +1200,11 @@ class Fighter {
       this.damageResistance = min(0.5, 1 - resistancePenalty);
       
       // Apply bleed damage per second
-      const bleedDamage = bleedStatus.potency * bleedStatus.count;
-      this.hp -= bleedDamage;
-      spawnDamageNumber(bleedDamage, this.pos.copy(), 1, false); // Show as self-damage
+      if (bleedStatus.timer <= 0) {
+        const bleedDamage = bleedStatus.potency * bleedStatus.count;
+        this.hp -= bleedDamage;
+        spawnDamageNumber(bleedDamage, this.pos.copy(), 1, false); // Show as self-damage
+      }
     }
 
     // Apply Sinking status (lose 1 count on hit, damage resistance and speed penalties)
@@ -1217,9 +1219,11 @@ class Fighter {
       this.speed = max(1.6, this.speed - speedPenalty);
       
       // Apply damage on hit
-      const sinkingDamage = sinkingStatus.potency * sinkingStatus.count;
-      this.hp -= sinkingDamage;
-      spawnDamageNumber(sinkingDamage, this.pos.copy(), 1, false); // Show as self-damage
+      if (sinkingStatus.timer <= 0) {
+        const sinkingDamage = sinkingStatus.potency * sinkingStatus.count;
+        this.hp -= sinkingDamage;
+        spawnDamageNumber(sinkingDamage, this.pos.copy(), 1, false); // Show as self-damage
+      }
     }
 
     // Apply Charge status (special resource, expires on use)

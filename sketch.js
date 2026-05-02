@@ -21,21 +21,8 @@ function setup() {//test
 }
 
 function initBattle() {
-  player = new Fighter(false, 'Player', 140, FLOOR_Y, {
-    color: '#4dc9ff',
-    controls: {
-      left: 'a',
-      right: 'd',
-      up: 'w',
-      down: 's',
-      evade: 'e',
-    },
-  });
-
-  enemy = new Fighter('Adversary', ARENA_WIDTH - 140, FLOOR_Y, true, {
-    color: '#ff6e6e',
-    controls: null,
-  });
+  player = new Fighter(false, 'Player', 'VALENCINA');
+  enemy = new Fighter(true, 'Enemy');
 
   battleState = 'ready';
   winner = null;

@@ -32,14 +32,17 @@ class Fighter {
     this.dashDuration = 0.16;
     this.dashCooldown = 3;
     this.stagger = 0;
-    this.staggerThreshold = 1000;
-    this.staggerRecovery = 10;
+    this.staggerThreshold = 100;
+    this.staggerRecovery = 0; // Disabled stagger recovery
     this.staggerRecoveryTimer = 0;
     this.staggerTimer = 0;
     this.staggerLength = 5;
     this.combo = 0;
     this.comboTimer = 0;
     this.comboTimeout = 1.4;
+    this.attackCounter = 0;
+    this.attackCounterDisplay = 0;
+    this.attackCounterTimer = 0;
     this.statuses = [];
     this.remainingSlide = 0;
     this.isDucking = false;
@@ -172,9 +175,16 @@ class Fighter {
     this.staggerRecoveryTimer = max(0, this.staggerRecoveryTimer - dt);
     this.comboTimer = max(0, this.comboTimer - dt);
     this.hitCooldown = max(0, this.hitCooldown - dt);
+    this.attackCounterTimer = max(0, this.attackCounterTimer - dt);
 
     if (this.comboTimer <= 0) {
       this.combo = 0;
+      this.attackCounter = 0; // Reset attack counter when combo times out
+    }
+
+    // Reset attack counter after 3 hits or timeout
+    if (this.attackCounter >= 3) {
+      this.attackCounter = 0; // Reset after completing 3-hit combo
     }
 
     if (this.parryTimer <= 0 && this.parryCount < 3) {
@@ -192,6 +202,7 @@ class Fighter {
 
     if (this.state === 'staggered' && this.staggerTimer <= 0) {
       this.state = 'idle';
+      this.stagger = 0; // Reset stagger bar after stagger period ends
       this.staggerRecoveryTimer = this.staggerRecovery;
     }
 
@@ -454,6 +465,11 @@ class Fighter {
       return;
     }
 
+    // Update attack counter for 3-hit combo
+    this.attackCounter = min(3, this.attackCounter + 1);
+    this.attackCounterDisplay = this.attackCounter;
+    this.attackCounterTimer = 1.0; // Show for 1 second
+
     const attackType = this.chargeAttack ? 'heavy' : 'light';
     this.state = 'attack';
     this.strikeActive = true;
@@ -519,6 +535,13 @@ class Fighter {
       opponent.receiveHit(finalDamage, this, 20);
       opponent.stagger += staggerDamage;
       spawnDamageNumber(finalDamage, opponent.pos.copy(), this.facing, false);
+      
+      // Ground slams build combo counter
+      this.attackCounter = min(3, this.attackCounter + 1);
+      this.attackCounterDisplay = this.attackCounter;
+      this.attackCounterTimer = 1.0; // Show for 1 second
+      this.comboTimer = this.comboTimeout; // Reset combo timer
+      this.combo += 1;
     }
     
     // Reset slam attack state
@@ -593,7 +616,13 @@ class Fighter {
   }
 
   calculateDamage(base, opponent) {
-    let damage = base + this.combo * 2;
+    let damage = base;
+    
+    // 3-hit combo system: 100%, 100%, 200% damage
+    if (this.attackCounter === 3) {
+      damage *= 2.0; // 200% damage on third hit
+    }
+    
     if (this.chargeAttack) damage *= 1.4;
     if (this.hasStatus('Poise')) {
       damage *= 1.15;
@@ -732,11 +761,7 @@ class Fighter {
       }
     });
     
-    // Stagger recovery: after 10 seconds of not being hit, reduce stagger by 2% per second
-    if (this.stagger > 0 && this.staggerRecoveryTimer <= 0) {
-      const recoveryAmount = this.staggerThreshold * 0.02 * dt;
-      this.stagger = max(0, this.stagger - recoveryAmount);
-    }
+    // Stagger recovery disabled - stagger bar only increases
     
     this.statuses = this.statuses.filter((status) => status.count > 0);
   }
@@ -882,6 +907,18 @@ class Fighter {
       stroke(255, 150, 255, 100);
       strokeWeight(2);
       ellipse(this.slamLandingHitbox.x, this.slamLandingHitbox.y, this.slamLandingHitbox.radius * 1.5);
+      pop();
+    }
+
+    // Draw attack counter display
+    if (this.attackCounterTimer > 0 && this.attackCounterDisplay > 0) {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(24);
+      fill(255, 255, 100, map(this.attackCounterTimer, 0, 1, 0, 255));
+      stroke(0, map(this.attackCounterTimer, 0, 1, 0, 255));
+      strokeWeight(2);
+      text(`Attack ${this.attackCounterDisplay}`, this.pos.x, this.pos.y - 100);
       pop();
     }
   }

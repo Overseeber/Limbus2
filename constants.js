@@ -1,5 +1,5 @@
-const ARENA_WIDTH = 900;
-const ARENA_HEIGHT = 500;
+const ARENA_WIDTH = 1400;
+const ARENA_HEIGHT = 700;
 const GRAVITY = 0.6;
 const FLOOR_Y = ARENA_HEIGHT - 80;
 const DEBUG = false;

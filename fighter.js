@@ -16,9 +16,15 @@ class Fighter {
     this.state = 'idle';
     this.hp = 9999;
     this.maxHp = 9999;
-    this.speed = 5;
+    this.speed = 12;
+    this.jumpStrength = -22;
     this.attackInterval = 1.0;
     this.attackTimer = 0;
+    this.attackDamage = 0;
+    this.attackKnockback = 0;
+    this.attackRange = 0;
+    this.attackIgnoreParry = false;
+    this.attackHitResolved = false;
     this.kbResist = 0.08;
     this.dashCharges = 3;
     this.dashTimer = 0;
@@ -167,6 +173,9 @@ class Fighter {
     }
 
     if (this.state === 'attack' && this.attackTimer <= 0) {
+      if (!this.attackHitResolved) {
+        this.resolveAttack(opponent);
+      }
       this.state = 'idle';
       this.strikeActive = false;
     }
@@ -186,6 +195,10 @@ class Fighter {
 
     if (this.isAI) {
       this.updateAIControls(opponent);
+    }
+
+    if (this.isGuarding && this.parryCount > 0 && opponent.strikeActive && opponent.parryWindow > 0 && abs(this.pos.x - opponent.pos.x) < opponent.attackRange + 200) {
+      this.checkParry(opponent, opponent.attackRange);
     }
 
     this.applyMovement(dt, opponent);
@@ -216,7 +229,7 @@ class Fighter {
     const opponentInRange = absDistance < 150;
     
     // Evade when opponent is attacking and in range
-    if (opponentAttacking && opponentInRange && this.evadeTimer <= 0 && !this.isEvading) {
+    if (opponentAttacking && opponentInRange && this.evadeTimer <= 0 && !this.isEvading && random() < 0.35) {
       this.ai.evade = true;
       this.requestEvade();
       return;
@@ -251,7 +264,13 @@ class Fighter {
   }
 
   applyMovement(dt, opponent) {
-    if (this.state === 'hit' || this.state === 'parry' || this.state === 'parried' || this.parryStunTimer > 0) {
+    if (
+      this.state === 'hit' ||
+      this.state === 'parry' ||
+      this.state === 'parried' ||
+      this.parryStunTimer > 0 ||
+      (this.state === 'attack' && this.attackTimer > 0)
+    ) {
       return;
     }
 
@@ -276,7 +295,7 @@ class Fighter {
     }
 
     if (this.jumpRequest && this.onGround() && !this.isDucking) {
-      this.vel.y = -11;
+      this.vel.y = this.jumpStrength;
       this.state = 'jump';
       this.jumpRequest = false;
     }
@@ -333,8 +352,10 @@ class Fighter {
       this.evadeRequested = false;
     }
 
-    if (this.attackRelease && !this.isEvading) {
-      this.executeAttack(opponent);
+    if (this.attackRelease) {
+      if (!this.isEvading && this.state !== 'attack') {
+        this.executeAttack(opponent);
+      }
       this.attackRequest = false;
       this.attackRelease = false;
     }
@@ -386,25 +407,32 @@ class Fighter {
     const attackType = this.chargeAttack ? 'heavy' : 'light';
     this.state = 'attack';
     this.strikeActive = true;
-    this.parryWindow = 0.18;
+    this.attackTimer = this.attackInterval;
+    this.attackIgnoreParry = ignoreParry;
+    this.attackHitResolved = false;
+    this.parryWindow = this.attackInterval;
     this.lastAttackHit = false;
 
-    const damage = attackType === 'heavy' ? this.baseDamage * 2 : this.baseDamage;
-    const range = attackType === 'heavy' ? 96 : 70;
-    const knockback = attackType === 'heavy' ? 18 * 0.5 : 12 * 0.5; // 50% knockback
-    const baseHit = this.calcAttackBox(range);
+    this.attackDamage = attackType === 'heavy' ? this.baseDamage * 2 : this.baseDamage;
+    this.attackRange = attackType === 'heavy' ? 140 : 110;
+    this.attackKnockback = attackType === 'heavy' ? 18 * 0.5 : 12 * 0.5; // 50% knockback
+  }
 
-    if (!ignoreParry && this.checkParry(opponent, range)) {
-      this.attackTimer = this.attackInterval;
+  resolveAttack(opponent) {
+    this.attackHitResolved = true;
+    if (!this.strikeActive) {
       return;
     }
 
-    if ((this.attackTimer <= 0 || ignoreParry) && this.hitOpponent(opponent, baseHit)) {
-      const finalDamage = this.calculateDamage(damage, opponent);
-      opponent.receiveHit(finalDamage, this, knockback);
+    if (!this.attackIgnoreParry && this.checkParry(opponent, this.attackRange)) {
+      return;
+    }
+
+    if (this.hitOpponent(opponent, this.calcAttackBox(this.attackRange))) {
+      const finalDamage = this.calculateDamage(this.attackDamage, opponent);
+      opponent.receiveHit(finalDamage, this, this.attackKnockback);
       this.onSuccessfulHit(finalDamage);
     }
-    this.attackTimer = this.attackInterval;
   }
 
   calcAttackBox(range) {
@@ -635,9 +663,9 @@ class Fighter {
     textAlign(CENTER, BOTTOM);
     text(this.name, x, y - 10);
     // Draw parry charges
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 3; i++) {
       fill(i < this.parryCount ? '#ffff00' : '#333');
-      ellipse(x - 20 + i * 10, y + 15, 6, 6);
+      ellipse(x - 15 + i * 12, y + 15, 6, 6);
     }
     pop();
   }
@@ -656,6 +684,17 @@ class Fighter {
       strokeWeight(3);
       noFill();
       ellipse(0, -30, 72, 88);
+    }
+    if (this.state === 'attack' && this.attackTimer > 0) {
+      const progress = constrain(this.attackTimer / this.attackInterval, 0, 1);
+      push();
+      noFill();
+      stroke(255, 220, 80, 180);
+      strokeWeight(3);
+      ellipse(0, -70, 46 + (1 - progress) * 26, 18 + (1 - progress) * 12);
+      strokeWeight(2);
+      arc(0, -70, 38, 14, PI, PI + progress * PI);
+      pop();
     }
     if (this.state === 'attack') {
       stroke('#ffd24d');

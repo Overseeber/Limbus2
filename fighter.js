@@ -18,7 +18,7 @@ class Fighter {
     this.maxHp = 9999;
     this.speed = 12;
     this.jumpStrength = -22;
-    this.attackInterval = 1.0;
+    this.attackInterval = 0.3;
     this.attackTimer = 0;
     this.attackDamage = 0;
     this.attackKnockback = 0;
@@ -34,6 +34,7 @@ class Fighter {
     this.stagger = 0;
     this.staggerThreshold = 1000;
     this.staggerRecovery = 10;
+    this.staggerRecoveryTimer = 0;
     this.staggerTimer = 0;
     this.staggerLength = 5;
     this.combo = 0;
@@ -160,6 +161,7 @@ class Fighter {
     this.parryTimer = max(0, this.parryTimer - dt);
     this.parryStunTimer = max(0, this.parryStunTimer - dt);
     this.staggerTimer = max(0, this.staggerTimer - dt);
+    this.staggerRecoveryTimer = max(0, this.staggerRecoveryTimer - dt);
     this.comboTimer = max(0, this.comboTimer - dt);
     this.hitCooldown = max(0, this.hitCooldown - dt);
 
@@ -178,6 +180,11 @@ class Fighter {
       }
       this.state = 'idle';
       this.strikeActive = false;
+    }
+
+    if (this.state === 'staggered' && this.staggerTimer <= 0) {
+      this.state = 'idle';
+      this.staggerRecoveryTimer = this.staggerRecovery;
     }
 
     if (this.state === 'hit' && this.staggerTimer <= 0) {
@@ -205,7 +212,7 @@ class Fighter {
     this.applyGravity(dt);
     this.applyDashRecharge(dt);
     this.applyStatuses(dt);
-    this.cleanupPosition();
+    this.cleanupPosition(opponent);
 
     this.processActions(opponent, dt);
   }
@@ -227,14 +234,6 @@ class Fighter {
     // Check if opponent is about to attack (strikeActive with parryWindow)
     const opponentAttacking = opponent.strikeActive && opponent.parryWindow > 0;
     const opponentInRange = absDistance < 150;
-    
-    // Evade when opponent is attacking and in range
-    if (opponentAttacking && opponentInRange && this.evadeTimer <= 0 && !this.isEvading && random() < 0.35) {
-      this.ai.evade = true;
-      this.requestEvade();
-      return;
-    }
-    this.ai.evade = false;
     
     // Block when opponent is in attack range
     if (opponentInRange && this.parryCount > 0) {
@@ -268,6 +267,7 @@ class Fighter {
       this.state === 'hit' ||
       this.state === 'parry' ||
       this.state === 'parried' ||
+      this.state === 'staggered' ||
       this.parryStunTimer > 0 ||
       (this.state === 'attack' && this.attackTimer > 0)
     ) {
@@ -338,15 +338,32 @@ class Fighter {
     this.pos.add(this.vel);
   }
 
-  cleanupPosition() {
+  cleanupPosition(opponent) {
     this.pos.x = constrain(this.pos.x, 60, width - 60);
     if (this.pos.y >= this.spawnY) {
       this.pos.y = this.spawnY;
       this.vel.y = 0;
     }
+    
+    // Check hitbox collision with opponent and push back if overlapping
+    const myBox = { x: this.pos.x - 25, y: this.pos.y - 36, w: 50, h: 72 };
+    const oppBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
+    
+    if (this.rectOverlap(myBox, oppBox)) {
+      // Push back based on which side we're on
+      if (this.pos.x < opponent.pos.x) {
+        this.pos.x = opponent.pos.x - 25 - 25 - 5; // Left of opponent
+      } else {
+        this.pos.x = opponent.pos.x + 25 + 25 + 5; // Right of opponent
+      }
+    }
   }
 
   processActions(opponent, dt) {
+    if (this.state === 'staggered') {
+      return;
+    }
+
     if (this.evadeRequested) {
       this.startEvade(opponent);
       this.evadeRequested = false;
@@ -391,8 +408,8 @@ class Fighter {
     this.dashCharges -= 1;
     this.isDashing = true;
     this.state = 'dash';
-    this.vel.x = this.facing * 50;
-    this.dashDuration = 0.16;
+    this.vel.x = this.facing * 60;
+    this.dashDuration = 0.2;
     this.dashAttacked = false;
   }
 
@@ -490,7 +507,7 @@ class Fighter {
       damage *= 1.15;
     }
     if (opponent.state === 'staggered') {
-      damage *= 1.1; // Passive: 10% more damage on staggered enemies
+      damage *= 2;
     }
     return damage;
   }
@@ -505,6 +522,7 @@ class Fighter {
     }
 
     if (this.isEvading) {
+      spawnEvadeIndicator(this.pos.copy());
       return;
     }
 
@@ -513,21 +531,28 @@ class Fighter {
     }
 
     this.hp -= amount;
-    spawnDamageNumber(amount, this.pos.copy(), attacker.facing);
-    this.state = 'hit';
+    const wasGuarding = this.isGuarding;
+    spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding);
+    
+    if (this.state !== 'staggered') {
+      this.state = 'hit';
+      this.staggerTimer = 0.18;
+    }
+    
     this.stagger += amount * 1.2;
+    this.staggerRecoveryTimer = 0;
+    
     const strength = max(1, amount * 0.05);
     const awayFromAttacker = this.pos.x < attacker.pos.x ? -1 : 1;
     this.vel.x = awayFromAttacker * knockback * strength;
     this.vel.y = -5;
     this.hitCooldown = 0.25;
-    this.staggerTimer = 0.18;
 
     if (this.stagger >= this.staggerThreshold) {
       this.state = 'staggered';
       this.staggerTimer = this.staggerLength;
       this.stagger = 0;
-      this.addStatus('Tremor', 2, 4);
+      this.staggerRecoveryTimer = 0;
     }
 
     this.consumeStatusOnHit();
@@ -614,6 +639,13 @@ class Fighter {
         }
       }
     });
+    
+    // Stagger recovery: after 10 seconds of not being hit, reduce stagger by 2% per second
+    if (this.stagger > 0 && this.staggerRecoveryTimer <= 0) {
+      const recoveryAmount = this.staggerThreshold * 0.02 * dt;
+      this.stagger = max(0, this.stagger - recoveryAmount);
+    }
+    
     this.statuses = this.statuses.filter((status) => status.count > 0);
   }
 
@@ -654,14 +686,31 @@ class Fighter {
     const y = this.pos.y - 90;
     push();
     rectMode(CENTER);
+    
+    // HP Bar background
     fill(0, 180);
     rect(x, y, barWidth, 18, 8);
+    
+    // HP Bar fill
     fill('#42d492');
     rect(x - barWidth / 2 + (barWidth * (this.hp / this.maxHp)) / 2, y, barWidth * (this.hp / this.maxHp), 10, 5);
+    
+    // Stagger Bar background (below HP bar)
+    fill(0, 180);
+    rect(x, y + 16, barWidth, 10, 6);
+    
+    // Stagger Bar fill (red/orange gradient)
+    const staggerPercent = constrain(this.stagger / this.staggerThreshold, 0, 1);
+    if (staggerPercent > 0) {
+      fill(255, 100 + staggerPercent * 50, 50);
+      rect(x - barWidth / 2 + (barWidth * staggerPercent) / 2, y + 16, barWidth * staggerPercent, 6, 4);
+    }
+    
     fill(255);
     textSize(14);
     textAlign(CENTER, BOTTOM);
     text(this.name, x, y - 10);
+    
     // Draw parry charges
     for (let i = 0; i < 3; i++) {
       fill(i < this.parryCount ? '#ffff00' : '#333');

@@ -64,8 +64,18 @@ function drawPlayerHud() {
   rect(hpBarX, hpBarY, hpWidth, 8, 4);
   fill('#42d492');
   rect(hpBarX, hpBarY, hpWidth * (player.hp / player.maxHp), 8, 4);
-  drawDashCharges(player, hpBarX, hpBarY + 14, hpWidth);
-  drawParryCharges(player, hpBarX, hpBarY + 24, hpWidth);
+  
+  // Stagger Bar
+  fill('#222');
+  rect(hpBarX, hpBarY + 14, hpWidth, 6, 3);
+  const staggerPercent = constrain(player.stagger / player.staggerThreshold, 0, 1);
+  if (staggerPercent > 0) {
+    fill(255, 100 + staggerPercent * 50, 50);
+    rect(hpBarX, hpBarY + 14, hpWidth * staggerPercent, 6, 3);
+  }
+  
+  drawDashCharges(player, hpBarX, hpBarY + 24, hpWidth);
+  drawParryCharges(player, hpBarX, hpBarY + 34, hpWidth);
   pop();
 }
 

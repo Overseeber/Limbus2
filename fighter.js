@@ -62,6 +62,10 @@ class Fighter {
     this.parryCount = 3;
     this.parryTimer = 0;
     this.parryStunTimer = 0;
+    this.slamAttackRequested = false;
+    this.isSlamAttacking = false;
+    this.slamLandingHitbox = null;
+    this.pendingSlamDamage = null;
     this.ai = {
       moveLeft: false,
       moveRight: false,
@@ -99,6 +103,10 @@ class Fighter {
     }
     if (keyLower === this.controls.down) {
       this.duckRequest = true;
+      // Check if also attacking for slam attack
+      if (this.attackRequest && !this.onGround()) {
+        this.slamAttackRequested = true;
+      }
     }
     if (keyLower === this.controls.evade) {
       this.requestEvade();
@@ -222,6 +230,9 @@ class Fighter {
   }
 
   updateAIControls(opponent) {
+    // AI DISABLED - Return early to prevent all AI behavior
+    return;
+    
     const distance = opponent.pos.x - this.pos.x;
     const absDistance = abs(distance);
     
@@ -307,7 +318,7 @@ class Fighter {
       }
       // Dash attack: move in and strike, then dash through enemy.
       if (!this.dashAttacked && abs(this.pos.x - opponent.pos.x) < 80) {
-        this.executeAttack(opponent, true);
+        this.executeDashAttack(opponent);
         this.dashAttacked = true;
         this.vel.x = this.facing * 60;
         this.dashDuration += 0.16;
@@ -333,9 +344,19 @@ class Fighter {
 
   applyGravity(dt) {
     if (!this.onGround()) {
-      this.vel.y += GRAVITY;
+      if (this.isSlamAttacking) {
+        // Override gravity for slam attack - maintain high speed descent
+        this.vel.y = 30;
+      } else {
+        this.vel.y += GRAVITY;
+      }
     }
     this.pos.add(this.vel);
+    
+    // Check for slam attack landing
+    if (this.isSlamAttacking && this.onGround()) {
+      this.onSlamLanding(opponent);
+    }
   }
 
   cleanupPosition(opponent) {
@@ -369,8 +390,13 @@ class Fighter {
       this.evadeRequested = false;
     }
 
+    if (this.slamAttackRequested && !this.onGround() && !this.isSlamAttacking) {
+      this.executeSlamAttack(opponent);
+      this.slamAttackRequested = false;
+    }
+
     if (this.attackRelease) {
-      if (!this.isEvading && this.state !== 'attack') {
+      if (!this.isEvading && this.state !== 'attack' && !this.isSlamAttacking) {
         this.executeAttack(opponent);
       }
       this.attackRequest = false;
@@ -433,6 +459,65 @@ class Fighter {
     this.attackDamage = attackType === 'heavy' ? this.baseDamage * 2 : this.baseDamage;
     this.attackRange = attackType === 'heavy' ? 140 : 110;
     this.attackKnockback = attackType === 'heavy' ? 18 * 0.5 : 12 * 0.5; // 50% knockback
+  }
+
+  executeDashAttack(opponent) {
+    // Dash attacks are unparrieable and do enhanced damage
+    this.state = 'attack';
+    this.strikeActive = true;
+    this.attackTimer = this.attackInterval;
+    this.attackIgnoreParry = true;
+    this.attackHitResolved = false;
+    this.parryWindow = 0; // No parry window for dash attacks
+    this.lastAttackHit = false;
+
+    // Dash attacks do 1.5x damage and have increased range
+    this.attackDamage = this.baseDamage * 1.5;
+    this.attackRange = 120;
+    this.attackKnockback = 15;
+
+    // Immediately resolve the attack since dash attacks are instant
+    this.resolveAttack(opponent);
+  }
+
+  executeSlamAttack(opponent) {
+    // Only usable in mid-air
+    if (this.onGround()) return;
+    
+    this.isSlamAttacking = true;
+    this.state = 'slam';
+    this.vel.y = 30; // High speed downward movement
+    this.vel.x = 0;
+    
+    // Set up landing hitbox (AOE area)
+    this.slamLandingHitbox = {
+      x: this.pos.x,
+      y: this.spawnY, // Ground level
+      radius: 80, // AOE radius
+      damage: this.baseDamage * 2, // Base damage
+      staggerDamage: 0 // Will be calculated on landing
+    };
+  }
+
+  onSlamLanding(opponent) {
+    if (!this.slamLandingHitbox) return;
+    
+    // Calculate final damage with 50% bonus stagger damage
+    const finalDamage = this.calculateDamage(this.slamLandingHitbox.damage, opponent);
+    const staggerDamage = finalDamage * 0.5; // 50% of damage as stagger
+    
+    // Apply AOE damage to opponent if in range
+    const distance = dist(opponent.pos.x, opponent.pos.y, this.slamLandingHitbox.x, this.slamLandingHitbox.y);
+    if (distance <= this.slamLandingHitbox.radius) {
+      opponent.receiveHit(finalDamage, this, 20);
+      opponent.stagger += staggerDamage;
+      spawnDamageNumber(finalDamage, opponent.pos.copy(), this.facing, false);
+    }
+    
+    // Reset slam attack state
+    this.isSlamAttacking = false;
+    this.state = 'idle';
+    this.slamLandingHitbox = null;
   }
 
   resolveAttack(opponent) {
@@ -778,6 +863,19 @@ class Fighter {
       stroke(255, 0, 0);
       noFill();
       rect(box.x - box.w / 2, box.y, box.w, box.h);
+    }
+
+    // Draw slam attack landing hitbox
+    if (this.isSlamAttacking && this.slamLandingHitbox) {
+      push();
+      stroke(255, 100, 255, 150);
+      strokeWeight(3);
+      noFill();
+      ellipse(this.slamLandingHitbox.x, this.slamLandingHitbox.y, this.slamLandingHitbox.radius * 2);
+      stroke(255, 150, 255, 100);
+      strokeWeight(2);
+      ellipse(this.slamLandingHitbox.x, this.slamLandingHitbox.y, this.slamLandingHitbox.radius * 1.5);
+      pop();
     }
   }
 }

@@ -204,9 +204,14 @@ class Fighter {
     }
 
     if (this.state === 'staggered' && this.staggerTimer <= 0) {
+      // Start recovery timer when stagger period ends
+      this.staggerRecoveryTimer = this.staggerLength; // 5 seconds recovery
+    }
+
+    // Reset stagger bar and state after recovery timer ends
+    if (this.state === 'staggered' && this.staggerTimer <= 0 && this.staggerRecoveryTimer <= 0) {
       this.state = 'idle';
-      this.stagger = 0; // Reset stagger bar after stagger period ends
-      this.staggerRecoveryTimer = this.staggerRecovery;
+      this.stagger = 0; // Reset stagger bar after recovery period ends
     }
 
     if (this.state === 'hit' && this.staggerTimer <= 0) {

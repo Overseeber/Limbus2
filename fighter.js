@@ -257,9 +257,6 @@ class Fighter {
   }
 
   updateAIControls(opponent) {
-    // AI DISABLED - Return early to prevent all AI behavior
-    return;
-    
     const distance = opponent.pos.x - this.pos.x;
     const absDistance = abs(distance);
     

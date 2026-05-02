@@ -142,6 +142,9 @@ class Fighter {
     
     // Set jump strength
     this.jumpStrength = -20;
+    
+    // Track last hit opponent for Time to Hunt ability
+    this.lastHitOpponent = null;
   }
 
   isDead() {
@@ -176,9 +179,7 @@ class Fighter {
     
     // Valencina's Time to Hunt ability (Q key)
     if (keyLower === 'q' && this.characterKey === 'VALENCINA') {
-      // Note: We need to pass the opponent, but it's not available here
-      // This will need to be handled in the update loop
-      console.log("Time to Hunt called - needs opponent parameter");
+      this.useTimeToHunt();
     }
     
     // Valencina's Disposial ultimate ability (E key) 
@@ -235,10 +236,13 @@ class Fighter {
     this.vel.y = -3;
   }
 
-  useTimeToHunt(opponent) {
+  useTimeToHunt() {
     if (this.timeToHuntCooldown > 0 || this.characterKey !== 'VALENCINA') {
       return;
     }
+    
+    // Target the last hit opponent
+    const opponent = this.lastHitOpponent;
     
     // Inflict Game Target status on enemy
     if (opponent) {
@@ -1008,6 +1012,11 @@ class Fighter {
     }
     this.parryCount = min(3, this.parryCount + 1);
     
+    // Track last hit opponent for Time to Hunt ability
+    if (opponent) {
+      this.lastHitOpponent = opponent;
+    }
+    
     // Valencina's on-hit effects: inflict burn and tremor
     if (this.characterKey === 'VALENCINA' && opponent) {
       // Inflict 2 burn potency and count
@@ -1219,13 +1228,13 @@ class Fighter {
         strokeWeight(1);
         rect(x, y, cellWidth - 4, 20, 4);
         
-        // Draw status count on left and potency on right
+        // Draw status potency on left and count on right
         fill(255);
         textSize(10);
         textAlign(LEFT, CENTER);
-        text(status.count, x - 15, y);
+        text(status.potency, x - 15, y);
         textAlign(RIGHT, CENTER);
-        text(status.potency, x + 15, y);
+        text(status.count, x + 15, y);
         pop();
       });
     }

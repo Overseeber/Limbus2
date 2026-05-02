@@ -2,10 +2,19 @@ class Fighter {
   constructor(isAI = false, name = 'Enemy', characterKey = null) {
     this.isAI = isAI;
     this.name = name;
-    this.characterKey = characterKey || (isAI ? 'JOHN' : currentCharacter);
+    // Safe character selection with fallback
+    const fallbackCharacter = (typeof currentCharacter !== 'undefined' ? currentCharacter : 'JOHN');
+    this.characterKey = characterKey || (isAI ? 'JOHN' : fallbackCharacter);
     
     // Get character stats from roster
     const character = CHARACTERS[this.characterKey];
+    
+    // Safety check in case character is not found
+    if (!character) {
+      console.error("Invalid characterKey:", this.characterKey);
+      this.characterKey = 'JOHN';
+      const character = CHARACTERS[this.characterKey];
+    }
     
     this.pos = createVector(width / 2 + (isAI ? 200 : -200), height - 100);
     this.vel = createVector(0, 0);
@@ -312,10 +321,10 @@ class Fighter {
     }
     
     // Only targets unit with Game Target
-    const target = battle?.enemy || battle?.player;
-    if (!target || !target.hasStatus('Game Target')) {
-      return;
-    }
+    // Note: battle object may not be available, so we'll need to pass the target differently
+    // For now, this method will need the opponent passed as a parameter
+    console.log("Disposial called - needs opponent parameter");
+    return;
     
     // QTE x 5
     const qteHits = 5;

@@ -1115,44 +1115,47 @@ class Fighter {
       status.timer -= dt;
       if (status.timer <= 0) {
         status.timer = 1;
+        const oldCount = status.count;
         status.count -= 1;
-        if (status.type === 'Burn') {
-          this.hp -= status.potency;
-        }
-        if (status.type === 'Rupture') {
-          this.hp -= status.potency;
-        }
-        if (status.type === 'Bleed') {
-          this.hp -= status.potency;
-        }
-        if (status.type === 'Tremor') {
-          this.stagger += status.potency;
-        }
-        if (status.type === 'Sinking') {
-          this.speed = max(1.6, this.speed - 0.04 * status.potency);
-        }
-        if (status.type === 'Poise') {
-          // +5% crit chance and 1.5x damage on crit
-          // Note: Crit logic would need to be implemented in calculateDamage
-        }
-        if (status.type === 'Game Target') {
-          // Set speed to 1 and track duration
-          this.speed = 1;
-          status.duration = max(5, status.count); // 5 hits or 10 seconds
-        }
-        if (status.type === 'Precognition') {
-          // Track precognition count
-          // Evade logic handled in receiveHit
-        }
-        if (status.type === 'Overheat') {
-          // -20% damage dealt
-          this.damageResistance = 0.8;
-          // Lose 1 on hit/when hit, every 5 seconds
-          if (status.timer <= 0) {
-            status.count--;
-            if (status.count <= 0) {
-              this.statuses = this.statuses.filter((s) => s.type !== 'Overheat');
-            }
+        
+        // Trigger status effects when count goes down
+        if (oldCount > status.count) {
+          if (status.type === 'Burn') {
+            this.hp -= status.potency;
+            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
+          }
+          if (status.type === 'Rupture') {
+            this.hp -= status.potency;
+            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
+          }
+          if (status.type === 'Bleed') {
+            this.hp -= status.potency;
+            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
+          }
+          if (status.type === 'Tremor') {
+            this.stagger += status.potency;
+          }
+          if (status.type === 'Sinking') {
+            this.speed = max(1.6, this.speed - 0.04 * status.potency);
+            this.hp -= status.potency;
+            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
+          }
+          if (status.type === 'Poise') {
+            // +5% crit chance and 1.5x damage on crit
+            // Note: Crit logic would need to be implemented in calculateDamage
+          }
+          if (status.type === 'Game Target') {
+            // Set speed to 1 and track duration
+            this.speed = 1;
+            status.duration = max(5, status.count); // 5 hits or 10 seconds
+          }
+          if (status.type === 'Precognition') {
+            // Track precognition count
+            // Evade logic handled in receiveHit
+          }
+          if (status.type === 'Overheat') {
+            // -20% damage dealt
+            this.damageResistance = 0.8;
           }
         }
       }
@@ -1160,54 +1163,15 @@ class Fighter {
     
     // Stagger recovery disabled - stagger bar only increases
     
-    // Apply Burn status damage (lose 1 count per second)
-    const burnStatus = this.statuses.find((s) => s.type === 'Burn');
-    if (burnStatus && burnStatus.count > 0 && burnStatus.timer <= 0) {
-      const burnDamage = burnStatus.potency * burnStatus.count;
-      this.hp -= burnDamage;
-      spawnDamageNumber(burnDamage, this.pos.copy(), 1, false); // Show as self-damage
-    }
-
-    // Apply Tremor status stagger gain (lose 1 count on burst, raise stagger on consumption)
-    const tremorStatus = this.statuses.find((s) => s.type === 'Tremor');
-    if (tremorStatus && tremorStatus.count > 0) {
-      const staggerGain = tremorStatus.potency * tremorStatus.count;
-      this.stagger += staggerGain;
-      tremorStatus.count -= 1; // Consume 1 count
-      if (tremorStatus.count <= 0) {
-        // Remove status when count expires
-        this.statuses = this.statuses.filter((s) => s.type !== 'Tremor');
-      }
-    }
-
-    // Apply Rupture status (lose 1 count on hit, damage on consumption)
-    const ruptureStatus = this.statuses.find((s) => s.type === 'Rupture');
-    if (ruptureStatus && ruptureStatus.count > 0 && ruptureStatus.timer <= 0) {
-      const ruptureDamage = ruptureStatus.potency * ruptureStatus.count;
-      this.hp -= ruptureDamage;
-      ruptureStatus.count -= 1; // Consume 1 count
-      if (ruptureStatus.count <= 0) {
-        // Remove status when count expires
-        this.statuses = this.statuses.filter((s) => s.type !== 'Rupture');
-      }
-    }
-
-    // Apply Bleed status (lose 1 count on attack, damage per second, lose 1% resistance)
+    // Apply Bleed status resistance penalty (continuous effect)
     const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
     if (bleedStatus && bleedStatus.count > 0) {
       // Lose 1% damage resistance per bleed count
       const resistancePenalty = bleedStatus.count * 0.01;
       this.damageResistance = min(0.5, 1 - resistancePenalty);
-      
-      // Apply bleed damage per second
-      if (bleedStatus.timer <= 0) {
-        const bleedDamage = bleedStatus.potency * bleedStatus.count;
-        this.hp -= bleedDamage;
-        spawnDamageNumber(bleedDamage, this.pos.copy(), 1, false); // Show as self-damage
-      }
     }
 
-    // Apply Sinking status (lose 1 count on hit, damage resistance and speed penalties)
+    // Apply Sinking status resistance and speed penalties (continuous effects)
     const sinkingStatus = this.statuses.find((s) => s.type === 'Sinking');
     if (sinkingStatus && sinkingStatus.count > 0) {
       // Apply damage resistance penalty
@@ -1217,20 +1181,6 @@ class Fighter {
       // Apply speed penalty (lose 1% speed per 5 potency)
       const speedPenalty = sinkingStatus.potency * 0.01;
       this.speed = max(1.6, this.speed - speedPenalty);
-      
-      // Apply damage on hit
-      if (sinkingStatus.timer <= 0) {
-        const sinkingDamage = sinkingStatus.potency * sinkingStatus.count;
-        this.hp -= sinkingDamage;
-        spawnDamageNumber(sinkingDamage, this.pos.copy(), 1, false); // Show as self-damage
-      }
-    }
-
-    // Apply Charge status (special resource, expires on use)
-    const chargeStatus = this.statuses.find((s) => s.type === 'Charge');
-    if (chargeStatus && chargeStatus.count > 0) {
-      // Charge status is a special resource - no active effects
-      // Status is consumed when used via special ability
     }
     
     this.statuses = this.statuses.filter((status) => status.count > 0);
@@ -1269,10 +1219,13 @@ class Fighter {
         strokeWeight(1);
         rect(x, y, cellWidth - 4, 20, 4);
         
-        // Draw status count
+        // Draw status count on left and potency on right
         fill(255);
-        textSize(12);
-        text(status.count, x, y);
+        textSize(10);
+        textAlign(LEFT, CENTER);
+        text(status.count, x - 15, y);
+        textAlign(RIGHT, CENTER);
+        text(status.potency, x + 15, y);
         pop();
       });
     }

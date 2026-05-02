@@ -217,7 +217,7 @@ class Fighter {
     }
 
     this.applyMovement(dt, opponent);
-    this.applyGravity(dt);
+    this.applyGravity(dt, opponent);
     this.applyDashRecharge(dt);
     this.applyStatuses(dt);
     this.cleanupPosition(opponent);
@@ -342,7 +342,7 @@ class Fighter {
     }
   }
 
-  applyGravity(dt) {
+  applyGravity(dt, opponent) {
     if (!this.onGround()) {
       if (this.isSlamAttacking) {
         // Override gravity for slam attack - maintain high speed descent

@@ -1040,8 +1040,6 @@ class Fighter {
       }
     }
   }
-    }
-  }
 
   addCombo(attacker) {
     if (attacker === this && this.comboTimer > 0) {

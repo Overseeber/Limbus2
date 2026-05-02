@@ -40,13 +40,13 @@ function getCurrentCharacter() {
 // Add new status effects to statusColor function
 function statusColor(type) {
   const colors = {
-    'Burn': '#ff6b6b',
-    'Tremor': '#ff9f40',
-    'Rupture': '#9b59b6',
-    'Bleed': '#4caf50',
-    'Sinking': '#2196f3',
-    'Charge': '#ffeb3b',
-    'Poise': '#00bcd4',
+    'Burn': '#ff0000',      // red
+    'Bleed': '#ff8800',     // orange  
+    'Tremor': '#ffff00',    // yellow
+    'Rupture': '#00ff00',   // green
+    'Sinking': '#0088ff',   // blue
+    'Charge': '#8800ff',    // purple
+    'Poise': '#ffffff',     // white
     'Game Target': '#ff1744',
     'Precognition': '#e1f5fe',
     'Overheat': '#dc2626'

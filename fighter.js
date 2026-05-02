@@ -203,10 +203,7 @@ class Fighter {
       this.strikeActive = false;
     }
 
-    if (this.state === 'staggered' && this.staggerTimer <= 0 && this.staggerRecoveryTimer <= 0) {
-      // Start recovery timer when stagger period ends
-      this.staggerRecoveryTimer = this.staggerLength; // 5 seconds recovery
-    }
+    // Recovery timer is started when stagger timer ends, not here
 
     // Make stagger bar lower as visual timer during stagger period
     if (this.state === 'staggered') {
@@ -217,9 +214,14 @@ class Fighter {
         // During recovery phase, bar stays at 0
         this.stagger = 0;
       } else {
-        // Full recovery - automatically exit staggered state and clear buildup
-        this.state = 'idle';
-        this.stagger = 0; // Clear any remaining stagger buildup
+        // Start recovery timer when stagger timer ends
+        if (this.staggerTimer <= 0 && this.staggerRecoveryTimer <= 0) {
+          this.staggerRecoveryTimer = this.staggerLength; // 5 seconds recovery
+        } else {
+          // Full recovery - automatically exit staggered state and clear buildup
+          this.state = 'idle';
+          this.stagger = 0; // Clear any remaining stagger buildup
+        }
       }
     }
 
@@ -258,8 +260,8 @@ class Fighter {
   }
 
   updateAIControls(opponent) {
-    // Don't act if enemy is staggered
-    if (this.state === 'staggered') {
+    // Don't act if enemy is in actual stagger phase (but allow movement during recovery)
+    if (this.state === 'staggered' && this.staggerTimer > 0) {
       this.ai.moveLeft = false;
       this.ai.moveRight = false;
       this.ai.moveUp = false;
@@ -317,7 +319,7 @@ class Fighter {
       this.state === 'hit' ||
       this.state === 'parry' ||
       this.state === 'parried' ||
-      this.state === 'staggered' ||
+      (this.state === 'staggered' && this.staggerTimer > 0) || // Only block during actual stagger phase
       this.parryStunTimer > 0
     ) {
       return;
@@ -426,7 +428,8 @@ class Fighter {
   }
 
   processActions(opponent, dt) {
-    if (this.state === 'staggered') {
+    // Only block actions during actual stagger phase, not recovery phase
+    if (this.state === 'staggered' && this.staggerTimer > 0) {
       return;
     }
 
@@ -717,7 +720,7 @@ class Fighter {
       this.state = 'staggered';
       this.staggerTimer = this.staggerLength;
       this.stagger = this.staggerThreshold; // Keep bar maxed during stagger
-      this.staggerRecoveryTimer = 0;
+      this.staggerRecoveryTimer = 0; // Will be set when staggerTimer reaches 0
       this.staggeredDisplay = 1; // Show staggered text
       this.staggeredDisplayTimer = 2.0; // Show for 2 seconds
     }

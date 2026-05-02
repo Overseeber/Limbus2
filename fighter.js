@@ -979,5 +979,56 @@ class Fighter {
       text('STAGGERED', this.pos.x, this.pos.y - 130);
       pop();
     }
+
+    // Draw stagger phase timer
+    if (this.state === 'staggered' && this.staggerTimer > 0) {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(20);
+      fill(255, 150, 150, 255);
+      stroke(0, 255);
+      strokeWeight(2);
+      const timeLeft = this.staggerTimer.toFixed(1);
+      text(`Stagger: ${timeLeft}s`, this.pos.x, this.pos.y - 100);
+      pop();
+    }
+
+    // Draw recovery phase timer
+    if (this.state === 'staggered' && this.staggerTimer <= 0 && this.staggerRecoveryTimer > 0) {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(20);
+      fill(150, 150, 255, 255);
+      stroke(0, 255);
+      strokeWeight(2);
+      const timeLeft = this.staggerRecoveryTimer.toFixed(1);
+      text(`Recovery: ${timeLeft}s`, this.pos.x, this.pos.y - 100);
+      pop();
+    }
+
+    // Draw stagger buildup progress
+    if (this.stagger > 0 && this.stagger < this.staggerThreshold && this.state !== 'staggered') {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(16);
+      const progress = (this.stagger / this.staggerThreshold * 100).toFixed(0);
+      fill(255, 200, 100, 200);
+      stroke(0, 200);
+      strokeWeight(1);
+      text(`Buildup: ${progress}%`, this.pos.x, this.pos.y - 70);
+      pop();
+    }
+
+    // Draw stagger immunity indicator
+    if (this.state === 'staggered') {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(14);
+      fill(255, 255, 100, 200);
+      stroke(0, 200);
+      strokeWeight(1);
+      text('IMMUNE', this.pos.x, this.pos.y - 40);
+      pop();
+    }
   }
 }

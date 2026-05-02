@@ -217,8 +217,9 @@ class Fighter {
         // During recovery phase, bar stays at 0
         this.stagger = 0;
       } else {
-        // Full recovery - automatically exit staggered state
+        // Full recovery - automatically exit staggered state and clear buildup
         this.state = 'idle';
+        this.stagger = 0; // Clear any remaining stagger buildup
       }
     }
 
@@ -283,9 +284,12 @@ class Fighter {
     }
     
     // Regular attack when in range and not on cooldown and opponent is not staggered
+    // Attack regardless of whether opponent is in front or behind
     this.ai.attack = absDistance < 120 && this.attackTimer <= 0 && !opponentAttacking && opponent.state !== 'staggered';
     
     if (this.ai.attack) {
+      // Turn to face opponent before attacking
+      this.facing = distance > 0 ? 1 : -1;
       this.requestAttack();
       this.releaseAttack(false);
     }

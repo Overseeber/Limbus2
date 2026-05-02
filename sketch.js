@@ -12,11 +12,12 @@ let battleTimer = 0;
 function setup() {//test
   createCanvas(ARENA_WIDTH, ARENA_HEIGHT);
   document.oncontextmenu = () => false;
+  switchCharacter('VALENCINA');
   initBattle();
 }
 
 function initBattle() {
-  player = new Fighter('Player', 140, FLOOR_Y, false, {
+  player = new Fighter(false, 'Player', 140, FLOOR_Y, {
     color: '#4dc9ff',
     controls: {
       left: 'a',

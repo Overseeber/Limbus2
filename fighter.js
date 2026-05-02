@@ -1,24 +1,43 @@
 class Fighter {
-  constructor(name, x, y, isAI, config = {}) {
-    this.name = name;
-    this.spawnX = x;
-    this.spawnY = y;
+  constructor(isAI = false, name = 'Enemy', characterKey = null) {
     this.isAI = isAI;
-    this.color = config.color || '#fff';
-    this.controls = config.controls || {};
+    this.name = name;
+    this.characterKey = characterKey || (isAI ? 'JOHN' : currentCharacter);
+    
+    // Get character stats from roster
+    const character = CHARACTERS[this.characterKey];
+    
+    this.pos = createVector(width / 2 + (isAI ? 200 : -200), height - 100);
+    this.vel = createVector(0, 0);
+    this.facing = isAI ? -1 : 1;
+    this.spawnY = height - 100;
+
+    // Combat stats from character roster
+    this.hp = character.hp;
+    this.maxHp = character.hp;
+    this.speed = character.speed;
+    this.baseDamage = character.baseDamage;
+    this.attackInterval = character.attackInterval;
+    this.staggerThreshold = character.staggerThreshold;
+    this.staggerLength = character.staggerLength;
+    this.staggerRecoveryTimer = 0;
+    this.stagger = 0;
+    this.staggerTimer = 0;
+    this.staggeredDisplay = 0;
+    this.staggeredDisplayTimer = 0;
+    this.color = isAI ? '#e74c3c' : character.color;
+    this.dashTimer = 0;
+    this.isDashing = false;
+    this.dashDuration = 0.16;
+    this.dashCooldown = 3;
+    this.stagger = 0;
+
+    this.controls = {};
     this.reset();
   }
 
   reset() {
-    this.pos = createVector(this.spawnX, this.spawnY);
-    this.vel = createVector(0, 0);
-    this.facing = this.spawnX > width / 2 ? -1 : 1;
     this.state = 'idle';
-    this.hp = 9999;
-    this.maxHp = 9999;
-    this.speed = 12;
-    this.jumpStrength = -22;
-    this.attackInterval = 0.3;
     this.attackTimer = 0;
     this.attackDamage = 0;
     this.attackKnockback = 0;
@@ -27,12 +46,6 @@ class Fighter {
     this.attackHitResolved = false;
     this.kbResist = 0.08;
     this.dashCharges = 3;
-    this.dashTimer = 0;
-    this.isDashing = false;
-    this.dashDuration = 0.16;
-    this.dashCooldown = 3;
-    this.stagger = 0;
-    this.staggerThreshold = 100;
     this.staggerRecovery = 0; // Disabled stagger recovery
     this.staggerRecoveryTimer = 0;
     this.staggerTimer = 0;
@@ -80,11 +93,30 @@ class Fighter {
       defend: false,
       evade: false,
     };
-    this.name = 'John Limbus';
-    this.title = 'glory to limbus company';
-    this.weapon = 'bus';
-    this.baseDamage = 5;
-    this.dashAttacked = false;
+    
+    // Valencina-specific properties
+    this.accelerationRounds = 0;
+    this.maxAccelerationRounds = 10;
+    this.isCharged = false;
+    this.precognition = 30;
+    this.maxPrecognition = 30;
+    this.overheat = 0;
+    this.maxOverheat = 30;
+    this.isOverheated = false;
+    this.timeToHuntCooldown = 0;
+    this.disposialCooldown = 0;
+    this.shinActive = false;
+    this.dialogueTimer = 0;
+    this.currentDialogue = '';
+    this.precognitionTimer = 0;
+    this.damageResistance = 1.0;
+    
+    // Set character-specific properties
+    const character = CHARACTERS[this.characterKey];
+    this.name = character.name;
+    this.title = character.title;
+    this.weapon = this.characterKey === 'VALENCINA' ? 'La Spada di Palermo' : 'bus';
+    this.baseDamage = character.baseDamage;
   }
 
   isDead() {
@@ -115,6 +147,16 @@ class Fighter {
     }
     if (keyLower === this.controls.evade) {
       this.requestEvade();
+    }
+    
+    // Valencina's Time to Hunt ability (Q key)
+    if (keyLower === 'q' && this.characterKey === 'VALENCINA') {
+      this.useTimeToHunt();
+    }
+    
+    // Valencina's Disposial ultimate ability (E key) 
+    if (keyLower === 'e' && this.characterKey === 'VALENCINA') {
+      this.useDisposial();
     }
   }
 
@@ -164,6 +206,163 @@ class Fighter {
     this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
     this.vel.x = -this.facing * 18;
     this.vel.y = -3;
+  }
+
+  useTimeToHunt() {
+    if (this.timeToHuntCooldown > 0 || this.characterKey !== 'VALENCINA') {
+      return;
+    }
+    
+    // Set target speed to 1
+    const originalSpeed = this.speed;
+    this.speed = 1;
+    
+    // Inflict Game Target status
+    this.addStatus('Game Target', 1, 1);
+    
+    // Duration: 5 hits or 10 seconds
+    const gameTargetStatus = this.statuses.find((s) => s.type === 'Game Target');
+    if (gameTargetStatus) {
+      gameTargetStatus.duration = 5; // 5 hits
+      gameTargetStatus.timer = 10; // 10 seconds
+    }
+    
+    this.timeToHuntCooldown = 5; // 5 second cooldown
+  }
+
+  update(dt, opponent) {
+    this.attackTimer = max(0, this.attackTimer - dt);
+    this.evadeTimer = max(0, this.evadeTimer - dt);
+    this.parryWindow = max(0, this.parryWindow - dt);
+    this.parryIndicator = max(0, this.parryIndicator - dt);
+    this.parryTimer = max(0, this.parryTimer - dt);
+    this.parryStunTimer = max(0, this.parryStunTimer - dt);
+    this.staggerTimer = max(0, this.staggerTimer - dt);
+    this.staggerRecoveryTimer = max(0, this.staggerRecoveryTimer - dt);
+    this.comboTimer = max(0, this.comboTimer - dt);
+    this.hitCooldown = max(0, this.hitCooldown - dt);
+    this.attackCounterTimer = max(0, this.attackCounterTimer - dt);
+    this.staggeredDisplayTimer = max(0, this.staggeredDisplayTimer - dt);
+    
+    // Update Valencina-specific cooldowns
+    this.timeToHuntCooldown = max(0, this.timeToHuntCooldown - dt);
+    this.disposialCooldown = max(0, this.disposialCooldown - dt);
+    this.precognitionTimer = max(0, this.precognitionTimer - dt);
+    this.dialogueTimer = max(0, this.dialogueTimer - dt);
+    
+    // Valencina's Eye of Precognition passive
+    if (this.characterKey === 'VALENCINA') {
+      // When attacked, 3% x cognition chance to evade (max 90%)
+      // This would need to be implemented in receiveHit method
+      
+      // When hit: gain 1 precognition
+      if (this.state === 'hit') {
+        this.precognition = min(this.maxPrecognition, this.precognition + 1);
+      }
+      
+      // After 5 seconds without evading or being hit, gain 1 precognition
+      if (this.precognitionTimer > 5) {
+        this.precognition = min(this.maxPrecognition, this.precognition + 1);
+        this.precognitionTimer = 0;
+      }
+      
+      // At 0 precognition, cannot evade, enter overheat
+      if (this.precognition <= 0 && !this.isOverheated) {
+        this.isOverheated = true;
+        this.overheat = 30;
+        this.precognition = 0;
+      }
+      
+      // Overheat: on transitioning to overheat, gain 30 overheat
+      // Every 5 seconds: lose 1 overheat
+      if (this.isOverheated) {
+        this.overheat = max(0, this.overheat - dt * 0.2); // Lose 1 overheat every 5 seconds
+        if (this.overheat <= 0) {
+          this.isOverheated = false;
+          this.precognition = 30;
+        }
+      }
+      
+      // Overheat effects: -20% damage, lose 1 on hit/when hit, every 5 seconds
+      if (this.isOverheated) {
+        this.damageResistance = 0.8; // -20% damage dealt
+      }
+    }
+    
+    // Valencina's Accelerating Future passive
+    if (this.characterKey === 'VALENCINA') {
+      // For every 1 combo: gain 1 movement speed, lower attack interval by 5%
+      if (this.combo > 0) {
+        this.speed = this.speed + (this.combo * 0.1);
+        this.attackInterval = this.attackInterval * (1 - this.combo * 0.05);
+      }
+      
+      // Shin (心) passive activation at less than 50% hp
+      if (this.hp < this.maxHp * 0.5 && !this.shinActive) {
+        this.shinActive = true;
+        // When hit, gain 5% x enemy combo damage resistance
+        // This would need to be implemented in damage calculation
+      }
+    }
+  }
+
+  useDisposial() {
+    if (this.disposialCooldown > 0 || this.characterKey !== 'VALENCINA' || !this.hasStatus('Overheat')) {
+      return;
+    }
+    
+    // Only targets unit with Game Target
+    const target = battle?.enemy || battle?.player;
+    if (!target || !target.hasStatus('Game Target')) {
+      return;
+    }
+    
+    // QTE x 5
+    const qteHits = 5;
+    
+    for (let i = 1; i <= qteHits; i++) {
+      switch(i) {
+        case 1:
+        // Inflict 3 burn and tremor potency
+          target.addStatus('Burn', 3, 3);
+          target.addStatus('Tremor', 3, 3);
+          break;
+        case 2:
+          // Inflict 3 burn and tremor potency
+          target.addStatus('Burn', 3, 3);
+          target.addStatus('Tremor', 3, 3);
+          break;
+        case 3:
+          // Inflict 6 burn and tremor count
+          target.addStatus('Burn', 6, 6);
+          target.addStatus('Tremor', 6, 6);
+          break;
+        case 4:
+          // Trigger tremor burst
+          const tremorStatus = target.statuses.find((s) => s.type === 'Tremor');
+          if (tremorStatus && tremorStatus.count > 0) {
+            const burnStatus = target.statuses.find((s) => s.type === 'Burn');
+            const damage = (burnStatus?.potency || 0 + tremorStatus.potency) / 2;
+            target.hp -= damage;
+            spawnDamageNumber(damage, target.pos.copy(), this.facing, false);
+          }
+          break;
+        case 5:
+          // Trigger tremor burst and deal damage 3 times
+          const tremorStatus2 = target.statuses.find((s) => s.type === 'Tremor');
+          if (tremorStatus2 && tremorStatus2.count > 0) {
+            const burnStatus2 = target.statuses.find((s) => s.type === 'Burn');
+            const damage2 = (burnStatus2?.potency || 0 + tremorStatus2.potency) / 2;
+            for (let j = 0; j < 3; j++) {
+              target.hp -= damage2;
+              spawnDamageNumber(damage2, target.pos.copy(), this.facing, false);
+            }
+          }
+          break;
+      }
+    }
+    
+    this.disposialCooldown = 10; // 10 second cooldown;
   }
 
   update(dt, opponent) {
@@ -514,9 +713,40 @@ class Fighter {
     this.parryWindow = this.attackInterval;
     this.lastAttackHit = false;
 
+    // Valencina's charged attack mechanics
+    if (this.characterKey === 'VALENCINA' && this.chargeAttack) {
+      // Use 1 acceleration round when charged
+      if (this.accelerationRounds < this.maxAccelerationRounds) {
+        this.accelerationRounds++;
+        this.isCharged = true;
+        
+        // Gain 4 poise count and potency
+        this.addStatus('Poise', 4, 4);
+        
+        // Trigger tremor burst
+        const tremorStatus = this.statuses.find((s) => s.type === 'Tremor');
+        if (tremorStatus && tremorStatus.count > 0) {
+          // Deal damage based on burn + tremor potency / 2
+          const burnStatus = this.statuses.find((s) => s.type === 'Burn');
+          const damage = (burnStatus?.potency || 0 + tremorStatus.potency) / 2;
+          opponent.hp -= damage;
+          spawnDamageNumber(damage, opponent.pos.copy(), this.facing, false);
+        }
+      }
+    }
+
+    // Base attack damage and range
     this.attackDamage = attackType === 'heavy' ? this.baseDamage * 2 : this.baseDamage;
     this.attackRange = attackType === 'heavy' ? 140 : 110;
     this.attackKnockback = attackType === 'heavy' ? 18 * 0.5 : 12 * 0.5; // 50% knockback
+    
+    // Valencina's acceleration round bonuses
+    if (this.characterKey === 'VALENCINA') {
+      // +30% damage (150% against shields)
+      this.attackDamage *= 1.3;
+      // Range +100%
+      this.attackRange *= 2.0;
+    }
   }
 
   executeDashAttack(opponent) {
@@ -725,6 +955,21 @@ class Fighter {
       this.staggeredDisplayTimer = 2.0; // Show for 2 seconds
     }
 
+    // Valencina's Eye of Precognition passive
+    if (this.characterKey === 'VALENCINA') {
+      // When attacked, 3% x cognition chance to evade (max 90%)
+      const evadeChance = min(0.9, this.precognition * 0.03);
+      if (random() < evadeChance) {
+        this.startEvade(attacker);
+        this.consumeStatus('Precognition');
+        return;
+      }
+      
+      // When hit: gain 1 precognition
+      this.precognition = min(this.maxPrecognition, this.precognition + 1);
+      this.precognitionTimer = 0;
+    }
+
     this.consumeStatusOnHit();
     this.addCombo(attacker);
   }
@@ -737,6 +982,65 @@ class Fighter {
       this.addStatus('Charge', 1, 1);
     }
     this.parryCount = min(3, this.parryCount + 1);
+    
+    // Valencina's on-hit effects: inflict burn and tremor
+    if (this.characterKey === 'VALENCINA') {
+      // Inflict 2 burn potency and count
+      opponent.addStatus('Burn', 2, 2);
+      // Inflict 2 tremor potency and count
+      opponent.addStatus('Tremor', 2, 2);
+      
+      // Dialogue triggers
+      if (!this.currentDialogue) {
+        this.currentDialogue = "I'll be damned before I let you ruin this! Not after toiling like a goddamn dog for decades, climbing up the ranks...!";
+        this.dialogueTimer = 10;
+      }
+      
+      // On 5x combo counter
+      if (this.attackCounter >= 5) {
+        this.currentDialogue = "Feeling confident today? Then parry this, asshole.\nMatch my hatred.";
+        this.dialogueTimer = 10;
+      }
+      
+      // On manual evade
+      if (this.isEvading) {
+        this.currentDialogue = "What, having a hard time landing a hit?\nYou won't even manage to brush my coattails at this rate.\nI'm reading you like an open book.\nBack in my day, you wouldn't even have dared to look me in the eye.\nWhat'd I say? I can handle you as long as I've got this eye.";
+        this.dialogueTimer = 10;
+        this.consumeStatus('Precognition');
+      }
+      
+      // Reduced to 60% hp
+      if (this.hp < this.maxHp * 0.6) {
+        this.currentDialogue = "Fuck you! I am Valencina della Famiglia Bognatelli...! I refuse to rot in this fucking dump!";
+        this.dialogueTimer = 10;
+      }
+      
+      // On kill
+      if (opponent.hp <= 0) {
+        this.currentDialogue = "Hahahahaha!\n And the hunt comes to a close!\n I'll make mincemeat of you all!";
+        this.dialogueTimer = 10;
+      }
+      
+      // On hit
+      if (this.state === 'hit') {
+        this.currentDialogue = "Shit!\nWhat the hell—";
+        this.dialogueTimer = 10;
+      }
+      
+      // Overheat
+      if (this.isOverheated) {
+        this.currentDialogue = "... Tsk. Overheated already?";
+        this.dialogueTimer = 10;
+      }
+      
+      // Disposal
+      if (this.isOverheated && this.overheat > 20) {
+        this.currentDialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all!\nYeah, I hate you all! The damn Famiglia, you, and Ticket, too!";
+        this.dialogueTimer = 10;
+      }
+    }
+  }
+    }
   }
 
   addCombo(attacker) {
@@ -807,6 +1111,26 @@ class Fighter {
         if (status.type === 'Poise') {
           // +5% crit chance and 1.5x damage on crit
           // Note: Crit logic would need to be implemented in calculateDamage
+        }
+        if (status.type === 'Game Target') {
+          // Set speed to 1 and track duration
+          this.speed = 1;
+          status.duration = max(5, status.count); // 5 hits or 10 seconds
+        }
+        if (status.type === 'Precognition') {
+          // Track precognition count
+          // Evade logic handled in receiveHit
+        }
+        if (status.type === 'Overheat') {
+          // -20% damage dealt
+          this.damageResistance = 0.8;
+          // Lose 1 on hit/when hit, every 5 seconds
+          if (status.timer <= 0) {
+            status.count--;
+            if (status.count <= 0) {
+              this.statuses = this.statuses.filter((s) => s.type !== 'Overheat');
+            }
+          }
         }
       }
     });
@@ -1117,6 +1441,18 @@ class Fighter {
       stroke(0, 200);
       strokeWeight(1);
       text('IMMUNE', this.pos.x, this.pos.y - 40);
+      pop();
+    }
+    
+    // Draw dialogue for Valencina
+    if (this.characterKey === 'VALENCINA' && this.currentDialogue) {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(16);
+      fill(255, 255, 255, map(this.dialogueTimer, 0, 10, 0, 255));
+      stroke(0, map(this.dialogueTimer, 0, 10, 0, 255));
+      strokeWeight(1);
+      text(this.currentDialogue, this.pos.x, this.pos.y - 160);
       pop();
     }
   }

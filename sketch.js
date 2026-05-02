@@ -91,15 +91,7 @@ function updateBattle() {
   player.update(dt, enemy);
   enemy.update(dt, player);
 
-  // Collision between players
-  const minDist = 50;
-  const dist = abs(player.pos.x - enemy.pos.x);
-  if (dist < minDist) {
-    const push = (minDist - dist) / 2;
-    const dir = player.pos.x > enemy.pos.x ? 1 : -1;
-    player.pos.x += dir * push;
-    enemy.pos.x -= dir * push;
-  }
+  // Collision is handled in Fighter.cleanupPosition() method
 
   updateDamageNumbers(dt);
 

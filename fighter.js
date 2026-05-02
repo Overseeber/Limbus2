@@ -370,12 +370,19 @@ class Fighter {
     const myBox = { x: this.pos.x - 25, y: this.pos.y - 36, w: 50, h: 72 };
     const oppBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
     
-    if (this.rectOverlap(myBox, oppBox)) {
-      // Push back based on which side we're on
-      if (this.pos.x < opponent.pos.x) {
-        this.pos.x = opponent.pos.x - 25 - 25 - 5; // Left of opponent
-      } else {
-        this.pos.x = opponent.pos.x + 25 + 25 + 5; // Right of opponent
+    // Only check horizontal overlap to allow jumping over enemies
+    const horizontalOverlap = !(myBox.x + myBox.w < oppBox.x || oppBox.x + oppBox.w < myBox.x);
+    
+    if (horizontalOverlap) {
+      // Only apply collision if both fighters are on the ground or at similar heights
+      const heightDifference = abs(this.pos.y - opponent.pos.y);
+      if (heightDifference < 40) { // Allow jumping over when height difference is significant
+        // Push back based on which side we're on
+        if (this.pos.x < opponent.pos.x) {
+          this.pos.x = opponent.pos.x - 25 - 25 - 5; // Left of opponent
+        } else {
+          this.pos.x = opponent.pos.x + 25 + 25 + 5; // Right of opponent
+        }
       }
     }
   }

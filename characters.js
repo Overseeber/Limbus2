@@ -233,25 +233,38 @@ const CHARACTERS = {
       // Sprite state changes
       let newSprite = 'idle'; // default sprite
       
+      // Debug: log current state
+      console.log("Current state:", fighter.state, "isGuarding:", fighter.isGuarding, "isEvading:", fighter.isEvading, "vel.x:", fighter.vel.x);
+      
       // Priority order for sprite states
       if (fighter.state === 'hit') {
         newSprite = 'hurt';
+        console.log("Setting sprite to hurt");
       } else if (fighter.isGuarding) {
         newSprite = 'guard';
+        console.log("Setting sprite to guard");
       } else if (fighter.isEvading) {
         newSprite = 'evade';
+        console.log("Setting sprite to evade");
       } else if (fighter.state === 'attack') {
         // Use prepat for first attack in combo
         if (fighter.attackCounter === 0) {
           newSprite = 'prepat';
+          console.log("Setting sprite to prepat");
         } else {
           newSprite = 'idle'; // Use idle for other attacks for now
+          console.log("Setting sprite to idle (attack)");
         }
       } else if (fighter.state === 'run' || (abs(fighter.vel.x) > 0.1 && fighter.onGround())) {
         newSprite = 'moving';
+        console.log("Setting sprite to moving");
       }
       
-      fighter.currentSprite = newSprite;
+      // Only update if sprite actually changed
+      if (fighter.currentSprite !== newSprite) {
+        console.log("Sprite changed from", fighter.currentSprite, "to", newSprite);
+        fighter.currentSprite = newSprite;
+      }
       
       // Eye of Precognition passive - precognition regeneration
       if (fighter.isOverheated) {

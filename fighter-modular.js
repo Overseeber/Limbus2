@@ -552,21 +552,17 @@ class Fighter {
 
   useTimeToHunt() {
     // This method is now handled by character profiles
-    // Keeping for backward compatibility
-    const character = CHARACTERS[this.characterKey];
-    if (character && character.processKeyPressed) {
-      character.processKeyPressed('q', this);
-    }
+    // Keeping for backward compatibility - but no longer calling processKeyPressed to avoid recursion
+    // The actual Time to Hunt logic is in the character profile's processKeyPressed method
+    // This method is kept for compatibility but should not be called directly
   }
 
   
   useDisposial() {
     // This method is now handled by character profiles
-    // Keeping for backward compatibility
-    const character = CHARACTERS[this.characterKey];
-    if (character && character.processKeyPressed) {
-      character.processKeyPressed('e', this);
-    }
+    // Keeping for backward compatibility - but no longer calling processKeyPressed to avoid recursion
+    // The actual Disposial logic is in the character profile's processKeyPressed method
+    // This method is kept for compatibility but should not be called directly
   }
 
   update(dt, opponent) {
@@ -708,7 +704,9 @@ class Fighter {
       this.updateAIControls(opponent);
     }
 
-    if (this.isGuarding && this.parryCount > 0 && opponent.strikeActive && opponent.parryWindow > 0 && abs(this.pos.x - opponent.pos.x) < opponent.attackRange + 200) {
+    // More forgiving parry system - allow parries when guarding or recently guarded
+    const canParry = this.isGuarding || (this.guardRequest && this.parryCount > 0);
+    if (canParry && this.parryCount > 0 && opponent.strikeActive && opponent.parryWindow > 0 && abs(this.pos.x - opponent.pos.x) < opponent.attackRange + 200) {
       this.checkParry(opponent, opponent.attackRange);
     }
 
@@ -758,19 +756,19 @@ class Fighter {
     }
     
     // Dash attack when in close range
-    if (absDistance < 100 && this.dashCharges > 0 && this.attackTimer <= 0 && random() < 0.01) {
+    if (absDistance < 100 && this.dashCharges > 0 && this.attackTimer <= 0 && random() < 0.03) {
       this.startDash();
     }
     
     // Regular attack when in range and not on cooldown and opponent is not staggered
     // Attack regardless of whether opponent is in front or behind
-    this.ai.attack = absDistance < 120 && this.attackTimer <= 0 && !opponentAttacking && opponent.state !== 'staggered';
+    this.ai.attack = absDistance < 120 && this.attackTimer <= 0 && !opponentAttacking && opponent.state !== 'staggered' && random() < 0.05;
     
     if (this.ai.attack) {
       // Turn to face opponent before attacking
       this.facing = distance > 0 ? 1 : -1;
-      this.requestAttack();
-      this.releaseAttack(false);
+      // Execute attack directly for AI (no need for request/release cycle)
+      this.executeAttack(opponent);
     }
     
     if (this.ai.defend) {
@@ -994,8 +992,9 @@ class Fighter {
     this.attackTimer = this.attackInterval;
     this.attackIgnoreParry = ignoreParry;
     this.attackHitResolved = false;
-    this.parryWindow = this.attackInterval;
+    this.parryWindow = 0.8; // Increased parry window from 0.5 to 0.8 seconds
     this.lastAttackHit = false;
+    this.strikeActive = true; // Set strikeActive for normal attacks
 
     // Valencina's charged attack mechanics
     if (this.characterKey === 'VALENCINA' && this.chargeAttack) {
@@ -1022,12 +1021,15 @@ class Fighter {
     // Auto-face towards opponent when attacking
     this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
     
+    // Consume Bleed status when attacking
+    this.consumeStatusOnAttack();
+    
     // Spawn a simple slash effect for all attacks
     this.spawnSlashEffect('s1s1', { x: 0, y: -20 });
     
     // Base attack damage and range
     this.attackDamage = attackType === 'heavy' ? this.baseDamage * 2 : this.baseDamage;
-    this.attackRange = attackType === 'heavy' ? 196 : 154; // 40% increase: 140→196, 110→154
+    this.attackRange = attackType === 'heavy' ? 294 : 231; // 50% increase: 196→294, 154→231
     this.attackKnockback = attackType === 'heavy' ? 18 * 0.5 : 12 * 0.5; // 50% knockback
     
     // Valencina's acceleration round bonuses
@@ -1259,13 +1261,15 @@ class Fighter {
       this.staggeredDisplayTimer = 2.0; // Show for 2 seconds
     }
 
+    // Consume status effects when hit
+    this.consumeStatusOnHit();
+    
     // Call character-specific onReceiveHit method
     const character = CHARACTERS[this.characterKey];
     if (character && character.onReceiveHit) {
       character.onReceiveHit(amount, attacker, this);
     }
 
-    this.consumeStatusOnHit();
     this.addCombo(attacker);
   }
 
@@ -1316,93 +1320,119 @@ class Fighter {
   }
 
   consumeStatusOnHit() {
-    ['Rupture', 'Bleed', 'Sinking'].forEach((type) => {
+    // Handle Rupture and Sinking when hit
+    ['Rupture', 'Sinking'].forEach((type) => {
       const status = this.statuses.find((s) => s.type === type);
-      if (!status) return;
-      status.count -= 1;
-      if (status.count <= 0) {
-        this.statuses = this.statuses.filter((s) => s.type !== type);
-      }
-      if (type === 'Rupture' || type === 'Bleed') {
-        this.hp -= status.potency;
+      if (status) {
+        status.count -= 1;
+        if (type === 'Rupture') {
+          this.hp -= status.potency;
+          spawnDamageNumber(status.potency, this.pos.copy(), 1, false);
+        }
       }
     });
   }
 
+  consumeStatusOnAttack() {
+    // Handle Bleed when attacking
+    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
+    if (bleedStatus) {
+      bleedStatus.count -= 1;
+      if (bleedStatus.count <= 0) {
+        this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
+      }
+    }
+  }
+
   applyStatuses(dt) {
     this.statuses.forEach((status) => {
-      status.timer -= dt;
-      if (status.timer <= 0) {
-        status.timer = 1;
-        const oldCount = status.count;
-        status.count -= 1;
-        
-        // Trigger status effects when count goes down
-        if (oldCount > status.count) {
-          if (status.type === 'Burn') {
-            this.hp -= status.potency;
-            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
-          }
-          if (status.type === 'Rupture') {
-            this.hp -= status.potency;
-            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
-          }
-          if (status.type === 'Bleed') {
-            this.hp -= status.potency;
-            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
-          }
-          if (status.type === 'Tremor') {
-            this.stagger += status.potency;
-          }
-          if (status.type === 'Sinking') {
-            this.speed = max(1.6, this.speed - 0.04 * status.potency);
-            this.hp -= status.potency;
-            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
-          }
-          if (status.type === 'Poise') {
-            // +5% crit chance and 1.5x damage on crit
-            // Note: Crit logic would need to be implemented in calculateDamage
-          }
-          if (status.type === 'Game Target') {
-            // Set speed to 1 and track duration
-            this.speed = 1;
-            status.duration = max(5, status.count); // 5 hits or 10 seconds
-          }
-          if (status.type === 'Precognition') {
-            // Track precognition count
-            // Evade logic handled in receiveHit
-          }
-          if (status.type === 'Overheat') {
-            // -20% damage dealt
-            this.damageResistance = 0.8;
-          }
+      status.timer += dt;
+      
+      // Burn: Every second, lose 1 count and take damage
+      if (status.type === 'Burn') {
+        if (status.timer >= 1) {
+          status.timer = 0;
+          status.count -= 1;
+          this.hp -= status.potency;
+          spawnDamageNumber(status.potency, this.pos.copy(), 1, false);
         }
       }
-    });
-    
-    // Stagger recovery disabled - stagger bar only increases
-    
-    // Apply Bleed status resistance penalty (continuous effect)
-    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
-    if (bleedStatus && bleedStatus.count > 0) {
-      // Lose 1% damage resistance per bleed count
-      const resistancePenalty = bleedStatus.count * 0.01;
-      this.damageResistance = min(0.5, 1 - resistancePenalty);
-    }
-
-    // Apply Sinking status resistance and speed penalties (continuous effects)
-    const sinkingStatus = this.statuses.find((s) => s.type === 'Sinking');
-    if (sinkingStatus && sinkingStatus.count > 0) {
-      // Apply damage resistance penalty
-      const resistancePenalty = sinkingStatus.potency * 0.05;
-      this.damageResistance = min(0.5, 1 - resistancePenalty);
       
-      // Apply speed penalty (lose 1% speed per 5 potency)
-      const speedPenalty = sinkingStatus.potency * 0.01;
-      this.speed = max(1.6, this.speed - speedPenalty);
-    }
-    
-    this.statuses = this.statuses.filter((status) => status.count > 0);
+      // Tremor: Only lose count when bursted (handled elsewhere)
+      else if (status.type === 'Tremor') {
+        // No automatic count decrease - handled in burst logic
+      }
+      
+      // Rupture: When hit, lose 1 count (handled in receiveHit)
+      else if (status.type === 'Rupture') {
+        // No automatic count decrease - handled in receiveHit
+      }
+      
+      // Bleed: Lose 1 potency per second
+      else if (status.type === 'Bleed') {
+        if (status.timer >= 1) {
+          status.timer = 0;
+          status.potency = max(0, status.potency - 1);
+        }
+      }
+      
+      // Sinking: When hit, lose 1 count (handled in receiveHit)
+      else if (status.type === 'Sinking') {
+        // No automatic count decrease - handled in receiveHit
+        // Apply ongoing effects
+        const resistancePenalty = 0.05 * Math.floor(status.potency / 5);
+        this.damageResistance = min(0.5, 1 - resistancePenalty);
+        const speedPenalty = 0.1 * Math.floor(status.potency / 10);
+        this.speed = max(1, this.speed - speedPenalty);
+      }
+      
+      // Charge: When used, lose 1 count (handled elsewhere)
+      else if (status.type === 'Charge') {
+        // No automatic count decrease - handled when used
+      }
+      
+      // Poise: On crit, lose 1 count (handled in calculateDamage)
+      else if (status.type === 'Poise') {
+        // No automatic count decrease - handled on crit
+        // Apply ongoing effects
+        this.critChance = this.critChance || 0;
+        this.critChance += 0.05 * status.potency;
+      }
+      
+      // Game Target: 5 hits or 10 seconds duration
+      else if (status.type === 'Game Target') {
+        this.speed = 1;
+        if (status.timer >= 10) {
+          status.count = 0;
+        }
+      }
+      
+      // Precognition: Unique mechanics handled in character profile
+      else if (status.type === 'Precognition') {
+        // No automatic count decrease - handled in character profile
+      }
+      
+      // Overheat: Unique mechanics handled in character profile
+      else if (status.type === 'Overheat') {
+        // No automatic count decrease - handled in character profile
+      }
+      
+      // Remove status if count reaches 0
+      if (status.count <= 0) {
+        // Reset status-specific properties
+        if (status.type === 'Sinking') {
+          this.damageResistance = 1;
+        }
+        if (status.type === 'Poise') {
+          this.critChance = 0;
+        }
+        if (status.type === 'Game Target') {
+          this.speed = this.baseSpeed || 7.5;
+        }
+        
+        this.statuses.splice(this.statuses.indexOf(status), 1);
+      }
+    });
   }
 
   drawStatusEffects() {
@@ -1600,7 +1630,7 @@ class Fighter {
     rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
 
     if (this.strikeActive) {
-      const range = this.chargeAttack ? 96 : 70;
+      const range = this.chargeAttack ? 294 : 231; // Updated to match new attack ranges
       const box = this.calcAttackBox(range);
       stroke(255, 0, 0);
       noFill();

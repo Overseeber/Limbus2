@@ -219,7 +219,13 @@ const CHARACTERS = {
       if (fighter.isEvading) {
         fighter.currentDialogue = "What, having a hard time landing a hit?\nYou won't even manage to brush my coattails at this rate.\nI'm reading you like an open book.\nBack in my day, you wouldn't even have dared to look me in the eye.\nWhat'd I say? I can handle you as long as I've got this eye.";
         fighter.dialogueTimer = 10;
-        fighter.consumeStatus('Precognition');
+        
+        const precognitionStatus = fighter.statuses.find((s) => s.type === 'Precognition');
+        if (precognitionStatus) {
+          precognitionStatus.count = max(0, precognitionStatus.count - 1); // Consume 1 precognition
+          fighter.precognition = precognitionStatus.count;
+          fighter.precognitionTimer = 0;
+        }
       }
       
       // Reduced to 60% hp
@@ -228,9 +234,16 @@ const CHARACTERS = {
         fighter.dialogueTimer = 10;
       }
       
+      // On hit or when hit, lose 1 overheat
+      const overheatStatus = fighter.statuses.find((s) => s.type === 'Overheat');
+      if (overheatStatus) {
+        overheatStatus.count = max(0, overheatStatus.count - 1);
+        fighter.overheat = overheatStatus.count;
+      }
+      
       // On kill
       if (opponent.hp <= 0) {
-        fighter.currentDialogue = "Hahahahaha!\n And the hunt comes to a close!\n I'll make mincemeat of you all!";
+        fighter.currentDialogue = "The world's better off without scum like you.\nRot in hell, you worthless piece of trash.";
         fighter.dialogueTimer = 10;
       }
       
@@ -253,18 +266,30 @@ const CHARACTERS = {
       }
     },
     onReceiveHit: function(amount, attacker, fighter) {
-      // Eye of Precognition passive
-      // When attacked, 3% x cognition chance to evade (max 90%)
-      const evadeChance = min(0.9, fighter.precognition * 0.03);
-      if (random() < evadeChance) {
-        fighter.startEvade(attacker);
-        fighter.consumeStatus('Precognition');
-        return;
-      }
+      const precognitionStatus = fighter.statuses.find((s) => s.type === 'Precognition');
+      const overheatStatus = fighter.statuses.find((s) => s.type === 'Overheat');
       
-      // When hit: gain 1 precognition
-      fighter.precognition = min(fighter.maxPrecognition, fighter.precognition + 1);
-      fighter.precognitionTimer = 0;
+      if (precognitionStatus) {
+        // Eye of Precognition passive
+        // When attacked, 3% x cognition chance to evade (max 90%)
+        const evadeChance = min(0.9, precognitionStatus.count * 0.03);
+        if (random() < evadeChance) {
+          fighter.startEvade(attacker);
+          precognitionStatus.count = max(0, precognitionStatus.count - 1); // Lose 1 precognition
+          fighter.precognition = precognitionStatus.count;
+          fighter.precognitionTimer = 0; // Reset timer
+          return;
+        }
+        
+        // When hit: gain 1 precognition
+        precognitionStatus.count = min(30, precognitionStatus.count + 1);
+        fighter.precognition = precognitionStatus.count;
+        fighter.precognitionTimer = 0;
+      } else if (overheatStatus) {
+        // Overheat state: lose 1 overheat when hit
+        overheatStatus.count = max(0, overheatStatus.count - 1);
+        fighter.overheat = overheatStatus.count;
+      }
     },
     onUpdate: function(dt, opponent, fighter) {
       // Debug: Check if onUpdate is being called
@@ -299,35 +324,54 @@ const CHARACTERS = {
         fighter.currentSprite = newSprite;
       }
       
-      // Eye of Precognition passive - precognition regeneration
-      if (fighter.isOverheated) {
-        // In overheat: lose 1 precognition per second, regenerate 1 per 2 seconds
-        fighter.precognitionTimer += dt;
-        if (fighter.precognitionTimer >= 2) {
-          fighter.precognitionTimer = 0;
-          fighter.precognition = min(fighter.maxPrecognition, fighter.precognition + 1);
+      // Eye of Precognition status system
+      const precognitionStatus = fighter.statuses.find((s) => s.type === 'Precognition');
+      const overheatStatus = fighter.statuses.find((s) => s.type === 'Overheat');
+      
+      if (overheatStatus) {
+        // Overheat state: -20% damage
+        fighter.damageResistance = 0.8;
+        
+        // Every 5 seconds: lose 1 overheat
+        fighter.overheatTimer += dt;
+        if (fighter.overheatTimer >= 5) {
+          fighter.overheatTimer = 0;
+          overheatStatus.count = max(0, overheatStatus.count - 1);
           
-          // Exit overheat when precognition reaches max
-          if (fighter.precognition >= fighter.maxPrecognition) {
+          // When at 0 overheat, transition back to precognition
+          if (overheatStatus.count <= 0) {
+            fighter.removeStatus('Overheat');
+            fighter.addStatus('Precognition', 30, 1);
+            fighter.precognition = 30;
             fighter.isOverheated = false;
-            fighter.overheat = 0;
-            fighter.damageResistance = 1.0;
           }
         }
-      } else if (fighter.precognition < fighter.maxPrecognition) {
-        // Normal: regenerate 1 precognition per 3 seconds
+      } else if (precognitionStatus) {
+        // Precognition state
+        fighter.damageResistance = 1.0;
+        fighter.isOverheated = false;
+        
+        // Update precognition property to match status
+        fighter.precognition = precognitionStatus.count;
+        
+        // After 5 seconds without evading or being hit, gain 1 precognition
         fighter.precognitionTimer += dt;
-        if (fighter.precognitionTimer >= 3) {
+        if (fighter.precognitionTimer >= 5) {
           fighter.precognitionTimer = 0;
-          fighter.precognition = min(fighter.maxPrecognition, fighter.precognition + 1);
+          if (precognitionStatus.count < 30) {
+            precognitionStatus.count += 1;
+            fighter.precognition = precognitionStatus.count;
+          }
         }
-      }
-      
-      // Check for overheat (0 precognition)
-      if (fighter.precognition <= 0 && !fighter.isOverheated) {
-        fighter.isOverheated = true;
-        fighter.overheat = 30;
-        fighter.damageResistance = 0.8;
+        
+        // Check for transition to overheat (0 precognition)
+        if (precognitionStatus.count <= 0) {
+          fighter.removeStatus('Precognition');
+          fighter.addStatus('Overheat', 30, 1);
+          fighter.isOverheated = true;
+          fighter.overheat = 30;
+          fighter.overheatTimer = 0;
+        }
       }
       
       // Accelerating Future passive - gain speed and reduce attack interval per combo
@@ -342,18 +386,40 @@ const CHARACTERS = {
         const damageResistance = min(0.5, 0.1 + (enemyCombo * 0.05));
         fighter.damageResistance = max(fighter.damageResistance, damageResistance);
       }
+      
+      // Reduce cooldowns
+      fighter.timeToHuntCooldown = max(0, fighter.timeToHuntCooldown - dt);
+      fighter.disposialCooldown = max(0, fighter.disposialCooldown - dt);
     },
     processKeyPressed: function(key, fighter) {
       const keyLower = key.toLowerCase();
       
       // Time to Hunt ability (Q key)
       if (keyLower === 'q') {
-        fighter.useTimeToHunt();
+        // Implement Time to Hunt logic - inflict Game Target on last enemy hit
+        if (fighter.timeToHuntCooldown <= 0) {
+          // Check if we have a last hit opponent
+          if (fighter.lastHitOpponent) {
+            // Inflict Game Target status on the last enemy hit
+            fighter.lastHitOpponent.addStatus('Game Target', 5, 1); // 5 hits, 1 potency
+            
+            // Set cooldown
+            fighter.timeToHuntCooldown = 5; // 5 second cooldown
+          }
+        }
       }
       
-      // Disposial ultimate ability (E key) 
-      if (keyLower === 'e') {
-        fighter.useDisposial();
+      // Disposial ultimate ability (X key) 
+      if (keyLower === 'x') {
+        // Implement Disposial logic directly
+        if (fighter.disposialCooldown <= 0) {
+          // Clear all statuses and add Game Target status
+          fighter.statuses = [];
+          fighter.addStatus('Game Target', 1, 1);
+          
+          // Set cooldown
+          fighter.disposialCooldown = 10; // 10 second cooldown
+        }
       }
     },
     initializeCharacter: function(fighter) {
@@ -367,9 +433,16 @@ const CHARACTERS = {
       fighter.overheat = 0;
       fighter.lastHitOpponent = null;
       
-      // Valencina-specific cooldowns
+      // Initialize cooldowns
       fighter.timeToHuntCooldown = 0;
       fighter.disposialCooldown = 0;
+      
+      // Initialize timers
+      fighter.precognitionTimer = 0;
+      fighter.overheatTimer = 0;
+      
+      // Add initial precognition status effect
+      fighter.addStatus('Precognition', 30, 1);
       
       // Set default sprite
       fighter.currentSprite = 'idle';

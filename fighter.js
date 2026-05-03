@@ -1162,6 +1162,11 @@ class Fighter {
     
     // Draw sprite if available, otherwise draw default character
     if (this.spriteType === 'atlas' && this.currentSprite) {
+      // Debug: Test if sprite drawing works
+      console.log("Attempting to draw sprite:", this.currentSprite, "spriteType:", this.spriteType);
+      console.log("SPRITES available:", Object.keys(SPRITES));
+      console.log("Atlases available:", Object.keys(atlases));
+      
       // Use sprite atlas system
       push();
       // Apply direction flipping for atlas sprites (default sprite faces left)
@@ -1171,14 +1176,18 @@ class Fighter {
       // Calculate scale to match John's size (144 pixels height)
       const targetHeight = 144;
       const spriteInfo = SPRITES[this.currentSprite];
+      console.log("Sprite info:", spriteInfo);
       if (spriteInfo) {
         const originalHeight = spriteInfo.h * 256; // CELL size
         const scaleFactor = targetHeight / originalHeight;
+        console.log("Scale factor:", scaleFactor, "originalHeight:", originalHeight);
         
         // Position Valencina's feet at the bottom of her hitbox
         // Hitbox bottom is at this.pos.y + 36, so feet should be at y = 36
         const hitboxBottomY = 36;
-        drawSpriteScaled(this.currentSprite, 0, hitboxBottomY, scaleFactor);
+        console.log("Calling drawSpriteScaled with:", this.currentSprite, 0, hitboxBottomY, scaleFactor);
+        const result = drawSpriteScaled(this.currentSprite, 0, hitboxBottomY, scaleFactor);
+        console.log("drawSpriteScaled result:", result);
       }
       pop();
     } else if (this.sprite && this.sprite.width > 0) {

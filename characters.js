@@ -89,7 +89,9 @@ function drawSprite(name, x, y, scale = 1) {
   translate(x, y);
   
   // Apply scale
-  scale(scale, scale);
+  if (scale !== 1) {
+    scale(scale, scale);
+  }
 
   image(
     img,

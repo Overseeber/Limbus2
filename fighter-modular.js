@@ -189,7 +189,7 @@ class Fighter {
 
     // Handle special states
     if (this.isSlamAttacking) {
-      this.currentSprite = 's4f4'; // Slam attack sprite
+      this.currentSprite = 's4f4'; // Keep s4f4 for character sprite
     } else if (this.isDashing) {
       if (this.state === 'attack') {
         this.currentSprite = 'joust'; // Dash attack sprite
@@ -337,25 +337,75 @@ class Fighter {
         continue;
       }
 
-      const spriteInfo = SPRITES?.[effect.type];
-      if (!spriteInfo) continue; // Prevent crash for missing sprites
-
       push();
 
       const owner = effect.owner;
-      let x = owner.pos.x + (effect.targetOffset?.x || 0);
-      let y = owner.pos.y + (effect.targetOffset?.y || 0);
-
-      // Apply facing to slash effect
-      if (owner.facing === -1) {
-        scale(-1, 1);
-        x = x - (effect.targetOffset?.x || 0);
-      }
-
-      translate(x, y);
       
-      // Draw sprite centered at origin after transform
-      drawSpriteScaled(effect.type, 0, 0, 1.0, effect.timer); // Fade with timer
+      // Translate to character position first
+      translate(owner.pos.x, owner.pos.y);
+      
+      // Apply same flipping as character sprites
+      if (owner.spriteType === 'atlas') {
+        scale(owner.facing === 1 ? -1 : 1, 1);
+      } else {
+        scale(owner.facing, 1);
+      }
+      
+      // Apply target offset
+      const offsetX = effect.targetOffset?.x || 0;
+      const offsetY = effect.targetOffset?.y || 0;
+      
+      // Apply same scaling as character sprites
+      if (owner.spriteType === 'atlas') {
+        // Use same scale factor as character (144/512)
+        const scaleFactor = 144 / 512;
+        
+        // Try to draw sprite with proper scaling
+        const spriteInfo = SPRITES?.[effect.type];
+        if (spriteInfo) {
+          drawSpriteScaled(effect.type, offsetX, offsetY + 36, scaleFactor, effect.timer); // Use same hitboxBottomY offset
+        } else {
+          // Fallback: draw scaled slash effect
+          push();
+          scale(scaleFactor);
+          stroke(255, 200, 100, map(effect.timer, 0, 1.0, 0, 255));
+          strokeWeight(4);
+          line(-30 + offsetX, -15 + offsetY, 30 + offsetX, 15 + offsetY);
+          stroke(255, 255, 255, map(effect.timer, 0, 1.0, 0, 200));
+          strokeWeight(2);
+          line(-25 + offsetX, -10 + offsetY, 25 + offsetX, 10 + offsetY);
+          
+          fill(255, 255, 0, map(effect.timer, 0, 1.0, 0, 150));
+          noStroke();
+          ellipse(offsetX, offsetY, 15, 15);
+          pop();
+        }
+      } else {
+        // Regular sprite scaling
+        const targetHeight = 144;
+        const scaleFactor = targetHeight / (owner.sprite?.height || 512);
+        
+        // Try to draw sprite with proper scaling
+        const spriteInfo = SPRITES?.[effect.type];
+        if (spriteInfo) {
+          drawSpriteScaled(effect.type, offsetX, offsetY - 30, scaleFactor, effect.timer); // Use same offset as regular sprite
+        } else {
+          // Fallback: draw scaled slash effect
+          push();
+          scale(scaleFactor);
+          stroke(255, 200, 100, map(effect.timer, 0, 1.0, 0, 255));
+          strokeWeight(4);
+          line(-30 + offsetX, -15 + offsetY, 30 + offsetX, 15 + offsetY);
+          stroke(255, 255, 255, map(effect.timer, 0, 1.0, 0, 200));
+          strokeWeight(2);
+          line(-25 + offsetX, -10 + offsetY, 25 + offsetX, 10 + offsetY);
+          
+          fill(255, 255, 0, map(effect.timer, 0, 1.0, 0, 150));
+          noStroke();
+          ellipse(offsetX, offsetY, 15, 15);
+          pop();
+        }
+      }
       
       pop();
     }
@@ -940,6 +990,9 @@ class Fighter {
     // Auto-face towards opponent when attacking
     this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
     
+    // Spawn a simple slash effect for all attacks
+    this.spawnSlashEffect('s1s1', { x: 0, y: -20 });
+    
     // Base attack damage and range
     this.attackDamage = attackType === 'heavy' ? this.baseDamage * 2 : this.baseDamage;
     this.attackRange = attackType === 'heavy' ? 196 : 154; // 40% increase: 140→196, 110→154
@@ -1034,8 +1087,8 @@ class Fighter {
     this.state = 'slam';
     this.slamLandingHitbox = null;
     
-    // Spawn s4f4 slash effect for slam attack
-    this.spawnSlashEffect('s4f4', { x: 0, y: -20 });
+    // Spawn s2s2 slash effect for slam attack
+    this.spawnSlashEffect('s2s2', { x: 0, y: -20 });
   }
 
   resolveAttack(opponent) {
@@ -1493,6 +1546,10 @@ class Fighter {
       ellipse(0, -40, 12, 12);
     }
     pop();
+    
+    // Draw slash effects
+    this.drawSlashEffects(0.016); // Assuming 60 FPS
+    
     this.drawWorldHpBar();
     this.drawStatusEffects();
 

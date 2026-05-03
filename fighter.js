@@ -260,12 +260,8 @@ class Fighter {
     this.precognitionTimer = max(0, this.precognitionTimer - dt);
     this.dialogueTimer = max(0, this.dialogueTimer - dt);
     
-    // Basic debug test
-    console.log("Fighter update running for", this.name, "characterKey:", this.characterKey);
-    
     // Call character-specific onUpdate method
     const character = CHARACTERS[this.characterKey];
-    console.log("Checking character onUpdate for", this.characterKey, "character exists:", !!character, "onUpdate exists:", !!(character && character.onUpdate));
     if (character && character.onUpdate) {
       character.onUpdate(dt, opponent, this);
     }
@@ -1163,9 +1159,6 @@ class Fighter {
   draw() {
     push();
     translate(this.pos.x, this.pos.y);
-    
-    // Debug: Check current sprite
-    console.log("Drawing sprite:", this.currentSprite, "spriteType:", this.spriteType);
     
     // Draw sprite if available, otherwise draw default character
     if (this.spriteType === 'atlas' && this.currentSprite) {

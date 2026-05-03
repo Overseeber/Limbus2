@@ -153,7 +153,6 @@ const CHARACTERS = {
     accelerationRounds: 5,
     maxPrecognition: 30,
     spriteType: 'atlas', // Use sprite atlas system
-    currentSprite: 'idle', // Default sprite
     // Character-specific methods
     onSuccessfulHit: function(damage, opponent, fighter) {
       if (!opponent) return;
@@ -230,42 +229,29 @@ const CHARACTERS = {
       fighter.precognitionTimer = 0;
     },
     onUpdate: function(dt, opponent, fighter) {
-      // Debug: Check if method is being called
-      console.log("onUpdate called for", fighter.name, "characterKey:", fighter.characterKey);
-      
       // Sprite state changes
       let newSprite = 'idle'; // default sprite
-      
-      // Debug: log current state
-      console.log("Current state:", fighter.state, "isGuarding:", fighter.isGuarding, "isEvading:", fighter.isEvading, "vel.x:", fighter.vel.x);
       
       // Priority order for sprite states
       if (fighter.state === 'hit') {
         newSprite = 'hurt';
-        console.log("Setting sprite to hurt");
       } else if (fighter.isGuarding) {
         newSprite = 'guard';
-        console.log("Setting sprite to guard");
       } else if (fighter.isEvading) {
         newSprite = 'evade';
-        console.log("Setting sprite to evade");
       } else if (fighter.state === 'attack') {
         // Use prepat for first attack in combo
         if (fighter.attackCounter === 0) {
           newSprite = 'prepat';
-          console.log("Setting sprite to prepat");
         } else {
           newSprite = 'idle'; // Use idle for other attacks for now
-          console.log("Setting sprite to idle (attack)");
         }
       } else if (fighter.state === 'run' || (abs(fighter.vel.x) > 0.1 && fighter.onGround())) {
         newSprite = 'moving';
-        console.log("Setting sprite to moving");
       }
       
       // Only update if sprite actually changed
       if (fighter.currentSprite !== newSprite) {
-        console.log("Sprite changed from", fighter.currentSprite, "to", newSprite);
         fighter.currentSprite = newSprite;
       }
       
@@ -327,8 +313,6 @@ const CHARACTERS = {
       }
     },
     initializeCharacter: function(fighter) {
-      console.log("Initializing Valencina character");
-      
       // Initialize Valencina-specific properties
       fighter.accelerationRounds = 0;
       fighter.maxAccelerationRounds = 10;
@@ -343,9 +327,8 @@ const CHARACTERS = {
       fighter.timeToHuntCooldown = 0;
       fighter.disposialCooldown = 0;
       
-      // TEMPORARY TEST: Force sprite change to guard
-      fighter.currentSprite = 'guard';
-      console.log("Valencina initialized, forcing sprite to guard for testing");
+      // Set default sprite
+      fighter.currentSprite = 'idle';
     }
   }
 };

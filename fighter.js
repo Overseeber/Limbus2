@@ -103,28 +103,15 @@ class Fighter {
       evade: false,
     };
     
-    // Valencina-specific properties
-    this.accelerationRounds = 0;
-    this.maxAccelerationRounds = 10;
-    this.isCharged = false;
-    this.precognition = 30;
-    this.maxPrecognition = 30;
-    this.overheat = 0;
-    this.maxOverheat = 30;
-    this.isOverheated = false;
-    this.timeToHuntCooldown = 0;
-    this.disposialCooldown = 0;
-    this.shinActive = false;
+    // Character-specific properties will be initialized by character profile
     this.dialogueTimer = 0;
     this.currentDialogue = '';
-    this.precognitionTimer = 0;
     this.damageResistance = 1.0;
     
     // Set character-specific properties
     const character = CHARACTERS[this.characterKey];
     this.name = character.name;
     this.title = character.title;
-    this.weapon = this.characterKey === 'VALENCINA' ? 'La Spada di Palermo' : 'bus';
     this.baseDamage = character.baseDamage;
     
     // Set controls for player
@@ -143,8 +130,10 @@ class Fighter {
     // Set jump strength
     this.jumpStrength = -20;
     
-    // Track last hit opponent for Time to Hunt ability
-    this.lastHitOpponent = null;
+    // Initialize character-specific properties
+    if (character.initializeCharacter) {
+      character.initializeCharacter(this);
+    }
   }
 
   isDead() {
@@ -177,14 +166,10 @@ class Fighter {
       this.requestEvade();
     }
     
-    // Valencina's Time to Hunt ability (Q key)
-    if (keyLower === 'q' && this.characterKey === 'VALENCINA') {
-      this.useTimeToHunt();
-    }
-    
-    // Valencina's Disposial ultimate ability (E key) 
-    if (keyLower === 'e' && this.characterKey === 'VALENCINA') {
-      this.useDisposial();
+    // Call character-specific processKeyPressed method
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.processKeyPressed) {
+      character.processKeyPressed(keyValue, this);
     }
   }
 
@@ -237,26 +222,12 @@ class Fighter {
   }
 
   useTimeToHunt() {
-    if (this.timeToHuntCooldown > 0 || this.characterKey !== 'VALENCINA') {
-      return;
+    // This method is now handled by character profiles
+    // Keeping for backward compatibility
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.processKeyPressed) {
+      character.processKeyPressed('q', this);
     }
-    
-    // Target the last hit opponent
-    const opponent = this.lastHitOpponent;
-    
-    // Inflict Game Target status on enemy
-    if (opponent) {
-      opponent.addStatus('Game Target', 1, 1);
-      
-      // Duration: 5 hits or 10 seconds
-      const gameTargetStatus = opponent.statuses.find((s) => s.type === 'Game Target');
-      if (gameTargetStatus) {
-        gameTargetStatus.duration = 5; // 5 hits
-        gameTargetStatus.timer = 10; // 10 seconds
-      }
-    }
-    
-    this.timeToHuntCooldown = 5; // 5 second cooldown
   }
 
   update(dt, opponent) {
@@ -278,6 +249,12 @@ class Fighter {
     this.disposialCooldown = max(0, this.disposialCooldown - dt);
     this.precognitionTimer = max(0, this.precognitionTimer - dt);
     this.dialogueTimer = max(0, this.dialogueTimer - dt);
+    
+    // Call character-specific onUpdate method
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.onUpdate) {
+      character.onUpdate(dt, opponent, this);
+    }
     
     // Valencina's Eye of Precognition passive
     if (this.characterKey === 'VALENCINA') {
@@ -336,62 +313,12 @@ class Fighter {
   }
 
   useDisposial() {
-    if (this.disposialCooldown > 0 || this.characterKey !== 'VALENCINA' || !this.hasStatus('Overheat')) {
-      return;
+    // This method is now handled by character profiles
+    // Keeping for backward compatibility
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.processKeyPressed) {
+      character.processKeyPressed('e', this);
     }
-    
-    // Only targets unit with Game Target
-    // Note: battle object may not be available, so we'll need to pass the target differently
-    // For now, this method will need the opponent passed as a parameter
-    console.log("Disposial called - needs opponent parameter");
-    return;
-    
-    // QTE x 5
-    const qteHits = 5;
-    
-    for (let i = 1; i <= qteHits; i++) {
-      switch(i) {
-        case 1:
-        // Inflict 3 burn and tremor potency
-          target.addStatus('Burn', 3, 3);
-          target.addStatus('Tremor', 3, 3);
-          break;
-        case 2:
-          // Inflict 3 burn and tremor potency
-          target.addStatus('Burn', 3, 3);
-          target.addStatus('Tremor', 3, 3);
-          break;
-        case 3:
-          // Inflict 6 burn and tremor count
-          target.addStatus('Burn', 6, 6);
-          target.addStatus('Tremor', 6, 6);
-          break;
-        case 4:
-          // Trigger tremor burst
-          const tremorStatus = target.statuses.find((s) => s.type === 'Tremor');
-          if (tremorStatus && tremorStatus.count > 0) {
-            const burnStatus = target.statuses.find((s) => s.type === 'Burn');
-            const damage = (burnStatus?.potency || 0 + tremorStatus.potency) / 2;
-            target.hp -= damage;
-            spawnDamageNumber(damage, target.pos.copy(), this.facing, false);
-          }
-          break;
-        case 5:
-          // Trigger tremor burst and deal damage 3 times
-          const tremorStatus2 = target.statuses.find((s) => s.type === 'Tremor');
-          if (tremorStatus2 && tremorStatus2.count > 0) {
-            const burnStatus2 = target.statuses.find((s) => s.type === 'Burn');
-            const damage2 = (burnStatus2?.potency || 0 + tremorStatus2.potency) / 2;
-            for (let j = 0; j < 3; j++) {
-              target.hp -= damage2;
-              spawnDamageNumber(damage2, target.pos.copy(), this.facing, false);
-            }
-          }
-          break;
-      }
-    }
-    
-    this.disposialCooldown = 10; // 10 second cooldown;
   }
 
   update(dt, opponent) {
@@ -984,19 +911,10 @@ class Fighter {
       this.staggeredDisplayTimer = 2.0; // Show for 2 seconds
     }
 
-    // Valencina's Eye of Precognition passive
-    if (this.characterKey === 'VALENCINA') {
-      // When attacked, 3% x cognition chance to evade (max 90%)
-      const evadeChance = min(0.9, this.precognition * 0.03);
-      if (random() < evadeChance) {
-        this.startEvade(attacker);
-        this.consumeStatus('Precognition');
-        return;
-      }
-      
-      // When hit: gain 1 precognition
-      this.precognition = min(this.maxPrecognition, this.precognition + 1);
-      this.precognitionTimer = 0;
+    // Call character-specific onReceiveHit method
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.onReceiveHit) {
+      character.onReceiveHit(amount, attacker, this);
     }
 
     this.consumeStatusOnHit();
@@ -1012,66 +930,10 @@ class Fighter {
     }
     this.parryCount = min(3, this.parryCount + 1);
     
-    // Track last hit opponent for Time to Hunt ability
-    if (opponent) {
-      this.lastHitOpponent = opponent;
-    }
-    
-    // Valencina's on-hit effects: inflict burn and tremor
-    if (this.characterKey === 'VALENCINA' && opponent) {
-      // Inflict 2 burn potency and count
-      opponent.addStatus('Burn', 2, 2);
-      // Inflict 2 tremor potency and count
-      opponent.addStatus('Tremor', 2, 2);
-      
-      // Dialogue triggers
-      if (!this.currentDialogue) {
-        this.currentDialogue = "I'll be damned before I let you ruin this! Not after toiling like a goddamn dog for decades, climbing up the ranks...!";
-        this.dialogueTimer = 10;
-      }
-      
-      // On 5x combo counter
-      if (this.attackCounter >= 5) {
-        this.currentDialogue = "Feeling confident today? Then parry this, asshole.\nMatch my hatred.";
-        this.dialogueTimer = 10;
-      }
-      
-      // On manual evade
-      if (this.isEvading) {
-        this.currentDialogue = "What, having a hard time landing a hit?\nYou won't even manage to brush my coattails at this rate.\nI'm reading you like an open book.\nBack in my day, you wouldn't even have dared to look me in the eye.\nWhat'd I say? I can handle you as long as I've got this eye.";
-        this.dialogueTimer = 10;
-        this.consumeStatus('Precognition');
-      }
-      
-      // Reduced to 60% hp
-      if (this.hp < this.maxHp * 0.6) {
-        this.currentDialogue = "Fuck you! I am Valencina della Famiglia Bognatelli...! I refuse to rot in this fucking dump!";
-        this.dialogueTimer = 10;
-      }
-      
-      // On kill
-      if (opponent.hp <= 0) {
-        this.currentDialogue = "Hahahahaha!\n And the hunt comes to a close!\n I'll make mincemeat of you all!";
-        this.dialogueTimer = 10;
-      }
-      
-      // On hit
-      if (this.state === 'hit') {
-        this.currentDialogue = "Shit!\nWhat the hell—";
-        this.dialogueTimer = 10;
-      }
-      
-      // Overheat
-      if (this.isOverheated) {
-        this.currentDialogue = "... Tsk. Overheated already?";
-        this.dialogueTimer = 10;
-      }
-      
-      // Disposal
-      if (this.isOverheated && this.overheat > 20) {
-        this.currentDialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all!\nYeah, I hate you all! The damn Famiglia, you, and Ticket, too!";
-        this.dialogueTimer = 10;
-      }
+    // Call character-specific onSuccessfulHit method
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.onSuccessfulHit) {
+      character.onSuccessfulHit(damage, opponent, this);
     }
   }
 

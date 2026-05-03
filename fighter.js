@@ -1162,8 +1162,8 @@ class Fighter {
       scale(this.facing, 1);
       imageMode(CENTER);
       
-      // Calculate scale to match original height (72 pixels) while maintaining proportions
-      const targetHeight = 72;
+      // Calculate scale to make sprite 2x as big (144 pixels) while maintaining proportions
+      const targetHeight = 144;
       const scaleFactor = targetHeight / this.sprite.height;
       const scaledWidth = this.sprite.width * scaleFactor;
       

@@ -144,6 +144,9 @@ class Fighter {
       this.currentSprite = character.defaultSprite || 'idle';
     }
     
+    // Initialize dash sprite properties
+    this.usePostDashSprite = false;
+    
     if (character.sprite && this.spriteType !== 'atlas') {
       // Regular sprite loading
       this.sprite = loadImage(character.sprite);
@@ -165,7 +168,22 @@ class Fighter {
       duck: 'idle'
     };
 
-    this.currentSprite = stateMap[this.state] || 'idle';
+    // Handle dash states specially
+    if (this.isDashing) {
+      if (this.state === 'attack') {
+        this.currentSprite = 'joust'; // Dash attack sprite
+      } else if (this.usePostDashSprite) {
+        this.currentSprite = 's2f1'; // Post-dash attack sprite
+      } else {
+        this.currentSprite = 'moving'; // Regular dash movement sprite
+      }
+    } else if (this.usePostDashSprite && !this.isDashing) {
+      // Reset post-dash sprite when dash ends
+      this.usePostDashSprite = false;
+      this.currentSprite = stateMap[this.state] || 'idle';
+    } else {
+      this.currentSprite = stateMap[this.state] || 'idle';
+    }
   }
 
   isDead() {
@@ -687,6 +705,9 @@ class Fighter {
     this.attackDamage = this.baseDamage * 1.5;
     this.attackRange = 168; // 40% increase: 120→168
     this.attackKnockback = 15;
+
+    // Set flag for post-dash attack sprite
+    this.usePostDashSprite = true;
 
     // Immediately resolve the attack since dash attacks are instant
     this.resolveAttack(opponent);

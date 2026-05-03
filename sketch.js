@@ -131,7 +131,7 @@ function mousePressed() {
     player.requestAttack();
     lastMouseDown = millis();
   } else if (mouseButton === RIGHT) {
-    player.requestGuard();
+    player.requestGuard(enemy);
   }
 }
 

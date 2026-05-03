@@ -262,6 +262,7 @@ class Fighter {
     
     // Call character-specific onUpdate method
     const character = CHARACTERS[this.characterKey];
+    console.log("Checking character onUpdate for", this.characterKey, "character exists:", !!character, "onUpdate exists:", !!(character && character.onUpdate));
     if (character && character.onUpdate) {
       character.onUpdate(dt, opponent, this);
     }

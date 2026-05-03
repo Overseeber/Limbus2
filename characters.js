@@ -230,6 +230,9 @@ const CHARACTERS = {
       fighter.precognitionTimer = 0;
     },
     onUpdate: function(dt, opponent, fighter) {
+      // Debug: Check if method is being called
+      console.log("onUpdate called for", fighter.name, "characterKey:", fighter.characterKey);
+      
       // Sprite state changes
       let newSprite = 'idle'; // default sprite
       

@@ -131,11 +131,8 @@ class Fighter {
     this.jumpStrength = -20;
     
     // Initialize character-specific properties
-    console.log("Checking initializeCharacter for", this.characterKey, "method exists:", !!(character && character.initializeCharacter));
     if (character.initializeCharacter) {
-      console.log("Calling initializeCharacter");
       character.initializeCharacter(this);
-      console.log("After initializeCharacter, currentSprite:", this.currentSprite);
     }
     
     // Load character sprite if available
@@ -1163,29 +1160,26 @@ class Fighter {
     push();
     translate(this.pos.x, this.pos.y);
     
-    // Debug: Check sprite condition
-    console.log("Sprite condition check - spriteType:", this.spriteType, "currentSprite:", this.currentSprite, "name:", this.name);
-    
     // Draw sprite if available, otherwise draw default character
     if (this.spriteType === 'atlas' && this.currentSprite) {
-      // Test basic sprite drawing first
-      console.log("Attempting to draw sprite:", this.currentSprite, "spriteType:", this.spriteType);
-      
-      // Try basic sprite drawing without scaling first
+      // Use sprite atlas system
       push();
-      // Apply direction flipping
+      // Apply direction flipping for atlas sprites (default sprite faces left)
+      // When facing right (1), flip to face right; when facing left (-1), don't flip
       scale(this.facing === 1 ? -1 : 1, 1);
       
-      // Test basic drawSprite function
-      console.log("Testing basic drawSprite with:", this.currentSprite, 0, 0);
-      
-      // Visual test: draw a red rectangle if sprite drawing is being called
-      fill(255, 0, 0);
-      rect(-25, -25, 50, 50);
-      
-      const basicResult = drawSprite(this.currentSprite, 0, 0);
-      console.log("Basic drawSprite result:", basicResult);
-      
+      // Calculate scale to match John's size (144 pixels height)
+      const targetHeight = 144;
+      const spriteInfo = SPRITES[this.currentSprite];
+      if (spriteInfo) {
+        const originalHeight = spriteInfo.h * 256; // CELL size
+        const scaleFactor = targetHeight / originalHeight;
+        
+        // Position Valencina's feet at the bottom of her hitbox
+        // Hitbox bottom is at this.pos.y + 36, so feet should be at y = 36
+        const hitboxBottomY = 36;
+        drawSpriteScaled(this.currentSprite, 0, hitboxBottomY, scaleFactor);
+      }
       pop();
     } else if (this.sprite && this.sprite.width > 0) {
       // Regular sprite loading

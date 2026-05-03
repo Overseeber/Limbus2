@@ -261,6 +261,11 @@ const CHARACTERS = {
       fighter.precognitionTimer = 0;
     },
     onUpdate: function(dt, opponent, fighter) {
+      // Debug: Check if onUpdate is being called
+      if (fighter.characterKey === 'VALENCINA') {
+        console.log("Valencina onUpdate called - state:", fighter.state, "currentSprite:", fighter.currentSprite);
+      }
+      
       // Sprite state changes
       let newSprite = 'idle'; // default sprite
       
@@ -284,6 +289,7 @@ const CHARACTERS = {
       
       // Only update if sprite actually changed
       if (fighter.currentSprite !== newSprite) {
+        console.log("Changing sprite from", fighter.currentSprite, "to", newSprite);
         fighter.currentSprite = newSprite;
       }
       
@@ -345,8 +351,6 @@ const CHARACTERS = {
       }
     },
     initializeCharacter: function(fighter) {
-      console.log("Valencina initializeCharacter called");
-      
       // Initialize Valencina-specific properties
       fighter.accelerationRounds = 0;
       fighter.maxAccelerationRounds = 10;
@@ -363,7 +367,6 @@ const CHARACTERS = {
       
       // Set default sprite
       fighter.currentSprite = 'idle';
-      console.log("Set currentSprite to idle, now:", fighter.currentSprite);
     }
   }
 };

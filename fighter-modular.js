@@ -54,6 +54,7 @@ class Fighter {
     this.attackIgnoreParry = false;
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
+    this.slashEffectsSpawned = false;
     
     // STEP 1: Isolate state management - create stateMachine object
     this.stateMachine = {
@@ -228,6 +229,7 @@ class Fighter {
     this.attackIgnoreParry = false;
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
+    this.slashEffectsSpawned = false;
     this.attackSequence = 0;
     this.attackFrame = 0;
     this.attackFrameTimer = 0;
@@ -383,10 +385,11 @@ class Fighter {
       if (this.attackFrame < sequence.length) {
         this.currentSprite = sequence[this.attackFrame];
         
-        // Spawn slash effects on specific frames
-        if (this.attackFrame === 1) {
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
           this.spawnSlashEffect('s1s1', { x: 0, y: -20 });
           this.spawnSlashEffect('s1s2', { x: 20, y: 0 });
+          this.slashEffectsSpawned = true;
         }
         
         // Deal damage on damage frames
@@ -404,9 +407,10 @@ class Fighter {
       if (this.attackFrame < sequence.length) {
         this.currentSprite = sequence[this.attackFrame];
         
-        // Spawn slash effects on specific frames
-        if (this.attackFrame === 0) {
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 0 && !this.slashEffectsSpawned) {
           this.spawnSlashEffect('s1s3', { x: 0, y: -20 });
+          this.slashEffectsSpawned = true;
         }
         
         // Deal damage on damage frames
@@ -425,9 +429,10 @@ class Fighter {
       if (this.attackFrame < sequence.length) {
         this.currentSprite = sequence[this.attackFrame];
         
-        // Spawn slash effects on specific frames
-        if (this.attackFrame === 1) {
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
           this.spawnSlashEffect('s1s4', { x: 0, y: -20 });
+          this.slashEffectsSpawned = true;
         }
         
         // Use custom frame duration for s3f3
@@ -1198,6 +1203,7 @@ class Fighter {
     this.attackIgnoreParry = ignoreParry;
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
+    this.slashEffectsSpawned = false;
     this.parryWindow = 0.8; // Increased parry window from 0.5 to 0.8 seconds
     this.lastAttackHit = false;
     this.strikeActive = true; // Set strikeActive for normal attacks
@@ -1260,6 +1266,7 @@ class Fighter {
     this.attackIgnoreParry = true;
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
+    this.slashEffectsSpawned = false;
     this.parryWindow = 0; // No parry window for dash attacks
     this.lastAttackHit = false;
 

@@ -331,9 +331,7 @@ class Fighter {
       }
     }
 
-    if (this.state === 'hit' && this.staggerTimer <= 0) {
-      this.state = 'idle';
-    }
+    // Don't auto-exit hurt state - player must act to exit
 
     if ((this.state === 'parry' || this.state === 'parried') && this.parryStunTimer <= 0) {
       this.state = 'idle';
@@ -482,7 +480,7 @@ class Fighter {
       }
     }
 
-    if (this.state === 'idle' || this.state === 'run') {
+    if (this.state === 'idle' || this.state === 'run' || this.state === 'hit') {
       if (moveDir === 0) {
         this.state = 'idle';
       } else {
@@ -1121,15 +1119,14 @@ class Fighter {
       // When facing right (1), flip to face right; when facing left (-1), don't flip
       scale(this.facing === 1 ? -1 : 1, 1);
       
-      // Calculate scale to match John's size (144 pixels height)
-      const targetHeight = 144;
+      // Calculate scale: 512px = John Limbus height (144px)
       const spriteInfo = SPRITES[this.currentSprite];
       if (!SPRITES[this.currentSprite]) {
         console.warn("Missing sprite:", this.currentSprite);
       }
       if (spriteInfo) {
         const originalHeight = spriteInfo.h * 256; // CELL size
-        const scaleFactor = targetHeight / originalHeight;
+        const scaleFactor = 144 / 512; // 144px (John height) / 512px (sprite height)
         
         // Position Valencina's feet at the bottom of her hitbox
         // Hitbox bottom is at this.pos.y + 36, so feet should be at y = 36

@@ -354,7 +354,7 @@ class Fighter {
       translate(x, y);
       
       // Draw sprite centered at origin after transform
-      drawSprite(effect.type, 0, 0, 1.0, effect.timer); // Fade with timer
+      drawSpriteScaled(effect.type, 0, 0, 1.0, effect.timer); // Fade with timer
       
       pop();
     }

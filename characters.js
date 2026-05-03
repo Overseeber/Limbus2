@@ -345,6 +345,8 @@ const CHARACTERS = {
       }
     },
     initializeCharacter: function(fighter) {
+      console.log("Valencina initializeCharacter called");
+      
       // Initialize Valencina-specific properties
       fighter.accelerationRounds = 0;
       fighter.maxAccelerationRounds = 10;
@@ -361,6 +363,7 @@ const CHARACTERS = {
       
       // Set default sprite
       fighter.currentSprite = 'idle';
+      console.log("Set currentSprite to idle, now:", fighter.currentSprite);
     }
   }
 };

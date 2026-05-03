@@ -131,14 +131,17 @@ class Fighter {
     this.jumpStrength = -20;
     
     // Initialize character-specific properties
+    console.log("Checking initializeCharacter for", this.characterKey, "method exists:", !!(character && character.initializeCharacter));
     if (character.initializeCharacter) {
+      console.log("Calling initializeCharacter");
       character.initializeCharacter(this);
+      console.log("After initializeCharacter, currentSprite:", this.currentSprite);
     }
     
     // Load character sprite if available
     this.sprite = null;
     this.spriteType = character.spriteType || null;
-    this.currentSprite = character.currentSprite || null;
+    // Don't overwrite currentSprite - it should be set in initializeCharacter
     
     if (character.sprite && this.spriteType !== 'atlas') {
       // Regular sprite loading

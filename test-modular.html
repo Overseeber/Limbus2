@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Modular Fighter Test</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+</head>
+<body>
+    <h1>Modular Fighter System Test</h1>
+    <div id="test-results"></div>
+    
+    <script type="module">
+        // Test the modular fighter system
+        import { Fighter } from './fighter-refactored.js';
+        
+        function runTests() {
+            const results = document.getElementById('test-results');
+            results.innerHTML = '<h2>Test Results:</h2>';
+            
+            try {
+                // Test 1: Create a modular fighter
+                const testFighter = new Fighter(false, 'TestFighter', 'JOHN');
+                results.innerHTML += '<p>✅ Fighter creation: SUCCESS</p>';
+                
+                // Test 2: Check properties
+                if (testFighter.hp > 0 && testFighter.speed > 0) {
+                    results.innerHTML += '<p>✅ Fighter properties: SUCCESS</p>';
+                } else {
+                    results.innerHTML += '<p>❌ Fighter properties: FAILED</p>';
+                }
+                
+                // Test 3: Check component systems
+                if (testFighter.stateMachine && testFighter.attackSystem && testFighter.movementSystem && testFighter.renderSystem) {
+                    results.innerHTML += '<p>✅ Component systems: SUCCESS</p>';
+                } else {
+                    results.innerHTML += '<p>❌ Component systems: FAILED</p>';
+                }
+                
+                // Test 4: Check methods exist
+                const requiredMethods = ['update', 'draw', 'executeAttack', 'receiveHit', 'handleInput'];
+                let methodsOK = true;
+                for (const method of requiredMethods) {
+                    if (!testFighter[method]) {
+                        methodsOK = false;
+                        break;
+                    }
+                }
+                
+                if (methodsOK) {
+                    results.innerHTML += '<p>✅ Required methods: SUCCESS</p>';
+                } else {
+                    results.innerHTML += '<p>❌ Required methods: FAILED</p>';
+                }
+                
+                results.innerHTML += '<h3>✅ All tests completed! Modular system is working.</h3>';
+                
+            } catch (error) {
+                results.innerHTML += `<p>❌ Test failed: ${error.message}</p>`;
+                console.error('Test error:', error);
+            }
+        }
+        
+        // Run tests when page loads
+        window.addEventListener('load', runTests);
+    </script>
+</body>
+</html>

@@ -48,12 +48,41 @@ export class BasicAttackSystem extends IAttackSystem {
   }
   
   executeAttack(attackType, context) {
-    // Default attack execution
-    console.log(`Executing attack: ${attackType}`);
+    // Delegate to the fighter's executeAttack method for compatibility
+    if (context.executeAttack) {
+      context.executeAttack(context, false);
+    }
   }
   
   update(dt, context) {
-    // Default attack update logic
+    // Update attack frame timers
+    if (context.attackFrameTimer > 0) {
+      context.attackFrameTimer -= dt;
+      
+      if (context.attackFrameTimer <= 0) {
+        // Move to next frame
+        context.attackFrame++;
+        
+        // Update attack sequence
+        if (context.updateAttackSequence) {
+          context.updateAttackSequence();
+        }
+        
+        // Reset frame timer
+        context.attackFrameTimer = context.attackFrameDuration;
+        
+        // Check if attack sequence is complete
+        if (context.attackFrame >= 4) {
+          context.state = 'idle';
+          context.attackFrame = 0;
+        }
+      }
+    }
+    
+    // Update sprite based on attack state
+    if (context.updateSprite) {
+      context.updateSprite();
+    }
   }
   
   getAttackData(attackType) {

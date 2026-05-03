@@ -500,6 +500,11 @@ class Fighter {
     }
     this.pos.add(this.vel);
     
+    // Reset jump state to idle when landing
+    if (this.state === 'jump' && this.onGround()) {
+      this.state = 'idle';
+    }
+    
     // Check for slam attack landing
     if (this.isSlamAttacking && this.onGround()) {
       this.onSlamLanding(opponent);

@@ -962,7 +962,7 @@ class Fighter {
     const existing = this.statuses.find((status) => status.type === type);
     if (existing) {
       existing.count += count;
-      existing.potency = max(existing.potency, potency);
+      existing.potency += potency; // Accumulate potency instead of taking max
     } else {
       this.statuses.push({ type, count, potency, timer: 1.0 });
     }
@@ -1164,7 +1164,7 @@ class Fighter {
     if (this.spriteType === 'atlas' && this.currentSprite) {
       // Use sprite atlas system
       push();
-      scale(this.facing, 1);
+      // Remove sprite flipping for atlas sprites - sprites already face the correct direction
       
       // Calculate scale to match John's size (144 pixels height)
       const targetHeight = 144;
@@ -1173,7 +1173,11 @@ class Fighter {
         const originalHeight = spriteInfo.h * 256; // CELL size
         const scaleFactor = targetHeight / originalHeight;
         
-        drawSprite(this.currentSprite, 0, -30, scaleFactor);
+        // Calculate Y offset to align feet with John Limbus
+        // John's feet are at y = -30 + 36 = 6 (half of 72px height)
+        // Valencina's sprite anchor is at bottom, so we need to position her feet at y = 6
+        const johnFeetY = 6;
+        drawSprite(this.currentSprite, 0, johnFeetY, scaleFactor);
       }
       pop();
     } else if (this.sprite && this.sprite.width > 0) {

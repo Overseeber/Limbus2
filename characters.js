@@ -234,7 +234,7 @@ const CHARACTERS = {
       let newSprite = 'idle'; // default sprite
       
       // Priority order for sprite states
-      if (fighter.state === 'hit' || fighter.state === 'hurt') {
+      if (fighter.state === 'hit') {
         newSprite = 'hurt';
       } else if (fighter.isGuarding) {
         newSprite = 'guard';
@@ -247,7 +247,7 @@ const CHARACTERS = {
         } else {
           newSprite = 'idle'; // Use idle for other attacks for now
         }
-      } else if (fighter.state === 'moving' || (abs(fighter.vel.x) > 0.1 && fighter.onGround())) {
+      } else if (fighter.state === 'run' || (abs(fighter.vel.x) > 0.1 && fighter.onGround())) {
         newSprite = 'moving';
       }
       

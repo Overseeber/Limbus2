@@ -182,7 +182,7 @@ const CHARACTERS = {
     title: 'The Accelerating Future',
     hp: 3204,
     speed: 9,
-    attackInterval: 0.7,
+    attackInterval: 0.5,
     baseDamage: 21,
     staggerThreshold: 1300,
     staggerLength: 5,

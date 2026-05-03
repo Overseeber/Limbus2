@@ -150,6 +150,19 @@ class Fighter {
     // Initialize slam attack properties
     this.slamHoldPosition = false;
     
+    // Initialize attack sequence properties
+    this.attackSequence = 0; // 0=none, 1=attack1, 2=attack2, 3=attack3
+    this.attackFrame = 0; // Current frame in attack sequence
+    this.attackFrameTimer = 0; // Timer for frame transitions
+    this.attackFrameDuration = 0.2; // 0.2s between frames
+    this.attackDamageDealt = false; // Track if damage was dealt for current frame
+    
+    // Initialize halt sequence properties
+    this.haltSequence = false; // Track if in halt sequence
+    this.haltFrame = 0; // Current frame in halt sequence
+    this.haltFrameTimer = 0; // Timer for halt frame transitions
+    this.haltFrameDuration = 0.1; // Rapid succession timing
+    
     if (character.sprite && this.spriteType !== 'atlas') {
       // Regular sprite loading
       this.sprite = loadImage(character.sprite);
@@ -163,7 +176,6 @@ class Fighter {
       idle: 'idle',
       run: 'moving',
       jump: 's2f3',
-      attack: 'prepat',
       guard: 'guard',
       evade: 'evade',
       hit: 'hurt',
@@ -182,6 +194,12 @@ class Fighter {
       } else {
         this.currentSprite = 'moving'; // Regular dash movement sprite
       }
+    } else if (this.state === 'attack' && this.attackSequence > 0) {
+      // Handle attack sequences
+      this.updateAttackSequence();
+    } else if (this.haltSequence) {
+      // Handle halt sequence
+      this.updateHaltSequence();
     } else if (this.usePostDashSprite && !this.isDashing) {
       // Reset post-dash sprite when dash ends
       this.usePostDashSprite = false;
@@ -189,6 +207,78 @@ class Fighter {
     } else {
       this.currentSprite = stateMap[this.state] || 'idle';
     }
+  }
+
+  updateAttackSequence() {
+    // Attack 1 sequence: prepat > s1f1 > s1f2 > s1f3
+    if (this.attackSequence === 1) {
+      const sequence = ['prepat', 's1f1', 's1f2', 's1f3'];
+      const damageFrames = [false, true, true, false]; // s1f1 and s1f2 deal damage
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Deal damage on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+        }
+      }
+    }
+    // Attack 2 sequence: s2f1 > halt1 > halt2 > s3f1
+    else if (this.attackSequence === 2) {
+      const sequence = ['s2f1', 'halt1', 'halt2', 's3f1'];
+      const damageFrames = [true, false, false, false]; // s2f1 deals damage
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Deal damage on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+        }
+      }
+    }
+    // Attack 3 sequence: s3f1 > s3f2 > s3f3 (0.5s hold)
+    else if (this.attackSequence === 3) {
+      const sequence = ['s3f1', 's3f2', 's3f3'];
+      const damageFrames = [false, true, false]; // s3f2 deals damage
+      const holdTimes = [0.2, 0.2, 0.5]; // s3f3 holds for 0.5s
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Use custom frame duration for s3f3
+        if (this.attackFrame === 2) {
+          this.attackFrameDuration = 0.5;
+        } else {
+          this.attackFrameDuration = 0.2;
+        }
+        
+        // Deal damage on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+        }
+      }
+    }
+  }
+
+  updateHaltSequence() {
+    // Halt sequence: halt1 > halt2 > idle
+    const sequence = ['halt1', 'halt2', 'idle'];
+    
+    if (this.haltFrame < sequence.length) {
+      this.currentSprite = sequence[this.haltFrame];
+    }
+  }
+
+  dealAttackDamage() {
+    // This method will be called to deal damage during attack sequences
+    // The actual damage dealing will be handled in the update method
+    this.strikeActive = true;
+    this.attackHitResolved = false;
   }
 
   isDead() {
@@ -350,12 +440,41 @@ class Fighter {
       this.parryTimer = 10;
     }
 
-    if (this.state === 'attack' && this.attackTimer <= 0) {
-      if (!this.attackHitResolved) {
-        this.resolveAttack(opponent);
+    if (this.state === 'attack') {
+      // Handle attack sequence frame timing
+      if (this.attackSequence > 0) {
+        this.attackFrameTimer += dt;
+        
+        if (this.attackFrameTimer >= this.attackFrameDuration) {
+          this.attackFrameTimer = 0;
+          this.attackFrame++;
+          this.attackDamageDealt = false; // Reset damage flag for next frame
+          
+          // Check if sequence is complete
+          if (this.attackSequence === 1 && this.attackFrame >= 4) { // Attack 1: 4 frames
+            this.state = 'idle';
+            this.strikeActive = false;
+            this.attackSequence = 0;
+          } else if (this.attackSequence === 2 && this.attackFrame >= 4) { // Attack 2: 4 frames
+            this.state = 'idle';
+            this.strikeActive = false;
+            this.attackSequence = 0;
+          } else if (this.attackSequence === 3 && this.attackFrame >= 3) { // Attack 3: 3 frames
+            this.state = 'idle';
+            this.strikeActive = false;
+            this.attackSequence = 0;
+          }
+        }
       }
-      this.state = 'idle';
-      this.strikeActive = false;
+      
+      // Handle attack timer expiration for non-sequence attacks
+      if (this.attackTimer <= 0 && this.attackSequence === 0) {
+        if (!this.attackHitResolved) {
+          this.resolveAttack(opponent);
+        }
+        this.state = 'idle';
+        this.strikeActive = false;
+      }
     }
 
     // Recovery timer is started when stagger timer ends, not here
@@ -389,6 +508,27 @@ class Fighter {
     if (this.isEvading && this.evadeTimer <= 0) {
       this.isEvading = false;
       this.state = 'idle';
+    }
+
+    // Deal damage during attack sequences when strike is active
+    if (this.strikeActive && this.attackSequence > 0 && !this.attackHitResolved) {
+      this.resolveAttack(opponent);
+    }
+
+    // Handle halt sequence timing
+    if (this.haltSequence) {
+      this.haltFrameTimer += dt;
+      
+      if (this.haltFrameTimer >= this.haltFrameDuration) {
+        this.haltFrameTimer = 0;
+        this.haltFrame++;
+        
+        // Check if halt sequence is complete
+        if (this.haltFrame >= 3) { // halt1, halt2, idle
+          this.haltSequence = false;
+          this.haltFrame = 0;
+        }
+      }
     }
 
     // Update sprite based on current state
@@ -511,6 +651,12 @@ class Fighter {
       this.dashDuration -= dt;
       if (this.dashDuration <= 0) {
         this.isDashing = false;
+        this.state = 'idle'; // Reset dash state when dash ends
+        
+        // Start halt sequence when dash ends
+        this.haltSequence = true;
+        this.haltFrame = 0;
+        this.haltFrameTimer = 0;
       }
       // Dash attack: move in and strike, then dash through enemy.
       if (!this.dashAttacked && abs(this.pos.x - opponent.pos.x) < 80) {
@@ -666,9 +812,14 @@ class Fighter {
     this.attackCounterDisplay = this.attackCounter;
     this.attackCounterTimer = 1.0; // Show for 1 second
 
-    const attackType = this.chargeAttack ? 'heavy' : 'light';
+    // Start attack sequence based on attack counter
+    this.attackSequence = this.attackCounter;
+    this.attackFrame = 0;
+    this.attackFrameTimer = 0;
+    this.attackDamageDealt = false;
+    this.attackFrameDuration = 0.2;
+    
     this.state = 'attack';
-    this.strikeActive = true;
     this.attackTimer = this.attackInterval;
     this.attackIgnoreParry = ignoreParry;
     this.attackHitResolved = false;

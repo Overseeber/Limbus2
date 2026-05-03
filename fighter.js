@@ -305,6 +305,7 @@ class Fighter {
       owner: this
     };
     
+    console.log(`Slash spawned: ${slashType} at (${effect.pos.x}, ${effect.pos.y}) facing: ${effect.facing}`);
     this.slashEffects.push(effect);
   }
 

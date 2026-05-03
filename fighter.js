@@ -7,13 +7,13 @@ class Fighter {
     this.characterKey = characterKey || (isAI ? 'JOHN' : fallbackCharacter);
     
     // Get character stats from roster
-    const character = CHARACTERS[this.characterKey];
+    let character = CHARACTERS[this.characterKey];
     
     // Safety check in case character is not found
     if (!character) {
       console.error("Invalid characterKey:", this.characterKey);
       this.characterKey = 'JOHN';
-      const character = CHARACTERS[this.characterKey];
+      character = CHARACTERS[this.characterKey];
     }
     
     this.pos = createVector(width / 2 + (isAI ? 200 : -200), height - 100);
@@ -321,24 +321,40 @@ class Fighter {
 
   drawSlashEffects() {
     // Draw all active slash effects
-    for (const effect of this.slashEffects) {
+    for (let i = this.slashEffects.length - 1; i >= 0; i--) {
+      const effect = this.slashEffects[i];
+
+      // Safety removal of invalid effects
+      if (!effect || !effect.owner) {
+        this.slashEffects.splice(i, 1);
+        continue;
+      }
+
+      effect.timer -= 1 / 60; // Safer fallback if dt not passed
+      if (effect.timer <= 0) {
+        this.slashEffects.splice(i, 1);
+        continue;
+      }
+
+      const spriteInfo = SPRITES?.[effect.type];
+      if (!spriteInfo) continue; // 🔥 Prevent crash for missing sprites
+
       push();
-      
-      // Calculate position based on character position and target offset
-      const drawX = effect.owner.pos.x + (effect.targetOffset?.x || 0);
-      const drawY = effect.owner.pos.y + (effect.targetOffset?.y || 0);
-      
+
+      const owner = effect.owner;
+      let x = owner.pos.x + (effect.targetOffset?.x || 0);
+      let y = owner.pos.y + (effect.targetOffset?.y || 0);
+
       // Apply facing to slash effect
-      if (effect.owner.facing === -1) {
+      if (owner.facing === -1) {
         scale(-1, 1);
-        drawX = drawX - (effect.targetOffset?.x || 0);
+        x = x - (effect.targetOffset?.x || 0);
       }
+
+      translate(x, y);
       
-      // Get sprite info
-      const spriteInfo = SPRITES[effect.type];
-      if (spriteInfo) {
-        drawSprite(effect.type, drawX, drawY, 1.0, effect.timer / 1.0); // Fade with timer
-      }
+      // Draw sprite centered at origin after transform
+      drawSprite(effect.type, 0, 0, 1.0, effect.timer); // Fade with timer
       
       pop();
     }
@@ -1405,24 +1421,20 @@ class Fighter {
     
     // Draw sprite if available, otherwise draw default character
     if (this.spriteType === 'atlas' && this.currentSprite) {
-      // Use sprite atlas system
       push();
-      // Apply direction flipping for atlas sprites (default sprite faces left)
-      // When facing right (1), flip to face right; when facing left (-1), don't flip
+
+      // Flip atlas sprites based on facing
       scale(this.facing === 1 ? -1 : 1, 1);
-      
-      // Draw slash effects
-      this.drawSlashEffects();
-    }
-      
-      // Calculate scale: 512px = John Limbus height (144px)
-      const spriteInfo = SPRITES[this.currentSprite];
-      if (!SPRITES[this.currentSprite]) {
+
+      // Debug missing sprite
+      const spriteInfo = SPRITES?.[this.currentSprite];
+      if (!spriteInfo) {
         console.warn("Missing sprite:", this.currentSprite);
-      }
-      if (spriteInfo) {
-        const originalHeight = spriteInfo.h * 256; // CELL size
-        const scaleFactor = 144 / 512; // 144px (John height) / 512px (sprite height)
+      } else {
+        // 512px reference height → 144px character height
+        const scaleFactor = 144 / 512;
+
+        // Align feet to hitbox bottom
         
         // Position Valencina's feet at the bottom of her hitbox
         // Hitbox bottom is at this.pos.y + 36, so feet should be at y = 36

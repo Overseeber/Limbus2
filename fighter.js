@@ -147,6 +147,9 @@ class Fighter {
     // Initialize dash sprite properties
     this.usePostDashSprite = false;
     
+    // Initialize slam attack properties
+    this.slamHoldPosition = false;
+    
     if (character.sprite && this.spriteType !== 'atlas') {
       // Regular sprite loading
       this.sprite = loadImage(character.sprite);
@@ -159,7 +162,7 @@ class Fighter {
     const stateMap = {
       idle: 'idle',
       run: 'moving',
-      jump: 'idle',
+      jump: 's2f3',
       attack: 'prepat',
       guard: 'guard',
       evade: 'evade',
@@ -168,8 +171,10 @@ class Fighter {
       duck: 'idle'
     };
 
-    // Handle dash states specially
-    if (this.isDashing) {
+    // Handle special states
+    if (this.isSlamAttacking) {
+      this.currentSprite = 's2f4'; // Slam attack sprite
+    } else if (this.isDashing) {
       if (this.state === 'attack') {
         this.currentSprite = 'joust'; // Dash attack sprite
       } else if (this.usePostDashSprite) {
@@ -202,6 +207,14 @@ class Fighter {
 
   processKeyPressed(keyValue) {
     const keyLower = keyValue.toLowerCase();
+    
+    // Release slam hold position on any input
+    if (this.slamHoldPosition) {
+      this.slamHoldPosition = false;
+      this.isSlamAttacking = false;
+      this.state = 'idle';
+    }
+    
     if (keyLower === this.controls.up) {
       this.jumpRequest = true;
     }
@@ -234,6 +247,12 @@ class Fighter {
   }
 
   requestAttack() {
+    // Release slam hold position on any input
+    if (this.slamHoldPosition) {
+      this.slamHoldPosition = false;
+      this.isSlamAttacking = false;
+      this.state = 'idle';
+    }
     this.attackRequest = true;
   }
 
@@ -245,6 +264,13 @@ class Fighter {
   }
 
   requestGuard(opponent = null) {
+    // Release slam hold position on any input
+    if (this.slamHoldPosition) {
+      this.slamHoldPosition = false;
+      this.isSlamAttacking = false;
+      this.state = 'idle';
+    }
+    
     this.guardRequest = true;
     this.isGuarding = true;
     
@@ -760,9 +786,9 @@ class Fighter {
       this.combo += 1;
     }
     
-    // Reset slam attack state
-    this.isSlamAttacking = false;
-    this.state = 'idle';
+    // Hold slam position until input detected
+    this.slamHoldPosition = true;
+    this.state = 'slam';
     this.slamLandingHitbox = null;
   }
 
@@ -877,6 +903,8 @@ class Fighter {
     if (this.state !== 'staggered') {
       this.state = 'hit';
       this.staggerTimer = 0.18;
+      // Face towards attacker when hurt
+      this.facing = attacker.pos.x > this.pos.x ? 1 : -1;
     }
     
     // Only add stagger if not already staggered (applies to both players and enemies)

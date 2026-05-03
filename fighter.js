@@ -1164,7 +1164,8 @@ class Fighter {
     if (this.spriteType === 'atlas' && this.currentSprite) {
       // Use sprite atlas system
       push();
-      // Remove sprite flipping for atlas sprites - sprites already face the correct direction
+      // Apply direction flipping for atlas sprites (default sprite faces left)
+      scale(this.facing, 1);
       
       // Calculate scale to match John's size (144 pixels height)
       const targetHeight = 144;
@@ -1173,11 +1174,10 @@ class Fighter {
         const originalHeight = spriteInfo.h * 256; // CELL size
         const scaleFactor = targetHeight / originalHeight;
         
-        // Calculate Y offset to align feet with John Limbus
-        // John's feet are at y = -30 + 36 = 6 (half of 72px height)
-        // Valencina's sprite anchor is at bottom, so we need to position her feet at y = 6
-        const johnFeetY = 6;
-        drawSprite(this.currentSprite, 0, johnFeetY, scaleFactor);
+        // Position Valencina's feet at the bottom of her hitbox
+        // Hitbox bottom is at this.pos.y + 36, so feet should be at y = 36
+        const hitboxBottomY = 36;
+        drawSprite(this.currentSprite, 0, hitboxBottomY, scaleFactor);
       }
       pop();
     } else if (this.sprite && this.sprite.width > 0) {

@@ -367,7 +367,7 @@ class Fighter {
       scale(slash.facing === 1 ? -1 : 1, 1);
       
       // Draw slash sprite
-      const spriteInfo = this.SPRITES[slash.sprite];
+      const spriteInfo = SPRITES[slash.sprite];
       if (spriteInfo) {
         const originalWidth = spriteInfo.w * 256;
         const originalHeight = spriteInfo.h * 256;

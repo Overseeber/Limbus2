@@ -295,12 +295,12 @@ class Fighter {
   }
 
   spawnSlashEffect(slashType, targetOffset = null) {
-    // Spawn slash effect that shares character position and fades out
+    // Spawn slash effect that shares character position and fades out slowly
     const effect = {
       type: slashType,
       pos: this.pos.copy(),
       facing: this.facing,
-      timer: 1.0, // Fade out over 1 second
+      timer: 0.8, // Fade out over 0.8 seconds (slower, more visible fade)
       targetOffset: targetOffset,
       owner: this
     };
@@ -360,22 +360,38 @@ class Fighter {
         // Use same scale factor as character (144/512)
         const scaleFactor = 144 / 512;
         
-        // Try to draw sprite with proper scaling
+        // Calculate alpha and color tint based on timer
+        const alpha = map(effect.timer, 0, 0.8, 0, 255); // 0.8 second fade time
+        const fadeProgress = map(effect.timer, 0.8, 0, 0, 1); // 0 = start, 1 = end
+        
+        // Interpolate color from original (255, 200, 100) to target (255, 82, 111)
+        const startR = 255, startG = 200, startB = 100;
+        const targetR = 255, targetG = 82, targetB = 111;
+        
+        const r = lerp(startR, targetR, fadeProgress);
+        const g = lerp(startG, targetG, fadeProgress);
+        const b = lerp(startB, targetB, fadeProgress);
+        
+        // Try to draw sprite with proper scaling and color tint
         const spriteInfo = SPRITES?.[effect.type];
         if (spriteInfo) {
-          drawSpriteScaled(effect.type, offsetX, offsetY + 36, scaleFactor, effect.timer); // Use same hitboxBottomY offset
+          // Apply alpha and color tint globally for sprite rendering
+          push();
+          tint(r, g, b, alpha); // Apply color and alpha tint
+          drawSpriteScaled(effect.type, offsetX, offsetY + 36, scaleFactor); 
+          pop();
         } else {
-          // Fallback: draw scaled slash effect
+          // Fallback: draw scaled slash effect with proper alpha and color tint
           push();
           scale(scaleFactor);
-          stroke(255, 200, 100, map(effect.timer, 0, 1.0, 0, 255));
+          stroke(r, g, b, alpha);
           strokeWeight(4);
           line(-30 + offsetX, -15 + offsetY, 30 + offsetX, 15 + offsetY);
-          stroke(255, 255, 255, map(effect.timer, 0, 1.0, 0, 200));
+          stroke(255, 255, 255, alpha * 0.8);
           strokeWeight(2);
           line(-25 + offsetX, -10 + offsetY, 25 + offsetX, 10 + offsetY);
           
-          fill(255, 255, 0, map(effect.timer, 0, 1.0, 0, 150));
+          fill(r, g, b, alpha * 0.6);
           noStroke();
           ellipse(offsetX, offsetY, 15, 15);
           pop();
@@ -385,22 +401,38 @@ class Fighter {
         const targetHeight = 144;
         const scaleFactor = targetHeight / (owner.sprite?.height || 512);
         
-        // Try to draw sprite with proper scaling
+        // Calculate alpha and color tint based on timer
+        const alpha = map(effect.timer, 0, 0.8, 0, 255); // 0.8 second fade time
+        const fadeProgress = map(effect.timer, 0.8, 0, 0, 1); // 0 = start, 1 = end
+        
+        // Interpolate color from original (255, 200, 100) to target (255, 82, 111)
+        const startR = 255, startG = 200, startB = 100;
+        const targetR = 255, targetG = 82, targetB = 111;
+        
+        const r = lerp(startR, targetR, fadeProgress);
+        const g = lerp(startG, targetG, fadeProgress);
+        const b = lerp(startB, targetB, fadeProgress);
+        
+        // Try to draw sprite with proper scaling and color tint
         const spriteInfo = SPRITES?.[effect.type];
         if (spriteInfo) {
-          drawSpriteScaled(effect.type, offsetX, offsetY - 30, scaleFactor, effect.timer); // Use same offset as regular sprite
+          // Apply alpha and color tint globally for sprite rendering
+          push();
+          tint(r, g, b, alpha); // Apply color and alpha tint
+          drawSpriteScaled(effect.type, offsetX, offsetY - 30, scaleFactor);
+          pop();
         } else {
-          // Fallback: draw scaled slash effect
+          // Fallback: draw scaled slash effect with proper alpha and color tint
           push();
           scale(scaleFactor);
-          stroke(255, 200, 100, map(effect.timer, 0, 1.0, 0, 255));
+          stroke(r, g, b, alpha);
           strokeWeight(4);
           line(-30 + offsetX, -15 + offsetY, 30 + offsetX, 15 + offsetY);
-          stroke(255, 255, 255, map(effect.timer, 0, 1.0, 0, 200));
+          stroke(255, 255, 255, alpha * 0.8);
           strokeWeight(2);
           line(-25 + offsetX, -10 + offsetY, 25 + offsetX, 10 + offsetY);
           
-          fill(255, 255, 0, map(effect.timer, 0, 1.0, 0, 150));
+          fill(r, g, b, alpha * 0.6);
           noStroke();
           ellipse(offsetX, offsetY, 15, 15);
           pop();

@@ -70,7 +70,7 @@ function loadSpriteAtlases() {
 // ==========================
 // 🧩 SPRITE DRAWING FUNCTION
 // ==========================
-function drawSprite(name, x, y, scale = 1) {
+function drawSprite(name, x, y, spriteScale = 1) {
   let s = SPRITES[name];
   if (!s) return null;
   
@@ -89,8 +89,8 @@ function drawSprite(name, x, y, scale = 1) {
   translate(x, y);
   
   // Apply scale
-  if (scale !== 1) {
-    scale(scale, scale);
+  if (spriteScale !== 1) {
+    scale(spriteScale, spriteScale);
   }
 
   image(
@@ -104,7 +104,7 @@ function drawSprite(name, x, y, scale = 1) {
 
   pop();
   
-  return { width: sw * scale, height: sh * scale };
+  return { width: sw * spriteScale, height: sh * spriteScale };
 }
 
 // Character roster system

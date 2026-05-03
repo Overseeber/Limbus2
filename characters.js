@@ -20,7 +20,7 @@ const SPRITES = {
   s1f2:   { atlas: "val1", x:4,y:5,w:4,h:3 },
 
   // ===== val2 =====
-  s1f3: { atlas:"val2", x:0,y:0,w:3,h:3, offsetX: -140 },
+  s1f3: { atlas:"val2", x:0,y:0,w:3,h:3, offsetX: +30 },
   halt2:{ atlas:"val2", x:0,y:3,w:3,h:2 },
   s2f1: { atlas:"val2", x:3,y:0,w:5,h:2 },
   joust:{ atlas:"val2", x:3,y:2,w:5,h:2 },

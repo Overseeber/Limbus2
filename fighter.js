@@ -189,7 +189,7 @@ class Fighter {
 
     // Handle special states
     if (this.isSlamAttacking) {
-      this.currentSprite = 's2f4'; // Slam attack sprite
+      this.currentSprite = 's4f4'; // Slam attack sprite
     } else if (this.isDashing) {
       if (this.state === 'attack') {
         this.currentSprite = 'joust'; // Dash attack sprite
@@ -543,10 +543,12 @@ class Fighter {
       }
       
       // Handle attack timer expiration for non-sequence attacks
-      if (this.attackTimer <= 0 && this.attackSequence === 0) {
+      if (this.state === 'attack' && this.attackTimer <= 0) {
         if (!this.attackHitResolved) {
           this.resolveAttack(opponent);
         }
+        // Add 1 second delay before allowing idle state transition
+        this.attackTimer = 1.0; // Prevent immediate transition to idle
         this.state = 'idle';
         this.strikeActive = false;
       }

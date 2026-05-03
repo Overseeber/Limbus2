@@ -7,13 +7,13 @@ class Fighter {
     this.characterKey = characterKey || (isAI ? 'JOHN' : fallbackCharacter);
     
     // Get character stats from roster
-    const character = CHARACTERS[this.characterKey];
+    let character = CHARACTERS[this.characterKey];
     
     // Safety check in case character is not found
     if (!character) {
       console.error("Invalid characterKey:", this.characterKey);
       this.characterKey = 'JOHN';
-      const character = CHARACTERS[this.characterKey];
+      character = CHARACTERS[this.characterKey];
     }
     
     this.pos = createVector(width / 2 + (isAI ? 200 : -200), height - 100);
@@ -163,6 +163,10 @@ class Fighter {
     this.haltFrameTimer = 0; // Timer for halt frame transitions
     this.haltFrameDuration = 0.1; // Rapid succession timing
     
+    // Initialize slash effect properties
+    this.activeSlashes = []; // Array of active slash effects
+    this.slashEffectTimer = 0; // Timer for slash effects
+    
     if (character.sprite && this.spriteType !== 'atlas') {
       // Regular sprite loading
       this.sprite = loadImage(character.sprite);
@@ -222,6 +226,13 @@ class Fighter {
         if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
           this.dealAttackDamage();
           this.attackDamageDealt = true;
+          
+          // Spawn slash effects on damage frames
+          if (this.attackFrame === 1) {
+            this.spawnSlashEffect('s1s1');
+          } else if (this.attackFrame === 2) {
+            this.spawnSlashEffect('s1s2');
+          }
         }
       }
     }
@@ -237,6 +248,11 @@ class Fighter {
         if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
           this.dealAttackDamage();
           this.attackDamageDealt = true;
+          
+          // Spawn slash effect on damage frame
+          if (this.attackFrame === 0) {
+            this.spawnSlashEffect('s2s1');
+          }
         }
       }
     }
@@ -260,6 +276,11 @@ class Fighter {
         if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
           this.dealAttackDamage();
           this.attackDamageDealt = true;
+          
+          // Spawn slash effect on damage frame
+          if (this.attackFrame === 1) {
+            this.spawnSlashEffect('s3f1');
+          }
         }
       }
     }
@@ -281,8 +302,86 @@ class Fighter {
     this.attackHitResolved = false;
   }
 
+  spawnSlashEffect(slashType) {
+    // Create slash effect based on attack type
+    const slashData = {
+      's1s1': { sprite: 's1s1', duration: 0.8 },
+      's1s2': { sprite: 's1s2', duration: 0.8 },
+      's1s3': { sprite: 's1s3', duration: 0.8 },
+      's2s1': { sprite: 's2s1', duration: 0.8 },
+      's2s2': { sprite: 's2s2', duration: 0.8 },
+      'js1': { sprite: 'js1', duration: 0.8 },
+      's4f1': { sprite: 's4f1', duration: 0.8 },
+      's4f2': { sprite: 's4f2', duration: 0.8 },
+      's4f4': { sprite: 's4f4', duration: 0.8 },
+      'diss1': { sprite: 'diss1', duration: 0.8 }
+    };
+
+    const effect = slashData[slashType];
+    if (effect) {
+      const slash = {
+        x: this.pos.x,
+        y: this.pos.y - 20, // Position slightly above character
+        sprite: effect.sprite,
+        opacity: 1.0,
+        scale: 1.0,
+        timer: 0,
+        maxTimer: effect.duration,
+        facing: this.facing
+      };
+      
+      this.activeSlashes.push(slash);
+    }
+  }
+
+  updateSlashEffects(dt) {
+    // Update all active slash effects
+    for (let i = 0; i < this.activeSlashes.length; i++) {
+      const slash = this.activeSlashes[i];
+      slash.timer += dt;
+      
+      // Start fading after 1 second
+      if (slash.timer > 1.0) {
+        slash.opacity = max(0, 1.0 - (slash.timer - 1.0));
+      }
+      
+      // Remove slash effect when timer expires
+      if (slash.timer >= slash.maxTimer) {
+        this.activeSlashes.splice(i, 1);
+      }
+    }
+  }
+
   isDead() {
     return this.hp <= 0;
+  }
+
+  drawSlashEffects() {
+    // Draw all active slash effects
+    for (let i = 0; i < this.activeSlashes.length; i++) {
+      const slash = this.activeSlashes[i];
+      push();
+      
+      // Apply transformations
+      translate(slash.x, slash.y);
+      scale(slash.facing === 1 ? -1 : 1, 1);
+      
+      // Draw slash sprite
+      const spriteInfo = this.SPRITES[slash.sprite];
+      if (spriteInfo) {
+        const originalWidth = spriteInfo.w * 256;
+        const originalHeight = spriteInfo.h * 256;
+        
+        drawSpriteScaled(
+          slash.sprite,
+          -originalWidth / 2, // Center on character
+          -originalHeight,
+          1.0 // Scale
+        );
+      }
+      
+      pop();
+    }
   }
 
   handleInput() {
@@ -530,6 +629,9 @@ class Fighter {
         }
       }
     }
+
+    // Update slash effects
+    this.updateSlashEffects(dt);
 
     // Update sprite based on current state
     this.updateSprite();
@@ -1372,6 +1474,9 @@ class Fighter {
       rectMode(CENTER);
       rect(this.facing * 20, -42, 20, 6, 4);
     }
+    
+    // Draw slash effects over character sprite
+    this.drawSlashEffects();
     if (this.isGuarding) {
       stroke('#90ee90');
       strokeWeight(3);

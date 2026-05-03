@@ -46,13 +46,31 @@ class Fighter {
   }
 
   reset() {
-    this.state = 'idle';
+    this.setState('idle');
     this.attackTimer = 0;
     this.attackDamage = 0;
     this.attackKnockback = 0;
     this.attackRange = 0;
     this.attackIgnoreParry = false;
     this.attackHitResolved = false;
+    
+    // STEP 1: Isolate state management - create stateMachine object
+    this.stateMachine = {
+      state: 'idle',
+      attackTimer: 0,
+      attackSequence: 0,
+      attackFrame: 0,
+      attackFrameTimer: 0,
+      staggerTimer: 0,
+      staggerRecoveryTimer: 0,
+      parryWindow: 0,
+      evadeTimer: 0
+    };
+    
+    // Initialize attackSequence and attackFrame variables for compatibility
+    this.attackSequence = 0;
+    this.attackFrame = 0;
+    this.attackFrameTimer = 0;
     this.kbResist = 0.08;
     this.dashCharges = 3;
     this.staggerRecovery = 0; // Disabled stagger recovery
@@ -103,6 +121,147 @@ class Fighter {
       evade: false,
     };
     
+    // STEP 3: Create attack system subsystem
+    this.attackSystem = {
+      executeAttack: (opponent, ignoreParry = false) => this.executeAttack(opponent, ignoreParry),
+      resolveAttack: (opponent) => this.resolveAttack(opponent),
+      updateAttackSequence: () => this.updateAttackSequence(),
+      resetAttack: () => this.resetAttack()
+    };
+    
+    // STEP 4: Create status system subsystem
+    this.statusSystem = {
+      addStatus: (type, count, potency) => this.addStatus(type, count, potency),
+      removeStatus: (type) => this.removeStatus(type),
+      consumeOnHit: () => this.consumeStatusOnHit(),
+      consumeOnAttack: () => this.consumeStatusOnAttack(),
+      applyStatuses: (dt) => this.applyStatuses(dt)
+    };
+    
+    // STEP 5: Create event emission layer (SERVER PREP)
+    this.events = {
+      emit: (eventName, data) => {
+        // Local logging for now - future server sync
+        console.log(`[EVENT] ${eventName}:`, data);
+      }
+    };
+    
+    // STEP 6: Create movement system subsystem (SEPARATE PHYSICS)
+    this.movementSystem = {
+      applyMovement: (dt, opponent) => this.applyMovement(dt, opponent),
+      applyGravity: (dt, opponent) => this.applyGravity(dt, opponent),
+      cleanupPosition: (opponent) => this.cleanupPosition(opponent)
+    };
+    
+    // Call syncState to initialize stateMachine values
+    this.syncState();
+    
+    // Initialize character-specific properties including controls
+    this.initializeCharacter();
+  }
+
+  // STEP 2: Centralize state changes - helper methods (NO LOGIC CHANGE)
+  setState(newState) {
+    this.state = newState;
+    if (this.stateMachine) {
+      this.stateMachine.state = newState;
+    }
+  }
+
+  setAttackState(sequence, frame) {
+    this.state = 'attack';
+    this.attackSequence = sequence;
+    this.attackFrame = frame;
+    this.attackFrameTimer = 0;
+    
+    // Update stateMachine
+    if (this.stateMachine) {
+      this.stateMachine.state = 'attack';
+      this.stateMachine.attackSequence = sequence;
+      this.stateMachine.attackFrame = frame;
+      this.stateMachine.attackFrameTimer = 0;
+    }
+  }
+
+  setStaggerState(duration) {
+    this.state = 'staggered';
+    this.staggerTimer = duration;
+    this.staggerRecoveryTimer = 0;
+    this.stagger = this.staggerThreshold;
+    this.staggeredDisplay = 1;
+    this.staggeredDisplayTimer = 2.0;
+    
+    // Emit staggerStarted event
+    this.events.emit('staggerStarted', {
+      target: this.characterKey,
+      duration: duration,
+      threshold: this.staggerThreshold
+    });
+    
+    // Update stateMachine
+    if (this.stateMachine) {
+      this.stateMachine.state = 'staggered';
+      this.stateMachine.staggerTimer = duration;
+      this.stateMachine.staggerRecoveryTimer = 0;
+    }
+  }
+
+  setEvadeState(duration) {
+    this.state = 'evade';
+    this.evadeTimer = duration;
+    this.isEvading = true;
+    
+    // Update stateMachine
+    if (this.stateMachine) {
+      this.stateMachine.state = 'evade';
+      this.stateMachine.evadeTimer = duration;
+    }
+  }
+
+  // STEP 3: Attack system helper methods
+  resetAttack() {
+    this.attackTimer = 0;
+    this.attackDamage = 0;
+    this.attackKnockback = 0;
+    this.attackRange = 0;
+    this.attackIgnoreParry = false;
+    this.attackHitResolved = false;
+    this.attackSequence = 0;
+    this.attackFrame = 0;
+    this.attackFrameTimer = 0;
+    this.attackDamageDealt = false;
+    this.strikeActive = false;
+    this.parryWindow = 0;
+    this.lastAttackHit = false;
+  }
+
+  // STEP 1: Sync state between original variables and stateMachine (two-way binding)
+  syncState() {
+    // Sync from original to stateMachine
+    this.stateMachine.state = this.state;
+    this.stateMachine.attackTimer = this.attackTimer;
+    this.stateMachine.attackSequence = this.attackSequence;
+    this.stateMachine.attackFrame = this.attackFrame;
+    this.stateMachine.attackFrameTimer = this.attackFrameTimer;
+    this.stateMachine.staggerTimer = this.staggerTimer;
+    this.stateMachine.staggerRecoveryTimer = this.staggerRecoveryTimer;
+    this.stateMachine.parryWindow = this.parryWindow;
+    this.stateMachine.evadeTimer = this.evadeTimer;
+    
+    // Sync from stateMachine to original (for safety)
+    this.state = this.stateMachine.state;
+    this.attackTimer = this.stateMachine.attackTimer;
+    this.attackSequence = this.stateMachine.attackSequence;
+    this.attackFrame = this.stateMachine.attackFrame;
+    this.attackFrameTimer = this.stateMachine.attackFrameTimer;
+    this.staggerTimer = this.stateMachine.staggerTimer;
+    this.staggerRecoveryTimer = this.stateMachine.staggerRecoveryTimer;
+    this.parryWindow = this.stateMachine.parryWindow;
+    this.evadeTimer = this.stateMachine.evadeTimer;
+  }
+
+  // Character-specific properties initialization
+  initializeCharacter() {
     // Character-specific properties will be initialized by character profile
     this.dialogueTimer = 0;
     this.currentDialogue = '';
@@ -200,7 +359,7 @@ class Fighter {
       }
     } else if (this.state === 'attack' && this.attackSequence > 0) {
       // Handle attack sequences
-      this.updateAttackSequence();
+      this.attackSystem.updateAttackSequence();
     } else if (this.haltSequence) {
       // Handle halt sequence
       this.updateHaltSequence();
@@ -444,7 +603,7 @@ class Fighter {
   }
 
   handleInput() {
-    if (this.isAI) {
+    if (this.isAI || !this.controls) {
       return;
     }
     this.ai.moveLeft = keyIsDown(this.controls.left.toUpperCase().charCodeAt(0));
@@ -460,7 +619,7 @@ class Fighter {
     if (this.slamHoldPosition) {
       this.slamHoldPosition = false;
       this.isSlamAttacking = false;
-      this.state = 'idle';
+      this.setState('idle');
     }
     
     if (keyLower === this.controls.up) {
@@ -499,7 +658,7 @@ class Fighter {
     if (this.slamHoldPosition) {
       this.slamHoldPosition = false;
       this.isSlamAttacking = false;
-      this.state = 'idle';
+      this.setState('idle');
     }
     this.attackRequest = true;
   }
@@ -516,7 +675,7 @@ class Fighter {
     if (this.slamHoldPosition) {
       this.slamHoldPosition = false;
       this.isSlamAttacking = false;
-      this.state = 'idle';
+      this.setState('idle');
     }
     
     this.guardRequest = true;
@@ -542,9 +701,7 @@ class Fighter {
     if (this.evadeTimer > 0 || this.isEvading) {
       return;
     }
-    this.isEvading = true;
-    this.evadeTimer = 0.22;
-    this.state = 'evade';
+    this.setEvadeState(0.22);
     this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
     this.vel.x = -this.facing * 18;
     this.vel.y = -3;
@@ -566,6 +723,51 @@ class Fighter {
   }
 
   update(dt, opponent) {
+    // STEP 7: Unified update pipeline
+    
+    // 1. State synchronization
+    this.syncState();
+    
+    // 2. Timer updates
+    this.updateTimers(dt);
+    
+    // 3. Input handling
+    this.handleInput();
+    
+    // 4. Movement system
+    this.movementSystem.applyMovement(dt, opponent);
+    this.movementSystem.applyGravity(dt, opponent);
+    this.movementSystem.cleanupPosition(opponent);
+    
+    // 5. Attack system
+    this.updateAttackSystem(dt, opponent);
+    
+    // 6. Status system
+    this.statusSystem.applyStatuses(dt);
+    
+    // 7. Dash recharge
+    this.applyDashRecharge(dt);
+    
+    // 8. State transitions
+    this.updateStateTransitions();
+    
+    // 9. Parry system
+    this.updateParrySystem(opponent);
+    
+    // 10. Visual updates
+    this.updateVisuals(dt);
+    
+    // 11. AI controls
+    if (this.isAI) {
+      this.updateAIControls(opponent);
+    }
+    
+    // 12. Process actions
+    this.processActions(opponent, dt);
+  }
+
+  // STEP 7: Unified update pipeline helper methods
+  updateTimers(dt) {
     this.attackTimer = max(0, this.attackTimer - dt);
     this.evadeTimer = max(0, this.evadeTimer - dt);
     this.parryWindow = max(0, this.parryWindow - dt);
@@ -599,7 +801,9 @@ class Fighter {
       this.parryCount += 1;
       this.parryTimer = 10;
     }
+  }
 
+  updateAttackSystem(dt, opponent) {
     if (this.state === 'attack') {
       // Handle attack sequence frame timing
       if (this.attackSequence > 0) {
@@ -612,15 +816,15 @@ class Fighter {
           
           // Check if sequence is complete
           if (this.attackSequence === 1 && this.attackFrame >= 4) { // Attack 1: 4 frames
-            this.state = 'idle';
+            this.setState('idle');
             this.strikeActive = false;
             this.attackSequence = 0;
           } else if (this.attackSequence === 2 && this.attackFrame >= 4) { // Attack 2: 4 frames
-            this.state = 'idle';
+            this.setState('idle');
             this.strikeActive = false;
             this.attackSequence = 0;
           } else if (this.attackSequence === 3 && this.attackFrame >= 3) { // Attack 3: 3 frames
-            this.state = 'idle';
+            this.setState('idle');
             this.strikeActive = false;
             this.attackSequence = 0;
           }
@@ -630,17 +834,22 @@ class Fighter {
       // Handle attack timer expiration for non-sequence attacks
       if (this.state === 'attack' && this.attackTimer <= 0) {
         if (!this.attackHitResolved) {
-          this.resolveAttack(opponent);
+          this.attackSystem.resolveAttack(opponent);
         }
         // Add 1 second delay before allowing idle state transition
         this.attackTimer = 1.0; // Prevent immediate transition to idle
-        this.state = 'idle';
+        this.setState('idle');
         this.strikeActive = false;
       }
     }
 
-    // Recovery timer is started when stagger timer ends, not here
+    // Deal damage during attack sequences when strike is active
+    if (this.strikeActive && this.attackSequence > 0 && !this.attackHitResolved) {
+      this.attackSystem.resolveAttack(opponent);
+    }
+  }
 
+  updateStateTransitions() {
     // Make stagger bar lower as visual timer during stagger period
     if (this.state === 'staggered') {
       if (this.staggerTimer > 0) {
@@ -655,7 +864,7 @@ class Fighter {
           this.staggerRecoveryTimer = this.staggerLength; // 5 seconds recovery
         } else {
           // Full recovery - automatically exit staggered state and clear buildup
-          this.state = 'idle';
+          this.setState('idle');
           this.stagger = 0; // Clear any remaining stagger buildup
         }
       }
@@ -664,19 +873,24 @@ class Fighter {
     // Don't auto-exit hurt state - player must act to exit
 
     if ((this.state === 'parry' || this.state === 'parried') && this.parryStunTimer <= 0) {
-      this.state = 'idle';
+      this.setState('idle');
     }
 
     if (this.isEvading && this.evadeTimer <= 0) {
       this.isEvading = false;
-      this.state = 'idle';
+      this.setState('idle');
     }
+  }
 
-    // Deal damage during attack sequences when strike is active
-    if (this.strikeActive && this.attackSequence > 0 && !this.attackHitResolved) {
-      this.resolveAttack(opponent);
+  updateParrySystem(opponent) {
+    // More forgiving parry system - allow parries when guarding or recently guarded
+    const canParry = this.isGuarding || (this.guardRequest && this.parryCount > 0);
+    if (canParry && this.parryCount > 0 && opponent.strikeActive && opponent.parryWindow > 0 && abs(this.pos.x - opponent.pos.x) < opponent.attackRange + 200) {
+      this.checkParry(opponent, opponent.attackRange);
     }
+  }
 
+  updateVisuals(dt) {
     // Handle halt sequence timing
     if (this.haltSequence) {
       this.haltFrameTimer += dt;
@@ -705,24 +919,6 @@ class Fighter {
 
     // Update sprite based on current state
     this.updateSprite();
-
-    if (this.isAI) {
-      this.updateAIControls(opponent);
-    }
-
-    // More forgiving parry system - allow parries when guarding or recently guarded
-    const canParry = this.isGuarding || (this.guardRequest && this.parryCount > 0);
-    if (canParry && this.parryCount > 0 && opponent.strikeActive && opponent.parryWindow > 0 && abs(this.pos.x - opponent.pos.x) < opponent.attackRange + 200) {
-      this.checkParry(opponent, opponent.attackRange);
-    }
-
-    this.applyMovement(dt, opponent);
-    this.applyGravity(dt, opponent);
-    this.applyDashRecharge(dt);
-    this.applyStatuses(dt);
-    this.cleanupPosition(opponent);
-
-    this.processActions(opponent, dt);
   }
 
   updateAI(opponent) {
@@ -774,7 +970,7 @@ class Fighter {
       // Turn to face opponent before attacking
       this.facing = distance > 0 ? 1 : -1;
       // Execute attack directly for AI (no need for request/release cycle)
-      this.executeAttack(opponent);
+      this.attackSystem.executeAttack(opponent);
     }
     
     if (this.ai.defend) {
@@ -808,7 +1004,7 @@ class Fighter {
     }
 
     if (this.duckRequest && this.onGround()) {
-      this.state = 'duck';
+      this.setState('duck');
       this.isDucking = true;
       this.vel.x *= 0.7;
     } else {
@@ -817,7 +1013,7 @@ class Fighter {
 
     if (this.jumpRequest && this.onGround() && !this.isDucking) {
       this.vel.y = this.jumpStrength;
-      this.state = 'jump';
+      this.setState('jump');
       this.jumpRequest = false;
     }
 
@@ -825,7 +1021,7 @@ class Fighter {
       this.dashDuration -= dt;
       if (this.dashDuration <= 0) {
         this.isDashing = false;
-        this.state = 'idle'; // Reset dash state when dash ends
+        this.setState('idle'); // Reset dash state when dash ends
         
         // Start halt sequence when dash ends
         this.haltSequence = true;
@@ -851,9 +1047,9 @@ class Fighter {
 
     if (this.state === 'idle' || this.state === 'run' || this.state === 'hit') {
       if (moveDir === 0) {
-        this.state = 'idle';
+        this.setState('idle');
       } else {
-        this.state = 'run';
+        this.setState('run');
       }
     }
   }
@@ -871,7 +1067,7 @@ class Fighter {
     
     // Reset jump state to idle when landing
     if (this.state === 'jump' && this.onGround()) {
-      this.state = 'idle';
+      this.setState('idle');
     }
     
     // Check for slam attack landing
@@ -926,14 +1122,14 @@ class Fighter {
 
     if (this.attackRelease) {
       if (!this.isEvading && this.state !== 'attack' && !this.isSlamAttacking) {
-        this.executeAttack(opponent);
+        this.attackSystem.executeAttack(opponent);
       }
       this.attackRequest = false;
       this.attackRelease = false;
     }
 
     if (this.isGuarding && this.state !== 'staggered') {
-      this.state = 'guard';
+      this.setState('guard');
       if (this.ai.defend && random() < 0.02) {
         this.isCountering = true;
       }
@@ -967,7 +1163,7 @@ class Fighter {
     }
     this.dashCharges -= 1;
     this.isDashing = true;
-    this.state = 'dash';
+    this.setState('dash');
     this.vel.x = this.facing * 60;
     this.dashDuration = 0.2;
     this.dashAttacked = false;
@@ -976,7 +1172,7 @@ class Fighter {
   executeAttack(opponent, ignoreParry = false) {
     // If attacker has no parry count, interrupt their attack (it goes through as if they didn't attack)
     if (!ignoreParry && this.parryCount <= 0) {
-      this.state = 'idle';
+      this.setState('idle');
       this.strikeActive = false;
       return;
     }
@@ -1010,7 +1206,7 @@ class Fighter {
         this.isCharged = true;
         
         // Gain 4 poise count and potency
-        this.addStatus('Poise', 4, 4);
+        this.statusSystem.addStatus('Poise', 4, 4);
         
         // Trigger tremor burst
         const tremorStatus = this.statuses.find((s) => s.type === 'Tremor');
@@ -1027,8 +1223,16 @@ class Fighter {
     // Auto-face towards opponent when attacking
     this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
     
+    // Emit attackStarted event
+    this.events.emit('attackStarted', {
+      attacker: this.characterKey,
+      target: opponent.characterKey,
+      attackType: this.chargeAttack ? 'heavy' : 'light',
+      damage: this.attackDamage
+    });
+    
     // Consume Bleed status when attacking
-    this.consumeStatusOnAttack();
+    this.statusSystem.consumeOnAttack();
     
     // Spawn a simple slash effect for all attacks
     this.spawnSlashEffect('s1s1', { x: 0, y: -20 });
@@ -1072,7 +1276,7 @@ class Fighter {
     this.spawnSlashEffect('js1', { x: 0, y: -20 });
 
     // Immediately resolve the attack since dash attacks are instant
-    this.resolveAttack(opponent);
+    this.attackSystem.resolveAttack(opponent);
   }
 
   executeSlamAttack(opponent) {
@@ -1143,6 +1347,15 @@ class Fighter {
 
     if (this.hitOpponent(opponent, this.calcAttackBox(this.attackRange))) {
       const finalDamage = this.calculateDamage(this.attackDamage, opponent);
+      
+      // Emit attackHit event
+      this.events.emit('attackHit', {
+        attacker: this.characterKey,
+        target: opponent.characterKey,
+        damage: finalDamage,
+        knockback: this.attackKnockback
+      });
+      
       opponent.receiveHit(finalDamage, this, this.attackKnockback);
       this.onSuccessfulHit(finalDamage, opponent);
     }
@@ -1193,6 +1406,14 @@ class Fighter {
     this.parryCount -= 1;
     attacker.parryStunTimer = 0.2;
     this.parryStunTimer = 0.2;
+    
+    // Emit parryOccurred event
+    this.events.emit('parryOccurred', {
+      defender: this.characterKey,
+      attacker: attacker.characterKey,
+      successful: true
+    });
+    
     return true;
   }
 
@@ -1207,7 +1428,9 @@ class Fighter {
       damage *= 2.0; // 200% damage on third hit
     }
     
-    if (this.chargeAttack) damage *= 1.4;
+    if (this.chargeAttack) {
+      damage *= 1.4;
+    }
     if (this.hasStatus('Poise')) {
       damage *= 1.15;
     }
@@ -1239,8 +1462,17 @@ class Fighter {
     const wasGuarding = this.isGuarding;
     spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding);
     
+    // Emit damageDealt event
+    this.events.emit('damageDealt', {
+      attacker: attacker.characterKey,
+      target: this.characterKey,
+      damage: amount,
+      knockback: knockback
+    });
+    
+    // Apply hitstun
     if (this.state !== 'staggered') {
-      this.state = 'hit';
+      this.setState('hit');
       this.staggerTimer = 0.18;
       // Face towards attacker when hurt
       this.facing = attacker.pos.x > this.pos.x ? 1 : -1;
@@ -1259,16 +1491,11 @@ class Fighter {
     this.hitCooldown = 0.25;
 
     if (this.stagger >= this.staggerThreshold) {
-      this.state = 'staggered';
-      this.staggerTimer = this.staggerLength;
-      this.stagger = this.staggerThreshold; // Keep bar maxed during stagger
-      this.staggerRecoveryTimer = 0; // Will be set when staggerTimer reaches 0
-      this.staggeredDisplay = 1; // Show staggered text
-      this.staggeredDisplayTimer = 2.0; // Show for 2 seconds
+      this.setStaggerState(this.staggerLength);
     }
 
     // Consume status effects when hit
-    this.consumeStatusOnHit();
+    this.statusSystem.consumeOnHit();
     
     // Call character-specific onReceiveHit method
     const character = CHARACTERS[this.characterKey];
@@ -1284,7 +1511,7 @@ class Fighter {
     this.comboTimer = this.comboTimeout;
     this.combo += 1;
     if (this.combo > 5) {
-      this.addStatus('Charge', 1, 1);
+      this.statusSystem.addStatus('Charge', 1, 1);
     }
     this.parryCount = min(3, this.parryCount + 1);
     
@@ -1314,6 +1541,15 @@ class Fighter {
     } else {
       this.statuses.push({ type, count, potency, timer: 1.0 });
     }
+    
+    // Emit statusApplied event
+    this.events.emit('statusApplied', {
+      target: this.characterKey,
+      statusType: type,
+      count: count,
+      potency: potency,
+      wasExisting: !!existing
+    });
   }
 
   consumeStatus(type) {
@@ -1323,6 +1559,10 @@ class Fighter {
     if (status.count <= 0) {
       this.statuses = this.statuses.filter((s) => s.type !== type);
     }
+  }
+
+  removeStatus(type) {
+    this.statuses = this.statuses.filter((s) => s.type !== type);
   }
 
   consumeStatusOnHit() {
@@ -1742,5 +1982,135 @@ class Fighter {
       text(this.currentDialogue, this.pos.x, this.pos.y - 160);
       pop();
     }
+  }
+
+  // STEP 8: Server readiness layer - deterministic state snapshot
+  getStateSnapshot() {
+    return {
+      // Position and velocity
+      position: {
+        x: this.pos.x,
+        y: this.pos.y
+      },
+      velocity: {
+        x: this.vel.x,
+        y: this.vel.y
+      },
+      
+      // Health and combat state
+      hp: this.hp,
+      state: this.state,
+      facing: this.facing,
+      
+      // Active statuses
+      statuses: this.statuses.map(status => ({
+        type: status.type,
+        count: status.count,
+        potency: status.potency,
+        timer: status.timer
+      })),
+      
+      // Attack state
+      attackState: {
+        attackTimer: this.attackTimer,
+        attackSequence: this.attackSequence,
+        attackFrame: this.attackFrame,
+        strikeActive: this.strikeActive,
+        attackDamage: this.attackDamage,
+        attackRange: this.attackRange,
+        attackKnockback: this.attackKnockback,
+        chargeAttack: this.chargeAttack
+      },
+      
+      // Movement state
+      movementState: {
+        isDashing: this.isDashing,
+        isEvading: this.isEvading,
+        isGuarding: this.isGuarding,
+        isGrounded: this.isGrounded
+      },
+      
+      // Timers and cooldowns
+      timers: {
+        evadeTimer: this.evadeTimer,
+        parryWindow: this.parryWindow,
+        parryTimer: this.parryTimer,
+        parryStunTimer: this.parryStunTimer,
+        staggerTimer: this.staggerTimer,
+        staggerRecoveryTimer: this.staggerRecoveryTimer,
+        comboTimer: this.comboTimer,
+        hitCooldown: this.hitCooldown,
+        attackCounterTimer: this.attackCounterTimer
+      },
+      
+      // Combat stats
+      combatStats: {
+        combo: this.combo,
+        attackCounter: this.attackCounter,
+        parryCount: this.parryCount,
+        stagger: this.stagger
+      },
+      
+      // Character identification
+      characterKey: this.characterKey,
+      isAI: this.isAI
+    };
+  }
+
+  applyStateSnapshot(snapshot) {
+    // Position and velocity
+    this.pos.x = snapshot.position.x;
+    this.pos.y = snapshot.position.y;
+    this.vel.x = snapshot.velocity.x;
+    this.vel.y = snapshot.velocity.y;
+    
+    // Health and combat state
+    this.hp = snapshot.hp;
+    this.state = snapshot.state;
+    this.facing = snapshot.facing;
+    
+    // Active statuses
+    this.statuses = snapshot.statuses.map(status => ({
+      type: status.type,
+      count: status.count,
+      potency: status.potency,
+      timer: status.timer
+    }));
+    
+    // Attack state
+    this.attackTimer = snapshot.attackState.attackTimer;
+    this.attackSequence = snapshot.attackState.attackSequence;
+    this.attackFrame = snapshot.attackState.attackFrame;
+    this.strikeActive = snapshot.attackState.strikeActive;
+    this.attackDamage = snapshot.attackState.attackDamage;
+    this.attackRange = snapshot.attackState.attackRange;
+    this.attackKnockback = snapshot.attackState.attackKnockback;
+    this.chargeAttack = snapshot.attackState.chargeAttack;
+    
+    // Movement state
+    this.isDashing = snapshot.movementState.isDashing;
+    this.isEvading = snapshot.movementState.isEvading;
+    this.isGuarding = snapshot.movementState.isGuarding;
+    this.isGrounded = snapshot.movementState.isGrounded;
+    
+    // Timers and cooldowns
+    this.evadeTimer = snapshot.timers.evadeTimer;
+    this.parryWindow = snapshot.timers.parryWindow;
+    this.parryTimer = snapshot.timers.parryTimer;
+    this.parryStunTimer = snapshot.timers.parryStunTimer;
+    this.staggerTimer = snapshot.timers.staggerTimer;
+    this.staggerRecoveryTimer = snapshot.timers.staggerRecoveryTimer;
+    this.comboTimer = snapshot.timers.comboTimer;
+    this.hitCooldown = snapshot.timers.hitCooldown;
+    this.attackCounterTimer = snapshot.timers.attackCounterTimer;
+    
+    // Combat stats
+    this.combo = snapshot.combatStats.combo;
+    this.attackCounter = snapshot.combatStats.attackCounter;
+    this.parryCount = snapshot.combatStats.parryCount;
+    this.stagger = snapshot.combatStats.stagger;
+    
+    // Sync stateMachine to match restored state
+    this.syncState();
   }
 }

@@ -138,12 +138,34 @@ class Fighter {
     // Load character sprite if available
     this.sprite = null;
     this.spriteType = character.spriteType || null;
-    // Don't overwrite currentSprite - it should be set in initializeCharacter
+    
+    // Safe default for currentSprite
+    if (!this.currentSprite) {
+      this.currentSprite = character.defaultSprite || 'idle';
+    }
     
     if (character.sprite && this.spriteType !== 'atlas') {
       // Regular sprite loading
       this.sprite = loadImage(character.sprite);
     }
+  }
+
+  updateSprite() {
+    if (this.spriteType !== 'atlas') return;
+
+    const stateMap = {
+      idle: 'idle',
+      run: 'moving',
+      jump: 'idle',
+      attack: 'prepat',
+      guard: 'guard',
+      evade: 'evade',
+      hit: 'hurt',
+      staggered: 'hurt',
+      duck: 'idle'
+    };
+
+    this.currentSprite = stateMap[this.state] || 'idle';
   }
 
   isDead() {
@@ -321,6 +343,9 @@ class Fighter {
       this.isEvading = false;
       this.state = 'idle';
     }
+
+    // Update sprite based on current state
+    this.updateSprite();
 
     if (this.isAI) {
       this.updateAIControls(opponent);
@@ -1099,6 +1124,9 @@ class Fighter {
       // Calculate scale to match John's size (144 pixels height)
       const targetHeight = 144;
       const spriteInfo = SPRITES[this.currentSprite];
+      if (!SPRITES[this.currentSprite]) {
+        console.warn("Missing sprite:", this.currentSprite);
+      }
       if (spriteInfo) {
         const originalHeight = spriteInfo.h * 256; // CELL size
         const scaleFactor = targetHeight / originalHeight;

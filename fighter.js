@@ -1178,7 +1178,7 @@ class Fighter {
         // Position Valencina's feet at the bottom of her hitbox
         // Hitbox bottom is at this.pos.y + 36, so feet should be at y = 36
         const hitboxBottomY = 36;
-        drawSprite(this.currentSprite, 0, hitboxBottomY, scaleFactor);
+        drawSpriteScaled(this.currentSprite, 0, hitboxBottomY, scaleFactor);
       }
       pop();
     } else if (this.sprite && this.sprite.width > 0) {

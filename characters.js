@@ -70,7 +70,39 @@ function loadSpriteAtlases() {
 // ==========================
 // 🧩 SPRITE DRAWING FUNCTION
 // ==========================
-function drawSprite(name, x, y, spriteScale = 1) {
+function drawSprite(name, x, y) {
+  let s = SPRITES[name];
+  if (!s) return null;
+  
+  let img = atlases[s.atlas];
+  if (!img) return null;
+
+  let sx = s.x * CELL;
+  let sy = s.y * CELL;
+  let sw = s.w * CELL;
+  let sh = s.h * CELL;
+
+  let offsetX = s.offsetX || 0;
+  let offsetY = s.offsetY || 0;
+
+  push();
+  translate(x, y);
+
+  image(
+    img,
+    -sw/2 + offsetX,
+    -sh + offsetY,
+    sw, sh,
+    sx, sy,
+    sw, sh
+  );
+
+  pop();
+  
+  return { width: sw, height: sh };
+}
+
+function drawSpriteScaled(name, x, y, spriteScale = 1) {
   let s = SPRITES[name];
   if (!s) return null;
   

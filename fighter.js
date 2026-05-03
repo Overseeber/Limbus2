@@ -150,6 +150,9 @@ class Fighter {
     // Initialize slam attack properties
     this.slamHoldPosition = false;
     
+    // Initialize slash effects management
+    this.slashEffects = [];
+    
     // Initialize attack sequence properties
     this.attackSequence = 0; // 0=none, 1=attack1, 2=attack2, 3=attack3
     this.attackFrame = 0; // Current frame in attack sequence
@@ -175,7 +178,8 @@ class Fighter {
     const stateMap = {
       idle: 'idle',
       run: 'moving',
-      jump: 's2f3',
+      jump: 's4f3',
+      attack: 'prepat',
       guard: 'guard',
       evade: 'evade',
       hit: 'hurt',
@@ -218,6 +222,12 @@ class Fighter {
       if (this.attackFrame < sequence.length) {
         this.currentSprite = sequence[this.attackFrame];
         
+        // Spawn slash effects on specific frames
+        if (this.attackFrame === 1) {
+          this.spawnSlashEffect('s1s1', { x: 0, y: -20 });
+          this.spawnSlashEffect('s1s2', { x: 20, y: 0 });
+        }
+        
         // Deal damage on damage frames
         if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
           this.dealAttackDamage();
@@ -232,6 +242,11 @@ class Fighter {
       
       if (this.attackFrame < sequence.length) {
         this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames
+        if (this.attackFrame === 0) {
+          this.spawnSlashEffect('s1s3', { x: 0, y: -20 });
+        }
         
         // Deal damage on damage frames
         if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
@@ -248,6 +263,11 @@ class Fighter {
       
       if (this.attackFrame < sequence.length) {
         this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames
+        if (this.attackFrame === 1) {
+          this.spawnSlashEffect('s1s4', { x: 0, y: -20 });
+        }
         
         // Use custom frame duration for s3f3
         if (this.attackFrame === 2) {
@@ -274,6 +294,20 @@ class Fighter {
     }
   }
 
+  spawnSlashEffect(slashType, targetOffset = null) {
+    // Spawn slash effect that shares character position and fades out
+    const effect = {
+      type: slashType,
+      pos: this.pos.copy(),
+      facing: this.facing,
+      timer: 1.0, // Fade out over 1 second
+      targetOffset: targetOffset,
+      owner: this
+    };
+    
+    this.slashEffects.push(effect);
+  }
+
   dealAttackDamage() {
     // This method will be called to deal damage during attack sequences
     // The actual damage dealing will be handled in the update method
@@ -283,6 +317,31 @@ class Fighter {
 
   isDead() {
     return this.hp <= 0;
+  }
+
+  drawSlashEffects() {
+    // Draw all active slash effects
+    for (const effect of this.slashEffects) {
+      push();
+      
+      // Calculate position based on character position and target offset
+      const drawX = effect.owner.pos.x + (effect.targetOffset?.x || 0);
+      const drawY = effect.owner.pos.y + (effect.targetOffset?.y || 0);
+      
+      // Apply facing to slash effect
+      if (effect.owner.facing === -1) {
+        scale(-1, 1);
+        drawX = drawX - (effect.targetOffset?.x || 0);
+      }
+      
+      // Get sprite info
+      const spriteInfo = SPRITES[effect.type];
+      if (spriteInfo) {
+        drawSprite(effect.type, drawX, drawY, 1.0, effect.timer / 1.0); // Fade with timer
+      }
+      
+      pop();
+    }
   }
 
   handleInput() {
@@ -528,6 +587,16 @@ class Fighter {
           this.haltSequence = false;
           this.haltFrame = 0;
         }
+      }
+    }
+
+    // Update slash effects
+    for (let i = this.slashEffects.length - 1; i >= 0; i--) {
+      const effect = this.slashEffects[i];
+      effect.timer -= dt;
+      
+      if (effect.timer <= 0) {
+        this.slashEffects.splice(i, 1);
       }
     }
 
@@ -887,6 +956,9 @@ class Fighter {
     // Set flag for post-dash attack sprite
     this.usePostDashSprite = true;
 
+    // Spawn joust slash effect for dash attack
+    this.spawnSlashEffect('js1', { x: 0, y: -20 });
+
     // Immediately resolve the attack since dash attacks are instant
     this.resolveAttack(opponent);
   }
@@ -942,6 +1014,9 @@ class Fighter {
     this.slamHoldPosition = true;
     this.state = 'slam';
     this.slamLandingHitbox = null;
+    
+    // Spawn s4f4 slash effect for slam attack
+    this.spawnSlashEffect('s4f4', { x: 0, y: -20 });
   }
 
   resolveAttack(opponent) {
@@ -1335,6 +1410,10 @@ class Fighter {
       // Apply direction flipping for atlas sprites (default sprite faces left)
       // When facing right (1), flip to face right; when facing left (-1), don't flip
       scale(this.facing === 1 ? -1 : 1, 1);
+      
+      // Draw slash effects
+      this.drawSlashEffects();
+    }
       
       // Calculate scale: 512px = John Limbus height (144px)
       const spriteInfo = SPRITES[this.currentSprite];

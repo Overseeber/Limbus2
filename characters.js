@@ -327,9 +327,12 @@ const CHARACTERS = {
       }
     },
     initializeCharacter: function(fighter) {
-      fighter.weapon = this.weapon;
-      fighter.accelerationRounds = this.accelerationRounds;
-      fighter.maxPrecognition = this.maxPrecognition;
+      console.log("Initializing Valencina character");
+      
+      // Initialize Valencina-specific properties
+      fighter.accelerationRounds = 0;
+      fighter.maxAccelerationRounds = 10;
+      fighter.isCharged = false;
       fighter.precognition = this.maxPrecognition;
       fighter.precognitionTimer = 0;
       fighter.isOverheated = false;
@@ -339,6 +342,10 @@ const CHARACTERS = {
       // Valencina-specific cooldowns
       fighter.timeToHuntCooldown = 0;
       fighter.disposialCooldown = 0;
+      
+      // TEMPORARY TEST: Force sprite change to guard
+      fighter.currentSprite = 'guard';
+      console.log("Valencina initialized, forcing sprite to guard for testing");
     }
   }
 };

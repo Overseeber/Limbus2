@@ -137,7 +137,11 @@ class Fighter {
     
     // Load character sprite if available
     this.sprite = null;
-    if (character.sprite) {
+    this.spriteType = character.spriteType || null;
+    this.currentSprite = character.currentSprite || null;
+    
+    if (character.sprite && this.spriteType !== 'atlas') {
+      // Regular sprite loading
       this.sprite = loadImage(character.sprite);
     }
   }
@@ -1157,7 +1161,23 @@ class Fighter {
     translate(this.pos.x, this.pos.y);
     
     // Draw sprite if available, otherwise draw default character
-    if (this.sprite && this.sprite.width > 0) {
+    if (this.spriteType === 'atlas' && this.currentSprite) {
+      // Use sprite atlas system
+      push();
+      scale(this.facing, 1);
+      
+      // Calculate scale to match John's size (144 pixels height)
+      const targetHeight = 144;
+      const spriteInfo = SPRITES[this.currentSprite];
+      if (spriteInfo) {
+        const originalHeight = spriteInfo.h * 256; // CELL size
+        const scaleFactor = targetHeight / originalHeight;
+        
+        drawSprite(this.currentSprite, 0, -30, scaleFactor);
+      }
+      pop();
+    } else if (this.sprite && this.sprite.width > 0) {
+      // Regular sprite loading
       push();
       scale(this.facing, 1);
       imageMode(CENTER);

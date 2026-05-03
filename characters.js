@@ -1,3 +1,110 @@
+// ==========================
+// 🔥 SPRITE ATLAS SYSTEM
+// ==========================
+let atlases = {};
+const CELL = 256;
+
+// ==========================
+// 🔥 SPRITE DATABASE
+// ==========================
+const SPRITES = {
+  // ===== val1 =====
+  idle:   { atlas: "val1", x:0,y:0,w:2,h:2 },
+  guard:  { atlas: "val1", x:2,y:0,w:2,h:3 },
+  hurt:   { atlas: "val1", x:4,y:0,w:2,h:2 },
+  evade:  { atlas: "val1", x:6,y:0,w:2,h:2 },
+  prepat: { atlas: "val1", x:0,y:2,w:2,h:2 },
+  halt1:  { atlas: "val1", x:2,y:3,w:3,h:2 },
+  moving: { atlas: "val1", x:5,y:2,w:3,h:2 },
+  s1f1:   { atlas: "val1", x:0,y:5,w:3,h:3 },
+  s1f2:   { atlas: "val1", x:4,y:5,w:4,h:3 },
+
+  // ===== val2 =====
+  s1f3: { atlas:"val2", x:0,y:0,w:3,h:3 },
+  halt2:{ atlas:"val2", x:0,y:3,w:3,h:2 },
+  s2f1: { atlas:"val2", x:3,y:0,w:5,h:2 },
+  joust:{ atlas:"val2", x:3,y:2,w:5,h:2 },
+  s3f1: { atlas:"val2", x:0,y:5,w:3,h:2 },
+  s3f2: { atlas:"val2", x:3,y:4,w:3,h:2 },
+  s3f3: { atlas:"val2", x:3,y:6,w:3,h:2 },
+  dist1:{ atlas:"val2", x:6,y:4,w:2,h:2 },
+
+  // ===== val3 =====
+  s2f1_v3:{ atlas:"val3", x:0,y:0,w:4,h:2 },
+  s2f2:   { atlas:"val3", x:0,y:2,w:3,h:3 },
+  s2f3:   { atlas:"val3", x:0,y:5,w:3,h:2 },
+  s2f4:   { atlas:"val3", x:4,y:0,w:4,h:3, offsetY:+256 }, // custom anchor
+  d1:     { atlas:"val3", x:3,y:3,w:3,h:2 },
+  d2:     { atlas:"val3", x:3,y:5,w:3,h:2 },
+
+  // ===== valdisposal =====
+  de1:{ atlas:"valdisposal", x:2,y:0,w:4,h:2 },
+  de2:{ atlas:"valdisposal", x:1,y:2,w:5,h:2 },
+  de3:{ atlas:"valdisposal", x:4,y:0,w:8,h:2 },
+
+  // ===== slash1 =====
+  s1s1:{ atlas:"vslash1", x:0,y:0,w:4,h:3 },
+  s1s2:{ atlas:"vslash1", x:4,y:0,w:4,h:3 },
+  s1s3:{ atlas:"vslash1", x:3,y:3,w:5,h:2 },
+  js1: { atlas:"vslash1", x:3,y:5,w:5,h:2 },
+
+  // ===== slash2 =====
+  s1s4:{ atlas:"vslash2", x:0,y:2,w:4,h:3, offsetY:+256 },
+  s2s1:{ atlas:"vslash2", x:0,y:0,w:4,h:2 },
+  s2s2:{ atlas:"vslash2", x:4,y:0,w:4,h:3, offsetY:+256 },
+  diss1:{atlas:"vslash2", x:4,y:3,w:4,h:2 }
+};
+
+// ==========================
+// 🔥 SPRITE LOADING FUNCTION
+// ==========================
+function loadSpriteAtlases() {
+  atlases.val1 = loadImage("data/val1.png");
+  atlases.val2 = loadImage("data/val2.png");
+  atlases.val3 = loadImage("data/val3.png");
+  atlases.valdisposal = loadImage("data/valdisposal.png");
+  atlases.vslash1 = loadImage("data/vslash1.png");
+  atlases.vslash2 = loadImage("data/vslash2.png");
+}
+
+// ==========================
+// 🧩 SPRITE DRAWING FUNCTION
+// ==========================
+function drawSprite(name, x, y, scale = 1) {
+  let s = SPRITES[name];
+  if (!s) return null;
+  
+  let img = atlases[s.atlas];
+  if (!img) return null;
+
+  let sx = s.x * CELL;
+  let sy = s.y * CELL;
+  let sw = s.w * CELL;
+  let sh = s.h * CELL;
+
+  let offsetX = s.offsetX || 0;
+  let offsetY = s.offsetY || 0;
+
+  push();
+  translate(x, y);
+  
+  // Apply scale
+  scale(scale, scale);
+
+  image(
+    img,
+    -sw/2 + offsetX,
+    -sh + offsetY,
+    sw, sh,
+    sx, sy,
+    sw, sh
+  );
+
+  pop();
+  
+  return { width: sw * scale, height: sh * scale };
+}
+
 // Character roster system
 const CHARACTERS = {
   JOHN: {
@@ -43,6 +150,8 @@ const CHARACTERS = {
     weapon: 'La Spada di Palermo',
     accelerationRounds: 5,
     maxPrecognition: 30,
+    spriteType: 'atlas', // Use sprite atlas system
+    currentSprite: 'idle', // Default sprite
     // Character-specific methods
     onSuccessfulHit: function(damage, opponent, fighter) {
       if (!opponent) return;

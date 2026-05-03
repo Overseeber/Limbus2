@@ -11,6 +11,11 @@ let summaryText = '';
 let lastMouseDown = null;
 let battleTimer = 0;
 
+function preload() {
+  // Load sprite atlases for character sprites
+  loadSpriteAtlases();
+}
+
 function setup() {//test
   createCanvas(ARENA_WIDTH, ARENA_HEIGHT);
   document.oncontextmenu = () => false;

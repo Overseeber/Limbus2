@@ -1161,7 +1161,13 @@ class Fighter {
       push();
       scale(this.facing, 1);
       imageMode(CENTER);
-      image(this.sprite, 0, -30);
+      
+      // Calculate scale to match original height (72 pixels) while maintaining proportions
+      const targetHeight = 72;
+      const scaleFactor = targetHeight / this.sprite.height;
+      const scaledWidth = this.sprite.width * scaleFactor;
+      
+      image(this.sprite, 0, -30, scaledWidth, targetHeight);
       pop();
     } else {
       fill(this.color);

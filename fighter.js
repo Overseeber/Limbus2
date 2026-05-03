@@ -1165,7 +1165,8 @@ class Fighter {
       // Use sprite atlas system
       push();
       // Apply direction flipping for atlas sprites (default sprite faces left)
-      scale(this.facing, 1);
+      // When facing right (1), flip to face right; when facing left (-1), don't flip
+      scale(this.facing === 1 ? -1 : 1, 1);
       
       // Calculate scale to match John's size (144 pixels height)
       const targetHeight = 144;

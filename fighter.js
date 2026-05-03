@@ -226,9 +226,14 @@ class Fighter {
     }
   }
 
-  requestGuard() {
+  requestGuard(opponent = null) {
     this.guardRequest = true;
     this.isGuarding = true;
+    
+    // Auto-face towards opponent if they're attacking and within range
+    if (opponent && opponent.strikeActive && abs(this.pos.x - opponent.pos.x) < opponent.attackRange + 100) {
+      this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
+    }
   }
 
   releaseGuard() {
@@ -415,7 +420,7 @@ class Fighter {
     }
     
     if (this.ai.defend) {
-      this.requestGuard();
+      this.requestGuard(opponent);
     } else {
       this.releaseGuard();
     }
@@ -648,9 +653,12 @@ class Fighter {
       }
     }
 
+    // Auto-face towards opponent when attacking
+    this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
+    
     // Base attack damage and range
     this.attackDamage = attackType === 'heavy' ? this.baseDamage * 2 : this.baseDamage;
-    this.attackRange = attackType === 'heavy' ? 140 : 110;
+    this.attackRange = attackType === 'heavy' ? 196 : 154; // 40% increase: 140→196, 110→154
     this.attackKnockback = attackType === 'heavy' ? 18 * 0.5 : 12 * 0.5; // 50% knockback
     
     // Valencina's acceleration round bonuses
@@ -672,9 +680,12 @@ class Fighter {
     this.parryWindow = 0; // No parry window for dash attacks
     this.lastAttackHit = false;
 
+    // Auto-face towards opponent when dash attacking
+    this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
+    
     // Dash attacks do 1.5x damage and have increased range
     this.attackDamage = this.baseDamage * 1.5;
-    this.attackRange = 120;
+    this.attackRange = 168; // 40% increase: 120→168
     this.attackKnockback = 15;
 
     // Immediately resolve the attack since dash attacks are instant

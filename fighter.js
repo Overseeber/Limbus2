@@ -319,7 +319,7 @@ class Fighter {
     return this.hp <= 0;
   }
 
-  drawSlashEffects() {
+  drawSlashEffects(dt) {
     // Draw all active slash effects
     for (let i = this.slashEffects.length - 1; i >= 0; i--) {
       const effect = this.slashEffects[i];
@@ -330,14 +330,14 @@ class Fighter {
         continue;
       }
 
-      effect.timer -= 1 / 60; // Safer fallback if dt not passed
+      effect.timer -= dt; // Use actual dt for consistent timing
       if (effect.timer <= 0) {
         this.slashEffects.splice(i, 1);
         continue;
       }
 
       const spriteInfo = SPRITES?.[effect.type];
-      if (!spriteInfo) continue; // 🔥 Prevent crash for missing sprites
+      if (!spriteInfo) continue; // Prevent crash for missing sprites
 
       push();
 

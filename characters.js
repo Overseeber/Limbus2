@@ -203,21 +203,35 @@ const CHARACTERS = {
       // Inflict 2 tremor potency and count
       opponent.addStatus('Tremor', 2, 2);
       
-      // Dialogue triggers
+      // Dialogue triggers - select random line from arrays
       if (!fighter.currentDialogue) {
-        fighter.currentDialogue = "I'll be damned before I let you ruin this! Not after toiling like a goddamn dog for decades, climbing up the ranks...!";
+        const attackDialogues = [
+          "..."
+        ];
+        fighter.currentDialogue = random(attackDialogues);
         fighter.dialogueTimer = 10;
       }
       
       // On 5x combo counter
       if (fighter.attackCounter >= 5) {
-        fighter.currentDialogue = "Feeling confident today? Then parry this, asshole.\nMatch my hatred.";
+        const comboDialogues = [
+          "Feeling confident today? Then parry this, asshole!",
+          "Match my hatred"
+        ];
+        fighter.currentDialogue = random(comboDialogues);
         fighter.dialogueTimer = 10;
       }
       
       // On manual evade
       if (fighter.isEvading) {
-        fighter.currentDialogue = "What, having a hard time landing a hit?\nYou won't even manage to brush my coattails at this rate.\nI'm reading you like an open book.\nBack in my day, you wouldn't even have dared to look me in the eye.\nWhat'd I say? I can handle you as long as I've got this eye.";
+        const evadeDialogues = [
+          "What, having a hard time landing a hit?",
+          "You won't even manage to brush my coattails at this rate.",
+          "I'm reading you like an open book.",
+          "Back in my day, you wouldn't even dare to look me in the eye.",
+          "What'd I say? I can handle you as long as I've got this eye."
+        ];
+        fighter.currentDialogue = random(evadeDialogues);
         fighter.dialogueTimer = 10;
         
         const precognitionStatus = fighter.statuses.find((s) => s.type === 'Precognition');
@@ -230,38 +244,48 @@ const CHARACTERS = {
       
       // Reduced to 60% hp
       if (fighter.hp < fighter.maxHp * 0.6) {
-        fighter.currentDialogue = "Fuck you! I am Valencina della Famiglia Bognatelli...! I refuse to rot in this fucking dump!";
+        const lowHpDialogues = [
+          "Fuck you! I am Valencina della Famiglia Bognatelli...! I refuse to rot in this fucking dump!"
+        ];
+        fighter.currentDialogue = random(lowHpDialogues);
         fighter.dialogueTimer = 10;
-      }
-      
-      // On hit or when hit, lose 1 overheat
-      const overheatStatus = fighter.statuses.find((s) => s.type === 'Overheat');
-      if (overheatStatus) {
-        overheatStatus.count = max(0, overheatStatus.count - 1);
-        fighter.overheat = overheatStatus.count;
       }
       
       // On kill
       if (opponent.hp <= 0) {
-        fighter.currentDialogue = "The world's better off without scum like you.\nRot in hell, you worthless piece of trash.";
+        const killDialogues = [
+          "Hahahahaha! And the hunt comes to a close!",
+          "I'll make mincemeat of you all!"
+        ];
+        fighter.currentDialogue = random(killDialogues);
         fighter.dialogueTimer = 10;
       }
       
       // On hit
       if (fighter.state === 'hit') {
-        fighter.currentDialogue = "Shit!\nWhat the hell—";
+        const hitDialogues = [
+          "Shit!",
+          "What the hell—"
+        ];
+        fighter.currentDialogue = random(hitDialogues);
         fighter.dialogueTimer = 10;
       }
       
       // Overheat
       if (fighter.isOverheated) {
-        fighter.currentDialogue = "... Tsk. Overheated already?";
+        const overheatDialogues = [
+          "... Tsk. Overheated already?"
+        ];
+        fighter.currentDialogue = random(overheatDialogues);
         fighter.dialogueTimer = 10;
       }
       
       // Disposal
       if (fighter.isOverheated && fighter.overheat > 20) {
-        fighter.currentDialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all!\nYeah, I hate you all! The damn Famiglia, you, and Ticket, too!";
+        const disposalDialogues = [
+          "I'm sick and tired of Ticket and her meddling fools—to hell with you all! Yeah, I hate you all! The damn Famiglia, you, and Ticket, too!"
+        ];
+        fighter.currentDialogue = random(disposalDialogues);
         fighter.dialogueTimer = 10;
       }
     },

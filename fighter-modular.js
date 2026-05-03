@@ -578,6 +578,12 @@ class Fighter {
     this.hitCooldown = max(0, this.hitCooldown - dt);
     this.attackCounterTimer = max(0, this.attackCounterTimer - dt);
     this.staggeredDisplayTimer = max(0, this.staggeredDisplayTimer - dt);
+    this.dialogueTimer = max(0, this.dialogueTimer - dt);
+    
+    // Reset dialogue when timer reaches 0
+    if (this.dialogueTimer <= 0) {
+      this.currentDialogue = '';
+    }
 
     if (this.comboTimer <= 0) {
       this.combo = 0;
@@ -1729,7 +1735,7 @@ class Fighter {
     if (this.characterKey === 'VALENCINA' && this.currentDialogue) {
       push();
       textAlign(CENTER, CENTER);
-      textSize(16);
+      textSize(8);
       fill(255, 255, 255, map(this.dialogueTimer, 0, 10, 0, 255));
       stroke(0, map(this.dialogueTimer, 0, 10, 0, 255));
       strokeWeight(1);

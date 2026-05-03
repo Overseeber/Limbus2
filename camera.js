@@ -23,7 +23,7 @@ function updateCamera() {
   const marginY = height * CAMERA_MARGIN;
   const targetWidth = max(200, right - left + marginX * 2);
   const targetHeight = max(160, bottom - top + marginY * 2);
-  const desiredZoom = min(1.6, width / targetWidth, height / targetHeight);
+  const desiredZoom = min(3.2, width / targetWidth, height / targetHeight);
   const centerX = (left + right) / 2;
   const centerY = (top + bottom) / 2;
   const zoomSpeed = desiredZoom < cameraZoom ? 0.28 : 0.08;

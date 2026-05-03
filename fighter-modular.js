@@ -53,6 +53,7 @@ class Fighter {
     this.attackRange = 0;
     this.attackIgnoreParry = false;
     this.attackHitResolved = false;
+    this.statusEffectsApplied = false;
     
     // STEP 1: Isolate state management - create stateMachine object
     this.stateMachine = {
@@ -226,6 +227,7 @@ class Fighter {
     this.attackRange = 0;
     this.attackIgnoreParry = false;
     this.attackHitResolved = false;
+    this.statusEffectsApplied = false;
     this.attackSequence = 0;
     this.attackFrame = 0;
     this.attackFrameTimer = 0;
@@ -844,7 +846,8 @@ class Fighter {
     }
 
     // Deal damage during attack sequences when strike is active
-    if (this.strikeActive && this.attackSequence > 0 && !this.attackHitResolved) {
+    // Only resolve if not already resolved by timer expiration
+    if (this.strikeActive && this.attackSequence > 0 && !this.attackHitResolved && this.attackTimer > 0) {
       this.attackSystem.resolveAttack(opponent);
     }
   }
@@ -1194,6 +1197,7 @@ class Fighter {
     this.attackTimer = this.attackInterval;
     this.attackIgnoreParry = ignoreParry;
     this.attackHitResolved = false;
+    this.statusEffectsApplied = false;
     this.parryWindow = 0.8; // Increased parry window from 0.5 to 0.8 seconds
     this.lastAttackHit = false;
     this.strikeActive = true; // Set strikeActive for normal attacks
@@ -1234,9 +1238,6 @@ class Fighter {
     // Consume Bleed status when attacking
     this.statusSystem.consumeOnAttack();
     
-    // Spawn a simple slash effect for all attacks
-    this.spawnSlashEffect('s1s1', { x: 0, y: -20 });
-    
     // Base attack damage and range
     this.attackDamage = attackType === 'heavy' ? this.baseDamage * 2 : this.baseDamage;
     this.attackRange = attackType === 'heavy' ? 294 : 231; // 50% increase: 196→294, 154→231
@@ -1258,6 +1259,7 @@ class Fighter {
     this.attackTimer = this.attackInterval;
     this.attackIgnoreParry = true;
     this.attackHitResolved = false;
+    this.statusEffectsApplied = false;
     this.parryWindow = 0; // No parry window for dash attacks
     this.lastAttackHit = false;
 
@@ -1506,24 +1508,157 @@ class Fighter {
     this.addCombo(attacker);
   }
 
-  onSuccessfulHit(damage, opponent) {
-    this.lastAttackHit = true;
-    this.comboTimer = this.comboTimeout;
-    this.combo += 1;
-    if (this.combo > 5) {
-      this.statusSystem.addStatus('Charge', 1, 1);
-    }
-    this.parryCount = min(3, this.parryCount + 1);
+    onParry(attacker) {
+    if (this.parryCount <= 0) return false; // Cannot parry if no parries left
+    const attackerRight = attacker.pos.x > this.pos.x;
+    this.state = 'parry';
+    attacker.state = 'parried';
+    attacker.vel.x = attackerRight ? 12 : -12;
+    this.vel.x = attackerRight ? -10 : 10;
+    attacker.strikeActive = false;
+    this.strikeActive = false;
+    attacker.parryWindow = 0;
+    this.parryWindow = 0;
+    attacker.hitCooldown = 0.15;
+    this.hitCooldown = 0.15;
+    this.parryIndicator = 0.35;
+    attacker.parryIndicator = 0.35;
+    this.attackTimer = this.attackInterval;
+    attacker.attackTimer = attacker.attackInterval;
+    this.combo = max(0, this.combo - 1);
+    // Only the defender (parrier) loses parry count, not the attacker
+    this.parryCount -= 1;
+    attacker.parryStunTimer = 0.2;
+    this.parryStunTimer = 0.2;
     
-    // Call character-specific onSuccessfulHit method
+    // Emit parryOccurred event
+    this.events.emit('parryOccurred', {
+      defender: this.characterKey,
+      attacker: attacker.characterKey,
+      successful: true
+    });
+    
+    return true;
+}
+
+calculateDamage(base, opponent) {
+  let damage = base;
+  
+  // Scale with combo counter
+  damage += this.combo * 2;
+  
+  // 3-hit combo system: 100%, 100%, 200% damage
+  if (this.attackCounter === 3) {
+    damage *= 2.0; // 200% damage on third hit
+  }
+  
+  if (this.chargeAttack) {
+    damage *= 1.4;
+  }
+  if (this.hasStatus('Poise')) {
+    damage *= 1.15;
+  }
+  if (opponent.state === 'staggered') {
+    damage *= 2;
+  }
+  return damage;
+}
+
+receiveHit(amount, attacker, knockback) {
+  if (this.isGuarding) {
+    amount *= 0.45;
+    if (this.isCountering) {
+      attacker.receiveHit(amount * 0.8, this, knockback * 0.8);
+      this.isCountering = false;
+    }
+  }
+
+  if (this.isEvading) {
+    spawnEvadeIndicator(this.pos.copy());
+    return;
+  }
+
+  if (this.state === 'hit' || this.hitCooldown > 0) {
+    return;
+  }
+
+  this.hp -= amount;
+  const wasGuarding = this.isGuarding;
+  spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding);
+  
+  // Emit damageDealt event
+  this.events.emit('damageDealt', {
+    attacker: attacker.characterKey,
+    target: this.characterKey,
+    damage: amount,
+    knockback: knockback
+  });
+  
+  // Apply hitstun
+  if (this.state !== 'staggered') {
+    this.setState('hit');
+    this.staggerTimer = 0.18;
+    // Face towards attacker when hurt
+    this.facing = attacker.pos.x > this.pos.x ? 1 : -1;
+  }
+  
+  // Only add stagger if not already staggered (applies to both players and enemies)
+  if (this.state !== 'staggered') {
+    this.stagger += amount * 1.2;
+    this.staggerRecoveryTimer = 0;
+  }
+  
+  const strength = max(1, amount * 0.05);
+  const awayFromAttacker = this.pos.x < attacker.pos.x ? -1 : 1;
+  this.vel.x = awayFromAttacker * knockback * strength;
+  this.vel.y = -5;
+  this.hitCooldown = 0.25;
+
+  if (this.stagger >= this.staggerThreshold) {
+    this.setStaggerState(this.staggerLength);
+  }
+
+  // Consume status effects when hit
+  this.statusSystem.consumeOnHit();
+  
+  // Call character-specific onReceiveHit method
+  const character = CHARACTERS[this.characterKey];
+  if (character && character.onReceiveHit) {
+    character.onReceiveHit(amount, attacker, this);
+  }
+
+  this.addCombo(attacker);
+}
+
+onSuccessfulHit(damage, opponent) {
+  this.lastAttackHit = true;
+  this.comboTimer = this.comboTimeout;
+  this.combo += 1;
+  
+  // Reset attack counter after 3 hits
+  if (this.combo >= 3) {
+    this.combo = 0;
+    this.attackCounter = 0; // Reset after completing 3-hit combo
+  }
+  
+  if (this.parryTimer <= 0 && this.parryCount < 3) {
+    this.parryCount += 1;
+    this.parryTimer = 10;
+  }
+  
+  // Call character-specific onSuccessfulHit method only once per attack
+  if (!this.statusEffectsApplied) {
+    this.statusEffectsApplied = true;
     const character = CHARACTERS[this.characterKey];
     if (character && character.onSuccessfulHit) {
       character.onSuccessfulHit(damage, opponent, this);
     }
   }
+}
 
-  addCombo(attacker) {
-    if (attacker === this && this.comboTimer > 0) {
+addCombo(attacker) {
+  if (attacker === this && this.comboTimer > 0) {
+    return;
       return;
     }
     this.comboTimer = this.comboTimeout;

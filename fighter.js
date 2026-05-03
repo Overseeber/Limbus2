@@ -819,6 +819,7 @@ class Fighter {
     this.attackDamageDealt = false;
     this.attackFrameDuration = 0.2;
     
+    const attackType = this.chargeAttack ? 'heavy' : 'light';
     this.state = 'attack';
     this.attackTimer = this.attackInterval;
     this.attackIgnoreParry = ignoreParry;

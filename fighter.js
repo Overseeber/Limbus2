@@ -134,6 +134,12 @@ class Fighter {
     if (character.initializeCharacter) {
       character.initializeCharacter(this);
     }
+    
+    // Load character sprite if available
+    this.sprite = null;
+    if (character.sprite) {
+      this.sprite = loadImage(character.sprite);
+    }
   }
 
   isDead() {
@@ -1149,12 +1155,22 @@ class Fighter {
   draw() {
     push();
     translate(this.pos.x, this.pos.y);
-    fill(this.color);
-    noStroke();
-    ellipse(0, -30, 52, 72);
-    fill(30);
-    rectMode(CENTER);
-    rect(this.facing * 20, -42, 20, 6, 4);
+    
+    // Draw sprite if available, otherwise draw default character
+    if (this.sprite && this.sprite.width > 0) {
+      push();
+      scale(this.facing, 1);
+      imageMode(CENTER);
+      image(this.sprite, 0, -30);
+      pop();
+    } else {
+      fill(this.color);
+      noStroke();
+      ellipse(0, -30, 52, 72);
+      fill(30);
+      rectMode(CENTER);
+      rect(this.facing * 20, -42, 20, 6, 4);
+    }
     if (this.isGuarding) {
       stroke('#90ee90');
       strokeWeight(3);

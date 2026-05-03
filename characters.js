@@ -11,6 +11,7 @@ const CHARACTERS = {
     staggerLength: 5,
     color: '#4a90e2',
     weapon: 'bus',
+    sprite: 'dummy/idle.png',
     // Character-specific methods
     onSuccessfulHit: function(damage, opponent, fighter) {
       // Default implementation - no special effects

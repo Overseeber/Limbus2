@@ -30,10 +30,10 @@ const SPRITES = {
   dist1:{ atlas:"val2", x:6,y:4,w:2,h:2 },
 
   // ===== val3 =====
-  s2f1_v3:{ atlas:"val3", x:0,y:0,w:4,h:2 },
-  s2f2:   { atlas:"val3", x:0,y:2,w:3,h:3 },
-  s2f3:   { atlas:"val3", x:0,y:5,w:3,h:2 },
-  s2f4:   { atlas:"val3", x:4,y:0,w:4,h:3, offsetY:+256 }, // custom anchor
+  s4f1:   { atlas:"val3", x:0,y:0,w:4,h:2 },
+  s4f2:   { atlas:"val3", x:0,y:2,w:3,h:3 },
+  s4f3:   { atlas:"val3", x:0,y:5,w:3,h:2 },
+  s4f4:   { atlas:"val3", x:4,y:0,w:4,h:3, offsetY:+256 }, // custom anchor
   d1:     { atlas:"val3", x:3,y:3,w:3,h:2 },
   d2:     { atlas:"val3", x:3,y:5,w:3,h:2 },
 
@@ -44,12 +44,13 @@ const SPRITES = {
 
   // ===== slash1 =====
   s1s1:{ atlas:"vslash1", x:0,y:0,w:4,h:3 },
+  s1s1:{ atlas:"vslash1", x:0,y:0,w:4,h:3 },
   s1s2:{ atlas:"vslash1", x:4,y:0,w:4,h:3 },
   s1s3:{ atlas:"vslash1", x:3,y:3,w:5,h:2 },
   js1: { atlas:"vslash1", x:3,y:5,w:5,h:2 },
 
   // ===== slash2 =====
-  s1s4:{ atlas:"vslash2", x:0,y:2,w:4,h:3, offsetY:+256 },
+  s1s4:{ atlas:"vslash2", x:0,y:2,w:4,h:4, offsetY:+256 },
   s2s1:{ atlas:"vslash2", x:0,y:0,w:4,h:2 },
   s2s2:{ atlas:"vslash2", x:4,y:0,w:4,h:3, offsetY:+256 },
   diss1:{atlas:"vslash2", x:4,y:3,w:4,h:2 }

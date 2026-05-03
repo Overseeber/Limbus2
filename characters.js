@@ -59,12 +59,12 @@ const SPRITES = {
 // 🔥 SPRITE LOADING FUNCTION
 // ==========================
 function loadSpriteAtlases() {
-  atlases.val1 = loadImage("data/val1.png");
-  atlases.val2 = loadImage("data/val2.png");
-  atlases.val3 = loadImage("data/val3.png");
-  atlases.valdisposal = loadImage("data/valdisposal.png");
-  atlases.vslash1 = loadImage("data/vslash1.png");
-  atlases.vslash2 = loadImage("data/vslash2.png");
+  atlases.val1 = loadImage("data/valencina/val1.png");
+  atlases.val2 = loadImage("data/valencina/val2.png");
+  atlases.val3 = loadImage("data/valencina/val3.png");
+  atlases.valdisposal = loadImage("data/valencina/valdisposal.png");
+  atlases.vslash1 = loadImage("data/valencina/vslash1.png");
+  atlases.vslash2 = loadImage("data/valencina/vslash2.png");
 }
 
 // ==========================

@@ -72,10 +72,16 @@ function loadSpriteAtlases() {
 // ==========================
 function drawSprite(name, x, y) {
   let s = SPRITES[name];
-  if (!s) return null;
+  if (!s) {
+    console.error("Missing sprite definition:", name);
+    return null;
+  }
   
   let img = atlases[s.atlas];
-  if (!img) return null;
+  if (!img) {
+    console.error("Missing atlas:", s.atlas);
+    return null;
+  }
 
   let sx = s.x * CELL;
   let sy = s.y * CELL;

@@ -240,91 +240,7 @@ class Fighter {
     }
   }
 
-  update(dt, opponent) {
-    this.attackTimer = max(0, this.attackTimer - dt);
-    this.evadeTimer = max(0, this.evadeTimer - dt);
-    this.parryWindow = max(0, this.parryWindow - dt);
-    this.parryIndicator = max(0, this.parryIndicator - dt);
-    this.parryTimer = max(0, this.parryTimer - dt);
-    this.parryStunTimer = max(0, this.parryStunTimer - dt);
-    this.staggerTimer = max(0, this.staggerTimer - dt);
-    this.staggerRecoveryTimer = max(0, this.staggerRecoveryTimer - dt);
-    this.comboTimer = max(0, this.comboTimer - dt);
-    this.hitCooldown = max(0, this.hitCooldown - dt);
-    this.attackCounterTimer = max(0, this.attackCounterTimer - dt);
-    this.staggeredDisplayTimer = max(0, this.staggeredDisplayTimer - dt);
-    
-    // Update Valencina-specific cooldowns
-    this.timeToHuntCooldown = max(0, this.timeToHuntCooldown - dt);
-    this.disposialCooldown = max(0, this.disposialCooldown - dt);
-    this.precognitionTimer = max(0, this.precognitionTimer - dt);
-    this.dialogueTimer = max(0, this.dialogueTimer - dt);
-    
-    // Call character-specific onUpdate method
-    const character = CHARACTERS[this.characterKey];
-    if (this.characterKey === 'VALENCINA') {
-      console.log("Valencina update loop - character exists:", !!character, "onUpdate exists:", !!(character && character.onUpdate));
-    }
-    if (character && character.onUpdate) {
-      character.onUpdate(dt, opponent, this);
-    }
-    
-    // Valencina's Eye of Precognition passive
-    if (this.characterKey === 'VALENCINA') {
-      // When attacked, 3% x cognition chance to evade (max 90%)
-      // This would need to be implemented in receiveHit method
-      
-      // When hit: gain 1 precognition
-      if (this.state === 'hit') {
-        this.precognition = min(this.maxPrecognition, this.precognition + 1);
-      }
-      
-      // After 5 seconds without evading or being hit, gain 1 precognition
-      if (this.precognitionTimer > 5) {
-        this.precognition = min(this.maxPrecognition, this.precognition + 1);
-        this.precognitionTimer = 0;
-      }
-      
-      // At 0 precognition, cannot evade, enter overheat
-      if (this.precognition <= 0 && !this.isOverheated) {
-        this.isOverheated = true;
-        this.overheat = 30;
-        this.precognition = 0;
-      }
-      
-      // Overheat: on transitioning to overheat, gain 30 overheat
-      // Every 5 seconds: lose 1 overheat
-      if (this.isOverheated) {
-        this.overheat = max(0, this.overheat - dt * 0.2); // Lose 1 overheat every 5 seconds
-        if (this.overheat <= 0) {
-          this.isOverheated = false;
-          this.precognition = 30;
-        }
-      }
-      
-      // Overheat effects: -20% damage, lose 1 on hit/when hit, every 5 seconds
-      if (this.isOverheated) {
-        this.damageResistance = 0.8; // -20% damage dealt
-      }
-    }
-    
-    // Valencina's Accelerating Future passive
-    if (this.characterKey === 'VALENCINA') {
-      // For every 1 combo: gain 1 movement speed, lower attack interval by 5%
-      if (this.combo > 0) {
-        this.speed = this.speed + (this.combo * 0.1);
-        this.attackInterval = this.attackInterval * (1 - this.combo * 0.05);
-      }
-      
-      // Shin (心) passive activation at less than 50% hp
-      if (this.hp < this.maxHp * 0.5 && !this.shinActive) {
-        this.shinActive = true;
-        // When hit, gain 5% x enemy combo damage resistance
-        // This would need to be implemented in damage calculation
-      }
-    }
-  }
-
+  
   useDisposial() {
     // This method is now handled by character profiles
     // Keeping for backward compatibility
@@ -541,7 +457,7 @@ class Fighter {
       }
     }
 
-    if (this.state !== 'attack' && !this.isEvading && this.state !== 'hit' && !this.isDashing) {
+    if (this.state === 'idle' || this.state === 'run') {
       if (moveDir === 0) {
         this.state = 'idle';
       } else {

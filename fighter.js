@@ -1160,6 +1160,9 @@ class Fighter {
     push();
     translate(this.pos.x, this.pos.y);
     
+    // Debug: Check sprite condition
+    console.log("Sprite condition check - spriteType:", this.spriteType, "currentSprite:", this.currentSprite, "name:", this.name);
+    
     // Draw sprite if available, otherwise draw default character
     if (this.spriteType === 'atlas' && this.currentSprite) {
       // Test basic sprite drawing first

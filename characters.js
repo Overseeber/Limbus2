@@ -44,7 +44,6 @@ const SPRITES = {
 
   // ===== slash1 =====
   s1s1:{ atlas:"vslash1", x:0,y:0,w:4,h:3 },
-  s1s1:{ atlas:"vslash1", x:0,y:0,w:4,h:3 },
   s1s2:{ atlas:"vslash1", x:4,y:0,w:4,h:3 },
   s1s3:{ atlas:"vslash1", x:3,y:3,w:5,h:2 },
   js1: { atlas:"vslash1", x:3,y:5,w:5,h:2 },

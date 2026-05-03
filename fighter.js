@@ -262,6 +262,9 @@ class Fighter {
     
     // Call character-specific onUpdate method
     const character = CHARACTERS[this.characterKey];
+    if (this.characterKey === 'VALENCINA') {
+      console.log("Valencina update loop - character exists:", !!character, "onUpdate exists:", !!(character && character.onUpdate));
+    }
     if (character && character.onUpdate) {
       character.onUpdate(dt, opponent, this);
     }
@@ -1159,6 +1162,15 @@ class Fighter {
   draw() {
     push();
     translate(this.pos.x, this.pos.y);
+    
+    // Debug: Show current sprite name
+    if (this.characterKey === 'VALENCINA') {
+      push();
+      fill(255);
+      textAlign(CENTER);
+      text(this.currentSprite || 'null', 0, -100);
+      pop();
+    }
     
     // Draw sprite if available, otherwise draw default character
     if (this.spriteType === 'atlas' && this.currentSprite) {

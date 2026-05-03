@@ -230,6 +230,29 @@ const CHARACTERS = {
       fighter.precognitionTimer = 0;
     },
     onUpdate: function(dt, opponent, fighter) {
+      // Sprite state changes
+      let newSprite = 'idle'; // default sprite
+      
+      // Priority order for sprite states
+      if (fighter.state === 'hit' || fighter.state === 'hurt') {
+        newSprite = 'hurt';
+      } else if (fighter.isGuarding) {
+        newSprite = 'guard';
+      } else if (fighter.isEvading) {
+        newSprite = 'evade';
+      } else if (fighter.state === 'attack') {
+        // Use prepat for first attack in combo
+        if (fighter.attackCounter === 0) {
+          newSprite = 'prepat';
+        } else {
+          newSprite = 'idle'; // Use idle for other attacks for now
+        }
+      } else if (fighter.state === 'moving' || (abs(fighter.vel.x) > 0.1 && fighter.onGround())) {
+        newSprite = 'moving';
+      }
+      
+      fighter.currentSprite = newSprite;
+      
       // Eye of Precognition passive - precognition regeneration
       if (fighter.isOverheated) {
         // In overheat: lose 1 precognition per second, regenerate 1 per 2 seconds

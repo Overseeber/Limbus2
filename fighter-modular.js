@@ -387,8 +387,8 @@ class Fighter {
         
         // Spawn slash effects on specific frames (only once per frame)
         if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('s1s1', { x: 0, y: -20 });
-          this.spawnSlashEffect('s1s2', { x: 20, y: 0 });
+          this.spawnSlashEffect('s1s1', { x: 0, y: -10 });
+          this.spawnSlashEffect('s1s2', { x: 15, y: -5 });
           this.slashEffectsSpawned = true;
         }
         
@@ -409,7 +409,7 @@ class Fighter {
         
         // Spawn slash effects on specific frames (only once per frame)
         if (this.attackFrame === 0 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('s1s3', { x: 0, y: -20 });
+          this.spawnSlashEffect('s1s3', { x: 0, y: -10 });
           this.slashEffectsSpawned = true;
         }
         
@@ -431,7 +431,7 @@ class Fighter {
         
         // Spawn slash effects on specific frames (only once per frame)
         if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('s1s4', { x: 0, y: -20 });
+          this.spawnSlashEffect('s1s4', { x: 0, y: -10 });
           this.slashEffectsSpawned = true;
         }
         
@@ -544,7 +544,7 @@ class Fighter {
           // Apply alpha and color tint globally for sprite rendering
           push();
           tint(r, g, b, alpha); // Apply color and alpha tint
-          drawSpriteScaled(effect.type, offsetX, offsetY + 36, scaleFactor); 
+          drawSpriteScaled(effect.type, offsetX, offsetY + 50, scaleFactor); 
           pop();
         } else {
           // Fallback: draw scaled slash effect with proper alpha and color tint
@@ -552,14 +552,14 @@ class Fighter {
           scale(scaleFactor);
           stroke(r, g, b, alpha);
           strokeWeight(4);
-          line(-30 + offsetX, -15 + offsetY, 30 + offsetX, 15 + offsetY);
+          line(-30 + offsetX, -15 + offsetY + 50, 30 + offsetX, 15 + offsetY + 50);
           stroke(255, 255, 255, alpha * 0.8);
           strokeWeight(2);
-          line(-25 + offsetX, -10 + offsetY, 25 + offsetX, 10 + offsetY);
+          line(-25 + offsetX, -10 + offsetY + 50, 25 + offsetX, 10 + offsetY + 50);
           
           fill(r, g, b, alpha * 0.6);
           noStroke();
-          ellipse(offsetX, offsetY, 15, 15);
+          ellipse(offsetX, offsetY + 50, 15, 15);
           pop();
         }
       } else {
@@ -1282,7 +1282,7 @@ class Fighter {
     this.usePostDashSprite = true;
 
     // Spawn joust slash effect for dash attack
-    this.spawnSlashEffect('js1', { x: 0, y: -20 });
+    this.spawnSlashEffect('js1', { x: 0, y: -10 });
 
     // Immediately resolve the attack since dash attacks are instant
     this.attackSystem.resolveAttack(opponent);
@@ -1341,7 +1341,7 @@ class Fighter {
     this.slamLandingHitbox = null;
     
     // Spawn s2s2 slash effect for slam attack
-    this.spawnSlashEffect('s2s2', { x: 0, y: -20 });
+    this.spawnSlashEffect('s2s2', { x: 0, y: -10 });
   }
 
   resolveAttack(opponent) {

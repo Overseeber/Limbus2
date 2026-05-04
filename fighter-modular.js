@@ -57,7 +57,6 @@ class Fighter {
     this.attackDamage = 0;
     this.attackKnockback = 0;
     this.attackRange = 0;
-    this.attackIgnoreParry = false;
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
     this.slashEffectsSpawned = false;
@@ -90,7 +89,6 @@ class Fighter {
       attackFrameTimer: 0,
       staggerTimer: 0,
       staggerRecoveryTimer: 0,
-      parryWindow: 0,
       evadeTimer: 0
     };
     
@@ -123,17 +121,12 @@ class Fighter {
     this.attackRequest = false;
     this.attackRelease = false;
     this.guardRequest = false;
-    this.parryWindow = 0;
     this.strikeActive = false;
     this.pendingCounter = false;
     this.lastAttackHit = false;
     this.hitCooldown = 0;
-    this.parryIndicator = 0;
     this.dashAttacked = false;
     this.evadeRequested = false;
-    this.parryCount = 3;
-    this.parryTimer = 0;
-    this.parryStunTimer = 0;
     this.slamAttackRequested = false;
     this.isSlamAttacking = false;
     this.slamLandingHitbox = null;
@@ -251,7 +244,6 @@ class Fighter {
     this.attackDamage = 0;
     this.attackKnockback = 0;
     this.attackRange = 0;
-    this.attackIgnoreParry = false;
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
     this.slashEffectsSpawned = false;
@@ -260,7 +252,6 @@ class Fighter {
     this.attackFrameTimer = 0;
     this.attackDamageDealt = false;
     this.strikeActive = false;
-    this.parryWindow = 0;
     this.lastAttackHit = false;
   }
 
@@ -274,7 +265,6 @@ class Fighter {
     this.stateMachine.attackFrameTimer = this.attackFrameTimer;
     this.stateMachine.staggerTimer = this.staggerTimer;
     this.stateMachine.staggerRecoveryTimer = this.staggerRecoveryTimer;
-    this.stateMachine.parryWindow = this.parryWindow;
     this.stateMachine.evadeTimer = this.evadeTimer;
     
     // Sync from stateMachine to original (for safety)
@@ -285,7 +275,6 @@ class Fighter {
     this.attackFrameTimer = this.stateMachine.attackFrameTimer;
     this.staggerTimer = this.stateMachine.staggerTimer;
     this.staggerRecoveryTimer = this.stateMachine.staggerRecoveryTimer;
-    this.parryWindow = this.stateMachine.parryWindow;
     this.evadeTimer = this.stateMachine.evadeTimer;
   }
 
@@ -810,18 +799,15 @@ class Fighter {
     // 8. State transitions
     this.updateStateTransitions();
     
-    // 9. Parry system
-    this.updateParrySystem(opponent);
-    
-    // 10. Visual updates
+    // 9. Visual updates
     this.updateVisuals(dt);
     
-    // 11. AI controls
+    // 10. AI controls
     if (this.isAI) {
       this.updateAIControls(opponent);
     }
     
-    // 12. Process actions
+    // 11. Process actions
     this.processActions(opponent, dt);
   }
 
@@ -912,10 +898,6 @@ class Fighter {
   updateTimers(dt) {
     this.attackTimer = max(0, this.attackTimer - dt);
     this.evadeTimer = max(0, this.evadeTimer - dt);
-    this.parryWindow = max(0, this.parryWindow - dt);
-    this.parryIndicator = max(0, this.parryIndicator - dt);
-    this.parryTimer = max(0, this.parryTimer - dt);
-    this.parryStunTimer = max(0, this.parryStunTimer - dt);
     this.staggerTimer = max(0, this.staggerTimer - dt);
     this.staggerRecoveryTimer = max(0, this.staggerRecoveryTimer - dt);
     this.comboTimer = max(0, this.comboTimer - dt);
@@ -937,11 +919,6 @@ class Fighter {
     // Reset attack counter after 3 hits or timeout
     if (this.attackCounter >= 3) {
       this.attackCounter = 0; // Reset after completing 3-hit combo
-    }
-
-    if (this.parryTimer <= 0 && this.parryCount < 3) {
-      this.parryCount += 1;
-      this.parryTimer = 10;
     }
   }
 
@@ -1015,23 +992,12 @@ class Fighter {
 
     // Don't auto-exit hurt state - player must act to exit
 
-    if ((this.state === 'parry' || this.state === 'parried') && this.parryStunTimer <= 0) {
-      this.setState('idle');
-    }
-
     if (this.isEvading && this.evadeTimer <= 0) {
       this.isEvading = false;
       this.setState('idle');
     }
   }
 
-  updateParrySystem(opponent) {
-    // More forgiving parry system - allow parries when guarding or recently guarded
-    const canParry = this.isGuarding || (this.guardRequest && this.parryCount > 0);
-    if (canParry && this.parryCount > 0 && opponent.strikeActive && opponent.parryWindow > 0 && abs(this.pos.x - opponent.pos.x) < opponent.attackRange + 200) {
-      this.checkParry(opponent, opponent.attackRange);
-    }
-  }
 
   updateVisuals(dt) {
     // Handle halt sequence timing
@@ -1100,12 +1066,12 @@ class Fighter {
     this.ai.moveUp = random() < 0.003 && absDistance < 220;
     this.ai.moveDown = false;
     
-    // Check if opponent is about to attack (strikeActive with parryWindow)
-    const opponentAttacking = opponent.strikeActive && opponent.parryWindow > 0;
+    // Check if opponent is about to attack
+    const opponentAttacking = opponent.strikeActive;
     const opponentInRange = absDistance < 150;
     
     // Block when opponent is in attack range
-    if (opponentInRange && this.parryCount > 0) {
+    if (opponentInRange) {
       this.ai.defend = random() < 0.03;
     } else {
       this.ai.defend = false;
@@ -1142,11 +1108,8 @@ class Fighter {
   applyMovement(dt, opponent) {
     if (
       this.state === 'hit' ||
-      this.state === 'parry' ||
-      this.state === 'parried' ||
       (this.state === 'staggered' && this.staggerTimer > 0) || // Only block during actual stagger phase
-      this.parryStunTimer > 0 ||
-      (opponent && opponent.ultimateActive) // Completely block movement during opponent's ultimate
+      this.ultimateActive // Completely disable movement during ultimate
     ) {
       return;
     }
@@ -1305,9 +1268,6 @@ class Fighter {
       this.releaseGuard();
     }
 
-    if (this.strikeActive && this.parryWindow <= 0) {
-      this.strikeActive = false;
-    }
   }
 
   applyDashRecharge(dt) {
@@ -1334,16 +1294,9 @@ class Fighter {
     this.dashAttacked = false;
   }
 
-  executeAttack(opponent, ignoreParry = false) {
+  executeAttack(opponent) {
     // Prevent attacks during ultimate
     if (this.ultimateActive || this.state === 'ultimate') {
-      return;
-    }
-    
-    // If attacker has no parry count, interrupt their attack (it goes through as if they didn't attack)
-    if (!ignoreParry && this.parryCount <= 0) {
-      this.setState('idle');
-      this.strikeActive = false;
       return;
     }
 
@@ -1362,11 +1315,9 @@ class Fighter {
     const attackType = this.chargeAttack ? 'heavy' : 'light';
     this.state = 'attack';
     this.attackTimer = this.attackInterval;
-    this.attackIgnoreParry = ignoreParry;
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
     this.slashEffectsSpawned = false;
-    this.parryWindow = 0.8; // Increased parry window from 0.5 to 0.8 seconds
     this.lastAttackHit = false;
     this.strikeActive = true; // Set strikeActive for normal attacks
 
@@ -1435,11 +1386,9 @@ class Fighter {
     this.state = 'attack';
     this.strikeActive = true;
     this.attackTimer = this.attackInterval;
-    this.attackIgnoreParry = true;
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
     this.slashEffectsSpawned = false;
-    this.parryWindow = 0; // No parry window for dash attacks
     this.lastAttackHit = false;
 
     // Auto-face towards opponent when dash attacking
@@ -1522,9 +1471,6 @@ class Fighter {
       return;
     }
 
-    if (!this.attackIgnoreParry && this.checkParry(opponent, this.attackRange)) {
-      return;
-    }
 
     if (this.hitOpponent(opponent, this.calcAttackBox(this.attackRange))) {
       const finalDamage = this.calculateDamage(this.attackDamage, opponent);
@@ -1564,45 +1510,7 @@ class Fighter {
     return !(r1.x + r1.w < r2.x || r2.x + r2.w < r1.x || r1.y + r1.h < r2.y || r2.y + r2.h < r1.y);
   }
 
-  checkParry(opponent, range) {
-    if (opponent.strikeActive && opponent.parryWindow > 0 && abs(this.pos.x - opponent.pos.x) < range + 200) {
-      return this.onParry(opponent);
-    }
-    return false;
-  }
 
-  onParry(attacker) {
-    if (this.parryCount <= 0) return false; // Cannot parry if no parries left
-    const attackerRight = attacker.pos.x > this.pos.x;
-    this.state = 'parry';
-    attacker.state = 'parried';
-    attacker.vel.x = attackerRight ? 12 : -12;
-    this.vel.x = attackerRight ? -10 : 10;
-    attacker.strikeActive = false;
-    this.strikeActive = false;
-    attacker.parryWindow = 0;
-    this.parryWindow = 0;
-    attacker.hitCooldown = 0.15;
-    this.hitCooldown = 0.15;
-    this.parryIndicator = 0.35;
-    attacker.parryIndicator = 0.35;
-    this.attackTimer = this.attackInterval;
-    attacker.attackTimer = attacker.attackInterval;
-    this.combo = max(0, this.combo - 1);
-    // Only the defender (parrier) loses parry count, not the attacker
-    this.parryCount -= 1;
-    attacker.parryStunTimer = 0.2;
-    this.parryStunTimer = 0.2;
-    
-    // Emit parryOccurred event
-    this.events.emit('parryOccurred', {
-      defender: this.characterKey,
-      attacker: attacker.characterKey,
-      successful: true
-    });
-    
-    return true;
-  }
 
   calculateDamage(base, opponent) {
     let damage = base;
@@ -2239,15 +2147,6 @@ addCombo(attacker) {
     this.drawWorldHpBar();
     this.drawStatusEffects();
 
-    if (this.parryIndicator > 0) {
-      push();
-      noFill();
-      stroke(255, 255, 0, map(this.parryIndicator, 0, 0.35, 0, 220));
-      strokeWeight(3);
-      ellipse(this.pos.x, this.pos.y - 30, 90 + (0.35 - this.parryIndicator) * 30, 100 + (0.35 - this.parryIndicator) * 30);
-      pop();
-    }
-
     // Draw player hitbox
     stroke(0, 255, 0);
     noFill();
@@ -2411,9 +2310,6 @@ addCombo(attacker) {
       // Timers and cooldowns
       timers: {
         evadeTimer: this.evadeTimer,
-        parryWindow: this.parryWindow,
-        parryTimer: this.parryTimer,
-        parryStunTimer: this.parryStunTimer,
         staggerTimer: this.staggerTimer,
         staggerRecoveryTimer: this.staggerRecoveryTimer,
         comboTimer: this.comboTimer,
@@ -2425,7 +2321,6 @@ addCombo(attacker) {
       combatStats: {
         combo: this.combo,
         attackCounter: this.attackCounter,
-        parryCount: this.parryCount,
         stagger: this.stagger
       },
       
@@ -2473,9 +2368,6 @@ addCombo(attacker) {
     
     // Timers and cooldowns
     this.evadeTimer = snapshot.timers.evadeTimer;
-    this.parryWindow = snapshot.timers.parryWindow;
-    this.parryTimer = snapshot.timers.parryTimer;
-    this.parryStunTimer = snapshot.timers.parryStunTimer;
     this.staggerTimer = snapshot.timers.staggerTimer;
     this.staggerRecoveryTimer = snapshot.timers.staggerRecoveryTimer;
     this.comboTimer = snapshot.timers.comboTimer;
@@ -2485,7 +2377,6 @@ addCombo(attacker) {
     // Combat stats
     this.combo = snapshot.combatStats.combo;
     this.attackCounter = snapshot.combatStats.attackCounter;
-    this.parryCount = snapshot.combatStats.parryCount;
     this.stagger = snapshot.combatStats.stagger;
     
     // Sync stateMachine to match restored state

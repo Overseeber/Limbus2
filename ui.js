@@ -7,7 +7,6 @@ function drawReadyScreen() {
   textSize(18);
   text('WASD move, Right Click attack, Left Click defend, E evade', width / 2, height / 2 - 30);
   text('Hold Right Click to charge heavy attack. Press ENTER to start.', width / 2, height / 2 + 0);
-  text('If the enemy attacks while you strike, you can parry them in the right window.', width / 2, height / 2 + 40);
   pop();
 }
 
@@ -75,7 +74,6 @@ function drawPlayerHud() {
   }
   
   drawDashCharges(player, hpBarX, hpBarY + 24, hpWidth);
-  drawParryCharges(player, hpBarX, hpBarY + 34, hpWidth);
   pop();
 }
 
@@ -102,7 +100,6 @@ function drawEnemyHud() {
   fill('#ffcc33');
   rect(panelX + 12, panelY + 12 + comboSize + 8, (panelWidth - 24) * comboRatio, 10, 5);
   drawDashCharges(enemy, panelX + 12, panelY + 12 + comboSize + 30, panelWidth - 24);
-  drawParryCharges(enemy, panelX + 12, panelY + 12 + comboSize + 40, panelWidth - 24);
   pop();
 }
 
@@ -113,17 +110,6 @@ function drawDashCharges(fighter, x, y, width) {
   for (let i = 0; i < total; i++) {
     fill(i < count ? '#4da6ff' : '#2f3f5f');
     rect(x + i * (size + 4), y, size, 6, 3);
-  }
-}
-
-function drawParryCharges(fighter, x, y, width) {
-  const count = fighter.parryCount;
-  const total = 3;
-  const spacing = 10;
-  const startX = x + (width - (total - 1) * spacing) / 2;
-  for (let i = 0; i < total; i++) {
-    fill(i < count ? '#ffff00' : '#333');
-    ellipse(startX + i * spacing, y, 6, 6);
   }
 }
 

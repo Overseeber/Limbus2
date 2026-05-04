@@ -245,17 +245,12 @@ export class Fighter {
     this.isEvading = false;
     this.evadeTimer = 0;
     this.chargeMeter = 0;
-    this.parryWindow = 0;
     this.strikeActive = false;
     this.pendingCounter = false;
     this.lastAttackHit = false;
     this.hitCooldown = 0;
-    this.parryIndicator = 0;
     this.dashAttacked = false;
     this.evadeRequested = false;
-    this.parryCount = 3;
-    this.parryTimer = 0;
-    this.parryStunTimer = 0;
     this.slamAttackRequested = false;
     this.isSlamAttacking = false;
     this.slamLandingHitbox = null;
@@ -275,16 +270,12 @@ export class Fighter {
     // Update timers
     this.attackTimer = max(0, this.attackTimer - dt);
     this.evadeTimer = max(0, this.evadeTimer - dt);
-    this.parryWindow = max(0, this.parryWindow - dt);
-    this.parryIndicator = max(0, this.parryIndicator - dt);
     this.staggerTimer = max(0, this.staggerTimer - dt);
     this.staggerRecoveryTimer = max(0, this.staggerRecoveryTimer - dt);
     this.comboTimer = max(0, this.comboTimer - dt);
     this.attackCounterTimer = max(0, this.attackCounterTimer - dt);
     this.staggeredDisplayTimer = max(0, this.staggeredDisplayTimer - dt);
     this.hitCooldown = max(0, this.hitCooldown - dt);
-    this.parryTimer = max(0, this.parryTimer - dt);
-    this.parryStunTimer = max(0, this.parryStunTimer - dt);
     
     // Update combo system
     if (this.comboTimer <= 0) {
@@ -623,13 +614,7 @@ export class Fighter {
     this.guardRequest = false;
   }
   
-  executeAttack(opponent, ignoreParry = false) {
-    // If attacker has no parry count, interrupt their attack
-    if (!ignoreParry && this.parryCount <= 0) {
-      this.state = 'idle';
-      this.strikeActive = false;
-      return;
-    }
+  executeAttack(opponent) {
 
     // Update attack counter for 3-hit combo
     this.attackCounter = min(3, this.attackCounter + 1);

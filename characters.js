@@ -150,11 +150,11 @@ const CHARACTERS = {
   JOHN: {
     name: 'John Limbus Company',
     title: 'Default Fighter',
-    hp: 2500,
+    hp: 9999,
     speed: 7.5,
     attackInterval: 1,
     baseDamage: 15,
-    staggerThreshold: 100,
+    staggerThreshold: 1000,
     staggerLength: 5,
     color: '#4a90e2',
     weapon: 'bus',

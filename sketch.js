@@ -104,7 +104,11 @@ function drawArena() {
 function updateBattle() {
   const dt = deltaTime / 1000;
   battleTimer += dt;
-  player.handleInput();
+  
+  // Disable player movement during ultimate
+  if (!player.ultimateActive) {
+    player.handleInput();
+  }
   enemy.updateAI(player);
 
   player.update(dt, enemy);

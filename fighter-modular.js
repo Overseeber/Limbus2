@@ -1722,7 +1722,7 @@ calculateDamage(base, opponent) {
   if (this.hasStatus('Poise')) {
     damage *= 1.15;
   }
-  if (opponent.state === 'staggered') {
+  if (opponent && opponent.state === 'staggered') {
     damage *= 2;
   }
   return damage;
@@ -1821,12 +1821,26 @@ onSuccessfulHit(damage, opponent) {
 }
 
 addCombo(attacker) {
-  if (attacker === this && this.comboTimer > 0) {
-    return;
-      return;
-    }
+  console.log('[COMBO DEBUG] addCombo called - attacker:', attacker, 'this:', this, 'comboTimer:', this.comboTimer, 'combo before:', this.combo);
+  
+  // During ultimate, always increase combo regardless of timer state
+  if (this.ultimateActive) {
+    console.log('[COMBO DEBUG] Ultimate active - forcing combo increase');
+    this.combo += 1;
     this.comboTimer = this.comboTimeout;
+    console.log('[COMBO DEBUG] addCombo completed - combo after:', this.combo);
+    return;
   }
+  
+  // Normal combo logic for non-ultimate
+  if (attacker === this && this.comboTimer > 0) {
+    console.log('[COMBO DEBUG] addCombo early return - same attacker with active timer');
+    return;
+  }
+  this.comboTimer = this.comboTimeout;
+  this.combo += 1; // Actually increase the combo count
+  console.log('[COMBO DEBUG] addCombo completed - combo after:', this.combo);
+}
 
   hasStatus(type) {
     return this.statuses.some((status) => status.type === type);

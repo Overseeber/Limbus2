@@ -612,7 +612,7 @@ const CHARACTERS = {
         case 0: // Initial pose (1 second)
           if (fighter.ultimateTimer <= 0) {
             fighter.ultimatePhase = 1;
-            fighter.ultimateTimer = 0.5; // Timing before first attack
+            fighter.ultimateTimer = 0.1; // Timing before first attack
             fighter.currentSprite = 'dist1'; // Keep dist1 sprite instead of switching to idle
           }
           break;
@@ -643,7 +643,7 @@ const CHARACTERS = {
             // Start attack sequence immediately (no need to approach)
             fighter.ultimatePhase = 2;
             fighter.ultimateAttackFrame = 0;
-            fighter.ultimateAttackTimer = 0.3;
+            fighter.ultimateAttackTimer = 0.1;
             fighter.currentSprite = 's1f1';
             fighter.ultimateMovingToEnemy = false; // Enemy is already in position
           }
@@ -661,7 +661,7 @@ const CHARACTERS = {
             switch (fighter.ultimateAttackFrame) {
               case 1:
                 fighter.currentSprite = 's1f2';
-                fighter.ultimateAttackTimer = 0.3;
+                fighter.ultimateAttackTimer = 0.1;
                 // Deal damage with s1s2 and apply knockback
                 console.log('[ULTIMATE DEBUG] About to deal damage for s1f2');
                 this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 1);
@@ -670,12 +670,12 @@ const CHARACTERS = {
                 break;
               case 2:
                 fighter.currentSprite = 's1f3';
-                fighter.ultimateAttackTimer = 0.3;
+                fighter.ultimateAttackTimer = 0.1;
                 break;
               case 3:
                 // End attack sequence - hold s1f3 sprite
                 fighter.ultimatePhase = 3;
-                fighter.ultimateTimer = 0.5; // Timing before next attack
+                fighter.ultimateTimer = 0.1; // Timing before next attack
                 fighter.currentSprite = 's1f3'; // Hold last attack sprite
                 fighter.ultimateMovingToEnemy = false;
                 break;
@@ -697,8 +697,8 @@ const CHARACTERS = {
             opponent.pos.x = enemyPos.x;
             opponent.pos.y = enemyPos.y;
             
-            // Make Valencina face enemy
-            fighter.facing = randomSide * -1; // Face towards enemy
+            // Make Valencina face opposite way from enemy
+            fighter.facing = randomSide; // Face opposite way from enemy
             
             // Halt all momentum/velocity on teleport
             fighter.vel.x = 0;
@@ -708,7 +708,7 @@ const CHARACTERS = {
             
             fighter.ultimatePhase = 4;
             fighter.ultimateAttackFrame = 0;
-            fighter.ultimateAttackTimer = 0.3;
+            fighter.ultimateAttackTimer = 0.1;
             fighter.currentSprite = 's4f2';
           }
           break;
@@ -724,7 +724,7 @@ const CHARACTERS = {
             switch (fighter.ultimateAttackFrame) {
               case 1:
                 fighter.currentSprite = 's4f1';
-                fighter.ultimateAttackTimer = 0.3;
+                fighter.ultimateAttackTimer = 0.1;
                 // Deal damage with s1s4 and apply knockback
                 this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 2);
                 fighter.spawnSlashEffect('s1s4', { x: 15, y: -5 });
@@ -733,7 +733,7 @@ const CHARACTERS = {
               case 2:
                 // End attack sequence - hold s4f1 sprite
                 fighter.ultimatePhase = 5;
-                fighter.ultimateTimer = 0.5; // Timing before next attack
+                fighter.ultimateTimer = 0.1; // Timing before next attack
                 fighter.currentSprite = 's4f1'; // Hold last attack sprite
                 break;
             }
@@ -754,8 +754,8 @@ const CHARACTERS = {
             opponent.pos.x = enemyPos.x;
             opponent.pos.y = enemyPos.y;
             
-            // Make Valencina face enemy
-            fighter.facing = randomSide * -1; // Face towards enemy
+            // Make Valencina face opposite way from enemy
+            fighter.facing = randomSide; // Face opposite way from enemy
             
             // Halt all momentum/velocity on teleport
             fighter.vel.x = 0;
@@ -765,7 +765,7 @@ const CHARACTERS = {
             
             fighter.ultimatePhase = 6;
             fighter.ultimateAttackFrame = 0;
-            fighter.ultimateAttackTimer = 0.3;
+            fighter.ultimateAttackTimer = 0.1;
             fighter.currentSprite = 's3f1';
             fighter.ultimateMovingThroughEnemy = false;
             fighter.ultimateMovementTimer = 0;
@@ -784,7 +784,7 @@ const CHARACTERS = {
             switch (fighter.ultimateAttackFrame) {
               case 1:
                 fighter.currentSprite = 's3f2';
-                fighter.ultimateAttackTimer = 0.3;
+                fighter.ultimateAttackTimer = 0.1;
                 // Deal damage with s1s4 and apply knockback
                 console.log('[ULTIMATE DEBUG] About to deal damage for s3f2');
                 this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 3);
@@ -793,11 +793,11 @@ const CHARACTERS = {
                 break;
               case 2:
                 fighter.currentSprite = 's3f3';
-                fighter.ultimateAttackTimer = 0.3;
+                fighter.ultimateAttackTimer = 0.1;
                 break;
               case 3:
                 // After 1 second, teleport to 300 pixels on the right of enemy
-                fighter.ultimateAttackTimer = 1.0; // Wait 1 second
+                fighter.ultimateAttackTimer = 0.1; // Wait 1 second
                 break;
               case 4:
                 // Teleport to 300 pixels right of enemy with 300px barrier
@@ -827,7 +827,7 @@ const CHARACTERS = {
                 
                 // End attack sequence
                 fighter.ultimatePhase = 7;
-                fighter.ultimateTimer = 0.5; // Timing before next attack
+                fighter.ultimateTimer = 0.1; // Timing before next attack
                 break;
             }
           }
@@ -867,7 +867,7 @@ const CHARACTERS = {
             
             fighter.ultimatePhase = 8;
             fighter.ultimateAttackFrame = 0;
-            fighter.ultimateAttackTimer = 0.3;
+            fighter.ultimateAttackTimer = 0.2;
             fighter.currentSprite = 'd2';
           }
           break;
@@ -891,7 +891,7 @@ const CHARACTERS = {
                 // d2 with diss1 (no damage) - d2 should not disappear when drawing diss1
                 fighter.currentSprite = 'd2';
                 fighter.spawnSlashEffect('diss1', { x: 15, y: -5 });
-                fighter.ultimateAttackTimer = 0.3;
+                fighter.ultimateAttackTimer = 0.2;
                 break;
               case 2:
                 // Teleport 50 pixels to the right of enemy with 300px barrier
@@ -909,12 +909,17 @@ const CHARACTERS = {
                 fighter.pos.x = targetX;
                 fighter.pos.y = opponent.pos.y;
                 fighter.currentSprite = 'de1';
-                fighter.ultimateAttackTimer = 0.3;
+                fighter.ultimateAttackTimer = 0.2;
                 break;
               case 3:
                 // de1 with s1s3 (simultaneous) - deal damage at same time as showing de1
                 this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 4);
                 fighter.spawnSlashEffect('s1s3', { x: 15, y: -5 });
+                
+                // Increase zoom when switching to de1
+                fighter.ultimateCameraZoom = 3.5; // Increased zoom for de1-de3 sequence
+                fighter.ultimateBackgroundDim = 0.8; // Increase background dimming
+                console.log('[ULTIMATE DEBUG] Increased zoom for de1-de3 sequence');
                 // Reposition after knockback
                 setTimeout(() => {
                   const valencinaTargetX = opponent.pos.x - (fighter.facing * 80);
@@ -924,12 +929,12 @@ const CHARACTERS = {
                   fighter.vel.x = 0;
                   fighter.vel.y = 0;
                 }, 100);
-                fighter.ultimateAttackTimer = 0.3;
+                fighter.ultimateAttackTimer = 0.2;
                 break;
               case 4:
                 // End attack sequence - hold de1 sprite
                 fighter.ultimatePhase = 9;
-                fighter.ultimateTimer = 0.5; // Timing before next attack
+                fighter.ultimateTimer = 1.0; // Timing before next attack
                 fighter.currentSprite = 'de1'; // Hold last attack sprite
                 break;
             }
@@ -941,12 +946,12 @@ const CHARACTERS = {
             fighter.currentSprite = 'de2';
             fighter.ultimatePhase = 10;
             fighter.ultimateAttackFrame = 0;
-            fighter.ultimateAttackTimer = 0.3;
+            fighter.ultimateAttackTimer = 0.2;
             fighter.ultimateAlternateCounter = 0;
           }
           break;
           
-        case 10: // Attack 5 sequence: de2 with s1s3/js1 alternating 5 times, then de3 with 2x damage and knockback
+        case 10: // Attack 5 sequence: de2 with s1s3 and js1 alternating 5 times, 5 damage instances at 0.1 second intervals
           fighter.ultimateAttackTimer -= dt;
           
           // Lock enemy position in front of Valencina during de2 attacks
@@ -954,39 +959,37 @@ const CHARACTERS = {
             opponent.pos.x = fighter.pos.x + (fighter.facing * 80);
             opponent.pos.y = fighter.pos.y;
             opponent.vel.x = 0; // Stop any movement
-            opponent.vel.y = 0;
           }
           
-          if (fighter.ultimateAttackTimer <= 0) {
-            if (fighter.ultimateAttackFrame < 10) { // 5 alternating attacks
-              if (fighter.ultimateAttackFrame % 2 === 0) {
-                // s1s3 slash effect
-                fighter.spawnSlashEffect('s1s3', { x: 15, y: -5 });
-              } else {
-                // js1 slash effect
-                fighter.spawnSlashEffect('js1', { x: 0, y: -10 });
-              }
-              // Deal damage for each attack
-              this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 5);
-              fighter.ultimateAttackFrame++;
-              fighter.ultimateAttackTimer = 0.3;
-            } else if (fighter.ultimateAttackFrame === 10) {
-              // Final attack - de3 with 2x damage and zoom out
-              fighter.currentSprite = 'de3';
-              this.dealUltimateDamage(fighter, opponent, fighter.baseDamage * 2, true, 5); // Mark as final attack
-              
-              // Knockback opponent (only happens at de3)
-              opponent.vel.x = fighter.facing * 20;
-              
-              // Zoom out camera during knockback
-              fighter.ultimateCameraZoom = 1.0; // Reset zoom
-              fighter.ultimateBackgroundDim = 0; // Reset background dimming
-              console.log('[ULTIMATE DEBUG] Zooming out during final knockback');
-              
-              // End attack sequence
-              fighter.ultimatePhase = 11;
-              fighter.ultimateTimer = 3.0; // Hold position for 3 seconds
+          if (fighter.ultimateAttackFrame < 5) {
+            // Alternate between s1s3 and js1 slash effects
+            if (fighter.ultimateAttackFrame % 2 === 0) {
+              // s1s3 slash effect
+              fighter.spawnSlashEffect('s1s3', { x: 15, y: -5 });
+            } else {
+              // js1 slash effect
+              fighter.spawnSlashEffect('js1', { x: 0, y: -10 });
             }
+            // Deal damage for each attack
+            this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 5);
+            fighter.ultimateAttackFrame++;
+            fighter.ultimateAttackTimer = 0.2; // 0.2 second intervals
+          } else if (fighter.ultimateAttackFrame === 5) {
+            // Final attack - de3 with 2x damage and zoom out
+            fighter.currentSprite = 'de3';
+            this.dealUltimateDamage(fighter, opponent, fighter.baseDamage * 2, true, 5); // Mark as final attack
+            
+            // Knockback opponent (only happens at de3)
+            opponent.vel.x = fighter.facing * 20;
+            
+            // Zoom out camera during knockback
+            fighter.ultimateCameraZoom = 1.0; // Reset zoom
+            fighter.ultimateBackgroundDim = 0; // Reset background dimming
+            console.log('[ULTIMATE DEBUG] Zooming out during final knockback');
+            
+            // End attack sequence
+            fighter.ultimatePhase = 11;
+            fighter.ultimateTimer = 3.0; // Hold position for 3 seconds
           }
           break;
           
@@ -1029,9 +1032,13 @@ const CHARACTERS = {
       }
     },
     
-    dealUltimateDamage: function(fighter, opponent, damage, isFinalAttack = false, attackPhase = 0) {
-      console.log('[ULTIMATE DEBUG] Dealing damage:', damage, 'protected:', opponent?.ultimateProtected, 'final:', isFinalAttack, 'phase:', attackPhase);
+    dealUltimateDamage: function(fighter, opponent, baseDamage, isFinalAttack = false, attackPhase = 0) {
+      console.log('[ULTIMATE DEBUG] Dealing damage - base:', baseDamage, 'protected:', opponent?.ultimateProtected, 'final:', isFinalAttack, 'phase:', attackPhase);
       if (!opponent) return;
+      
+      // Calculate damage using the proper damage calculation function (includes combo bonus)
+      const damage = fighter.calculateDamage(baseDamage);
+      console.log('[ULTIMATE DEBUG] Calculated damage with combo bonus:', damage, '(base:', baseDamage, ', combo:', fighter.combo, ')');
       
       // Bypass hit cooldown during ultimate to ensure all attacks land
       const previousState = opponent.state;
@@ -1105,7 +1112,9 @@ const CHARACTERS = {
       fighter.vel.y = 0;
       
       // Build combo for Valencina during ultimate - 1 combo per hit like regular attacks
+      console.log('[ULTIMATE DEBUG] Before addCombo - fighter combo:', fighter.combo);
       fighter.addCombo(fighter);
+      console.log('[ULTIMATE DEBUG] After addCombo - fighter combo:', fighter.combo);
       
       fighter.ultimateTotalDamage += damage;
       fighter.ultimateDamageDealt += damage;

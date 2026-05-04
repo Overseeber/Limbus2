@@ -499,15 +499,19 @@ class Fighter {
     this.parryStunTimer = max(0, this.parryStunTimer - dt);
     this.staggerTimer = max(0, this.staggerTimer - dt);
     this.staggerRecoveryTimer = max(0, this.staggerRecoveryTimer - dt);
-    this.comboTimer = max(0, this.comboTimer - dt);
+    // Don't decay combo during ultimate
+    if (!this.ultimateActive) {
+      this.comboTimer = max(0, this.comboTimer - dt);
+
+      if (this.comboTimer <= 0) {
+        this.combo = 0;
+        this.attackCounter = 0; // Reset attack counter when combo times out
+      }
+    }
+    
     this.hitCooldown = max(0, this.hitCooldown - dt);
     this.attackCounterTimer = max(0, this.attackCounterTimer - dt);
     this.staggeredDisplayTimer = max(0, this.staggeredDisplayTimer - dt);
-
-    if (this.comboTimer <= 0) {
-      this.combo = 0;
-      this.attackCounter = 0; // Reset attack counter when combo times out
-    }
 
     // Reset attack counter after 3 hits or timeout
     if (this.attackCounter >= 3) {
@@ -1235,10 +1239,25 @@ class Fighter {
   }
 
   addCombo(attacker) {
+    console.log('[COMBO DEBUG] addCombo called - attacker:', attacker, 'this:', this, 'comboTimer:', this.comboTimer, 'combo before:', this.combo);
+    
+    // During ultimate, always increase combo regardless of timer state
+    if (this.ultimateActive) {
+      console.log('[COMBO DEBUG] Ultimate active - forcing combo increase');
+      this.combo += 1;
+      this.comboTimer = this.comboTimeout;
+      console.log('[COMBO DEBUG] addCombo completed - combo after:', this.combo);
+      return;
+    }
+    
+    // Normal combo logic for non-ultimate
     if (attacker === this && this.comboTimer > 0) {
+      console.log('[COMBO DEBUG] addCombo early return - same attacker with active timer');
       return;
     }
     this.comboTimer = this.comboTimeout;
+    this.combo += 1; // Actually increase the combo count
+    console.log('[COMBO DEBUG] addCombo completed - combo after:', this.combo);
   }
 
   hasStatus(type) {

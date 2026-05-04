@@ -1363,6 +1363,11 @@ class Fighter {
           const damage = (burnStatus?.potency || 0 + tremorStatus.potency) / 2;
           opponent.hp -= damage;
           spawnDamageNumber(damage, opponent.pos.copy(), this.facing, false);
+          
+          // Tremor bursts are impactful - add screen shake
+          if (typeof addScreenShake === 'function' && damage > 0) {
+            addScreenShake(damage);
+          }
         }
       }
     }
@@ -1628,6 +1633,14 @@ class Fighter {
     const wasGuarding = this.isGuarding;
     spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding);
     
+    // Add screen shake based on damage
+    if (typeof addScreenShake === 'function') {
+      console.log('[NORMAL ATTACK DEBUG] Adding screen shake for damage:', amount);
+      addScreenShake(amount);
+    } else {
+      console.log('[NORMAL ATTACK DEBUG] addScreenShake function not found');
+    }
+    
     // Emit damageDealt event
     this.events.emit('damageDealt', {
       attacker: attacker.characterKey,
@@ -1749,6 +1762,12 @@ receiveHit(amount, attacker, knockback) {
   this.hp -= amount;
   const wasGuarding = this.isGuarding;
   spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding);
+  
+  // Add screen shake based on damage
+  if (typeof addScreenShake === 'function') {
+    console.log('[NORMAL ATTACK DEBUG] Adding screen shake for damage:', amount);
+    addScreenShake(amount);
+  }
   
   // Emit damageDealt event
   this.events.emit('damageDealt', {
@@ -1887,6 +1906,8 @@ addCombo(attacker) {
         if (type === 'Rupture') {
           this.hp -= status.potency;
           spawnDamageNumber(status.potency, this.pos.copy(), 1, false);
+          
+          // Status effects don't cause screen shake (only direct combat damage)
         }
       }
     });
@@ -1914,6 +1935,8 @@ addCombo(attacker) {
           status.count -= 1;
           this.hp -= status.potency;
           spawnDamageNumber(status.potency, this.pos.copy(), 1, false);
+          
+          // Status effects don't cause screen shake (only direct combat damage)
         }
       }
       

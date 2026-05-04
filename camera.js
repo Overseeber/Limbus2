@@ -2,12 +2,17 @@ let cameraZoom = 1;
 let cameraX = 0;
 let cameraY = 0;
 
+// Screen shake variables
+let screenShakeX = 0;
+let screenShakeY = 0;
+let screenShakeIntensity = 0;
+
 function beginCamera() {
   updateCamera();
   push();
   translate(width / 2, height / 2);
   scale(cameraZoom);
-  translate(-cameraX, -cameraY);
+  translate(-cameraX + screenShakeX, -cameraY + screenShakeY);
 }
 //test
 function endCamera() {
@@ -15,6 +20,9 @@ function endCamera() {
 }
 
 function updateCamera() {
+  // Update screen shake
+  updateScreenShake();
+  
   // Check if any fighter is in ultimate
   const ultimateActive = (player && player.ultimateActive) || (enemy && enemy.ultimateActive);
   const ultimateFighter = (player && player.ultimateActive) ? player : (enemy && enemy.ultimateActive) ? enemy : null;
@@ -48,4 +56,31 @@ function updateCamera() {
     cameraX = lerp(cameraX, centerX, 0.12);
     cameraY = lerp(cameraY, centerY, 0.12);
   }
+}
+
+// Screen shake functions
+function updateScreenShake() {
+  if (screenShakeIntensity > 0) {
+    // Higher intensity decreases faster
+    const decayRate = screenShakeIntensity > 10 ? 0.15 : 0.08;
+    screenShakeIntensity -= decayRate;
+    
+    if (screenShakeIntensity <= 0) {
+      screenShakeIntensity = 0;
+      screenShakeX = 0;
+      screenShakeY = 0;
+    } else {
+      // Generate random shake offset based on intensity
+      const maxShake = min(screenShakeIntensity, 15); // Cap at 15 pixels for clarity
+      screenShakeX = random(-maxShake, maxShake);
+      screenShakeY = random(-maxShake, maxShake);
+    }
+  }
+}
+
+function addScreenShake(damage) {
+  // Scale shake with damage magnitude
+  // 5 damage = very little shake, 100 damage = good amount of shake
+  const shakeAmount = map(damage, 5, 100, 0.5, 12, true);
+  screenShakeIntensity = min(screenShakeIntensity + shakeAmount, 20); // Cap at 20 for clarity
 }

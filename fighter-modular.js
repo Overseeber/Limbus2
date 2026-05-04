@@ -1528,6 +1528,12 @@ class Fighter {
       });
       
       opponent.receiveHit(finalDamage, this, this.attackKnockback);
+      
+      // Trigger tremor burst on third basic attack for Valencina
+      if (this.characterKey === 'VALENCINA' && this.attackCounter === 3) {
+        opponent.triggerTremorBurst();
+      }
+      
       this.onSuccessfulHit(finalDamage, opponent);
     }
   }
@@ -1962,6 +1968,13 @@ addCombo(attacker) {
       // Tremor: Only lose count when bursted (handled elsewhere)
       else if (status.type === 'Tremor') {
         // No automatic count decrease - handled in burst logic
+        // When count expires, raise stagger by potency
+        if (status.count <= 0) {
+          this.stagger += status.potency;
+          this.staggerRecoveryTimer = 0;
+          // Remove expired status
+          this.statuses = this.statuses.filter((s) => s.type !== 'Tremor');
+        }
       }
       
       // Rupture: When hit, lose 1 count (handled in receiveHit)
@@ -2524,5 +2537,38 @@ addCombo(attacker) {
       }
     }
     // If new shake is weaker, don't change current intensity
+  }
+
+  triggerTremorBurst() {
+    const tremorStatus = this.statuses.find((s) => s.type === 'Tremor');
+    if (!tremorStatus || tremorStatus.count <= 0) return;
+    
+    // Show tremor visual indicator
+    if (typeof spawnTremorIndicator === 'function') {
+      spawnTremorIndicator(this.pos.copy());
+    }
+    
+    // Lose 1 count
+    tremorStatus.count -= 1;
+    if (tremorStatus.count <= 0) {
+      this.statuses = this.statuses.filter((s) => s.type !== 'Tremor');
+    }
+    
+    // Apply tremor burst damage (Burn + Tremor potency)
+    const burnStatus = this.statuses.find((s) => s.type === 'Burn');
+    const burnPotency = burnStatus ? burnStatus.potency : 0;
+    const tremorPotency = tremorStatus.potency;
+    const damage = burnPotency + tremorPotency;
+    
+    if (damage > 0) {
+      this.hp -= damage;
+      spawnDamageNumber(damage, this.pos.copy(), 1, false);
+      
+      // Tremor bursts are impactful - add screen shake
+      if (typeof addScreenShake === 'function') {
+        addScreenShake(damage);
+      }
+      this.addSpriteShake(damage, false);
+    }
   }
 }

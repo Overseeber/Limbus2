@@ -789,6 +789,9 @@ const CHARACTERS = {
                 console.log('[ULTIMATE DEBUG] About to deal damage for s3f2');
                 this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 3);
                 fighter.spawnSlashEffect('s1s4', { x: 15, y: -5 });
+                
+                // Trigger tremor burst once for Attack 3
+                opponent.triggerTremorBurst();
                 // Valencina stays in center - no repositioning needed
                 break;
               case 2:
@@ -978,6 +981,11 @@ const CHARACTERS = {
             // Final attack - de3 with 2x damage and zoom out
             fighter.currentSprite = 'de3';
             this.dealUltimateDamage(fighter, opponent, fighter.baseDamage * 2, true, 5); // Mark as final attack
+            
+            // Trigger tremor burst 3 times for final Attack 5 damage
+            opponent.triggerTremorBurst();
+            opponent.triggerTremorBurst();
+            opponent.triggerTremorBurst();
             
             // Knockback opponent (only happens at de3)
             opponent.vel.x = fighter.facing * 20;

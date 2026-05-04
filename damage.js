@@ -70,6 +70,17 @@ function spawnEvadeIndicator(position) {
 }
 
 /**
+ * Spawns a tremor indicator
+ * @param {p5.Vector} position - Position to spawn at
+ */
+function spawnTremorIndicator(position) {
+  damageNumbers.push(new TremorIndicator(
+    position.x, 
+    position.y + DAMAGE_CONSTANTS.BASE_Y_OFFSET
+  ));
+}
+
+/**
  * Base class for floating indicators (damage numbers, evade indicators, etc.)
  */
 class FloatingIndicator {
@@ -190,6 +201,36 @@ class EvadeIndicator extends FloatingIndicator {
     strokeWeight(DAMAGE_CONSTANTS.STROKE_WEIGHT);
     
     text('evade', this.pos.x, this.pos.y);
+    pop();
+  }
+}
+
+/**
+ * Tremor indicator display class
+ */
+class TremorIndicator extends FloatingIndicator {
+  constructor(x, y) {
+    super(x, y);
+    this.vel = createVector(random(-0.5, 0.5), -2.8);
+    this.size = DAMAGE_CONSTANTS.EVADE_SIZE;
+  }
+
+  update(dt) {
+    super.update(dt);
+    this.vel.y -= DAMAGE_CONSTANTS.EVADE_GRAVITY;
+  }
+
+  draw() {
+    push();
+    textAlign(CENTER, CENTER);
+    textSize(this.size);
+    
+    // Use orange/red colors for tremor to distinguish from evade
+    fill(255, 100, 50, this.alpha);
+    stroke(255, 50, 0, this.alpha);
+    strokeWeight(DAMAGE_CONSTANTS.STROKE_WEIGHT);
+    
+    text('Tremor', this.pos.x, this.pos.y);
     pop();
   }
 }

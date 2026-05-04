@@ -488,6 +488,9 @@ class Fighter {
   }
 
   update(dt, opponent) {
+    // ENFORCE BOUNDARIES IN REGULAR COMBAT - PREVENT WALL CLIPPING
+    this.enforceBoundaries();
+    
     this.attackTimer = max(0, this.attackTimer - dt);
     this.evadeTimer = max(0, this.evadeTimer - dt);
     this.parryWindow = max(0, this.parryWindow - dt);
@@ -794,6 +797,35 @@ class Fighter {
     }
   }
 
+  enforceBoundaries() {
+    // Define strict boundaries - no clipping allowed
+    const boundaryMargin = 50;
+    const minX = boundaryMargin;
+    const maxX = width - boundaryMargin;
+    const minY = boundaryMargin;
+    const maxY = height - boundaryMargin;
+    
+    // Force position within boundaries
+    const originalX = this.pos.x;
+    const originalY = this.pos.y;
+    
+    this.pos.x = constrain(this.pos.x, minX, maxX);
+    this.pos.y = constrain(this.pos.y, minY, maxY);
+    
+    // Stop velocity if hitting boundary
+    if (this.pos.x <= minX || this.pos.x >= maxX) {
+      this.vel.x = 0;
+    }
+    if (this.pos.y <= minY || this.pos.y >= maxY) {
+      this.vel.y = 0;
+    }
+    
+    // Log if boundary was enforced (for debugging)
+    if (originalX !== this.pos.x || originalY !== this.pos.y) {
+      console.log('[BOUNDARY] Enforced boundaries for fighter - moved from', originalX, originalY, 'to', this.pos.x, this.pos.y);
+    }
+  }
+
   cleanupPosition(opponent) {
     this.pos.x = constrain(this.pos.x, 60, width - 60);
     if (this.pos.y >= this.spawnY) {
@@ -801,25 +833,27 @@ class Fighter {
       this.vel.y = 0;
     }
     
+    // DISABLED: Character collision to prevent glitching
+    // Characters can now pass through each other without collision issues
     // Check hitbox collision with opponent and push back if overlapping
-    const myBox = { x: this.pos.x - 25, y: this.pos.y - 36, w: 50, h: 72 };
-    const oppBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
+    // const myBox = { x: this.pos.x - 25, y: this.pos.y - 36, w: 50, h: 72 };
+    // const oppBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
     
-    // Only check horizontal overlap to allow jumping over enemies
-    const horizontalOverlap = !(myBox.x + myBox.w < oppBox.x || oppBox.x + oppBox.w < myBox.x);
+    // // Only check horizontal overlap to allow jumping over enemies
+    // const horizontalOverlap = !(myBox.x + myBox.w < oppBox.x || oppBox.x + oppBox.w < myBox.x);
     
-    if (horizontalOverlap) {
-      // Only apply collision if both fighters are on the ground or at similar heights
-      const heightDifference = abs(this.pos.y - opponent.pos.y);
-      if (heightDifference < 40) { // Allow jumping over when height difference is significant
-        // Push back based on which side we're on
-        if (this.pos.x < opponent.pos.x) {
-          this.pos.x = opponent.pos.x - 25 - 25 - 5; // Left of opponent
-        } else {
-          this.pos.x = opponent.pos.x + 25 + 25 + 5; // Right of opponent
-        }
-      }
-    }
+    // if (horizontalOverlap) {
+    //   // Only apply collision if both fighters are on the ground or at similar heights
+    //   const heightDifference = abs(this.pos.y - opponent.pos.y);
+    //   if (heightDifference < 40) { // Allow jumping over when height difference is significant
+    //     // Push back based on which side we're on
+    //     if (this.pos.x < opponent.pos.x) {
+    //       this.pos.x = opponent.pos.x - 25 - 25 - 5; // Left of opponent
+    //     } else {
+    //       this.pos.x = opponent.pos.x + 25 + 25 + 5; // Right of opponent
+    //     }
+    //   }
+    // }
   }
 
   processActions(opponent, dt) {

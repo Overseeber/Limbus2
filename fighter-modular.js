@@ -644,6 +644,16 @@ class Fighter {
     if (this.isAI || !this.controls) {
       return;
     }
+    
+    // Disable player movement during ultimate
+    if (this.ultimateActive) {
+      this.ai.moveLeft = false;
+      this.ai.moveRight = false;
+      this.ai.moveUp = false;
+      this.ai.moveDown = false;
+      return;
+    }
+    
     this.ai.moveLeft = keyIsDown(this.controls.left.toUpperCase().charCodeAt(0));
     this.ai.moveRight = keyIsDown(this.controls.right.toUpperCase().charCodeAt(0));
     this.ai.moveUp = keyIsDown(this.controls.up.toUpperCase().charCodeAt(0));

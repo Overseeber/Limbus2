@@ -164,19 +164,22 @@ function mousePressed() {
 function drawUltimateName(fighter) {
   if (!fighter || !fighter.ultimateName) return;
   
+  // Only show during starting pose (Phase 0)
+  if (fighter.ultimatePhase !== 0) return;
+  
   push();
   resetMatrix(); // Reset camera transforms for UI
   
-  // Set text properties
+  // Set text properties for full screen display
   textAlign(CENTER, CENTER);
-  textSize(48);
-  fill(255, 255, 255, 180); // Semi-transparent white
-  stroke(0, 0, 0, 200);
-  strokeWeight(3);
+  textSize(120); // Much larger text to take up whole screen
+  fill(255, 255, 255, 220); // More opaque white
+  stroke(0, 0, 0, 255); // Solid black stroke
+  strokeWeight(8); // Thicker stroke for visibility
   
-  // Draw ultimate name behind character position
+  // Draw ultimate name centered on screen
   const nameX = width / 2;
-  const nameY = height / 2 - 100;
+  const nameY = height / 2;
   
   text(fighter.ultimateName.toUpperCase(), nameX, nameY);
   pop();

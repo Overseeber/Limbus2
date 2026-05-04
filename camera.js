@@ -51,7 +51,8 @@ function updateCamera() {
     const targetHeight = max(160, bottom - top + marginY * 2);
     const desiredZoom = min(3.2, width / targetWidth, height / targetHeight);
     const centerX = (left + right) / 2;
-    const centerY = (top + bottom) / 2;
+    // Bias camera upward to reduce floor visibility from 50% to 25%
+    const centerY = (top + bottom) / 2 - 60;
     const zoomSpeed = desiredZoom < cameraZoom ? 0.28 : 0.08;
     cameraZoom = lerp(cameraZoom, desiredZoom, zoomSpeed);
     cameraX = lerp(cameraX, centerX, 0.12);

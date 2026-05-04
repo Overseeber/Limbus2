@@ -39,7 +39,17 @@ function initBattle() {
 }
 
 function draw() {
-  background(28);
+  // Check for ultimate background dimming
+  const ultimateActive = (player && player.ultimateActive) || (enemy && enemy.ultimateActive);
+  const ultimateFighter = (player && player.ultimateActive) ? player : (enemy && enemy.ultimateActive) ? enemy : null;
+  
+  if (ultimateActive && ultimateFighter) {
+    // Apply background dimming during ultimate
+    const dimAmount = ultimateFighter.ultimateBackgroundDim || 0.7;
+    background(28 * (1 - dimAmount));
+  } else {
+    background(28);
+  }
 
   if (battleState === 'ready') {
     drawReadyScreen();
@@ -47,9 +57,21 @@ function draw() {
     updateBattle();
     beginCamera();
     drawArena();
+    
+    // Draw ultimate name behind characters
+    if (ultimateActive && ultimateFighter && ultimateFighter.ultimateName) {
+      drawUltimateName(ultimateFighter);
+    }
+    
     player.draw();
     enemy.draw();
     drawDamageNumbers();
+    
+    // Draw ultimate damage counter
+    if (ultimateActive && ultimateFighter) {
+      drawUltimateDamageCounter(ultimateFighter);
+    }
+    
     endCamera();
   } else if (battleState === 'summary') {
     beginCamera();
@@ -133,6 +155,48 @@ function mousePressed() {
   } else if (mouseButton === RIGHT) {
     player.requestGuard(enemy);
   }
+}
+
+function drawUltimateName(fighter) {
+  if (!fighter || !fighter.ultimateName) return;
+  
+  push();
+  resetMatrix(); // Reset camera transforms for UI
+  
+  // Set text properties
+  textAlign(CENTER, CENTER);
+  textSize(48);
+  fill(255, 255, 255, 180); // Semi-transparent white
+  stroke(0, 0, 0, 200);
+  strokeWeight(3);
+  
+  // Draw ultimate name behind character position
+  const nameX = width / 2;
+  const nameY = height / 2 - 100;
+  
+  text(fighter.ultimateName.toUpperCase(), nameX, nameY);
+  pop();
+}
+
+function drawUltimateDamageCounter(fighter) {
+  if (!fighter) return;
+  
+  push();
+  resetMatrix(); // Reset camera transforms for UI
+  
+  // Set text properties
+  textAlign(RIGHT, BOTTOM);
+  textSize(24);
+  fill(255, 255, 255, 220); // Semi-transparent white
+  stroke(0, 0, 0, 200);
+  strokeWeight(2);
+  
+  // Draw damage counter in bottom right corner
+  const counterX = width - 20;
+  const counterY = height - 20;
+  
+  text(`DAMAGE: ${Math.floor(fighter.ultimateTotalDamage)}`, counterX, counterY);
+  pop();
 }
 
 function mouseReleased() {

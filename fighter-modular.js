@@ -56,6 +56,19 @@ class Fighter {
     this.statusEffectsApplied = false;
     this.slashEffectsSpawned = false;
     
+    // Ultimate system properties
+    this.ultimateActive = false;
+    this.ultimatePhase = 0;
+    this.ultimateTimer = 0;
+    this.ultimateDamageDealt = 0;
+    this.ultimateTotalDamage = 0;
+    this.ultimateCameraZoom = 1;
+    this.ultimateBackgroundDim = 0;
+    this.ultimateName = "";
+    this.ultimateDialogue = "";
+    this.ultimateCanActivate = true; // Always available for testing
+    this.ultimateActivationRequested = false;
+    
     // STEP 1: Isolate state management - create stateMachine object
     this.stateMachine = {
       state: 'idle',
@@ -336,18 +349,24 @@ class Fighter {
   }
 
   updateSprite() {
-    if (this.spriteType !== 'atlas') return;
-
+    // Skip sprite updates during ultimate - ultimate controls its own sprites
+    if (this.ultimateActive) {
+      return;
+    }
+    
+    // State to sprite mapping
     const stateMap = {
       idle: 'idle',
       run: 'moving',
       jump: 's4f3',
       attack: 'prepat',
       guard: 'guard',
+      dash: 'joust',
       evade: 'evade',
       hit: 'hurt',
       staggered: 'hurt',
-      duck: 'idle'
+      duck: 'idle',
+      ultimate: 'dist1' // Use dist1 sprite for ultimate state
     };
 
     // Handle special states
@@ -363,7 +382,7 @@ class Fighter {
       }
     } else if (this.state === 'attack' && this.attackSequence > 0) {
       // Handle attack sequences
-      this.attackSystem.updateAttackSequence();
+      this.updateAttackSequence();
     } else if (this.haltSequence) {
       // Handle halt sequence
       this.updateHaltSequence();
@@ -643,6 +662,11 @@ class Fighter {
       this.requestEvade();
     }
     
+    // Ultimate activation with X key (always available for testing)
+    if (keyLower === 'x' && this.ultimateCanActivate && !this.ultimateActive) {
+      this.ultimateActivationRequested = true;
+    }
+    
     // Call character-specific processKeyPressed method
     const character = CHARACTERS[this.characterKey];
     if (character && character.processKeyPressed) {
@@ -749,7 +773,10 @@ class Fighter {
     // 5. Attack system
     this.updateAttackSystem(dt, opponent);
     
-    // 6. Status system
+    // 6. Ultimate system
+    this.updateUltimateSystem(dt, opponent);
+    
+    // 7. Status system
     this.statusSystem.applyStatuses(dt);
     
     // 7. Dash recharge
@@ -771,6 +798,89 @@ class Fighter {
     
     // 12. Process actions
     this.processActions(opponent, dt);
+  }
+
+  // Ultimate system methods
+  updateUltimateSystem(dt, opponent) {
+    // Handle ultimate activation request
+    if (this.ultimateActivationRequested && !this.ultimateActive) {
+      this.activateUltimate(opponent);
+      this.ultimateActivationRequested = false;
+    }
+    
+    // Update active ultimate
+    if (this.ultimateActive) {
+      // Execute character-specific ultimate logic
+      const character = CHARACTERS[this.characterKey];
+      if (character && character.updateUltimate) {
+        character.updateUltimate(this, opponent, dt);
+      }
+      
+      // End ultimate when timer reaches 0 and we're not in attack sequences
+      if (this.ultimateTimer <= 0 && this.ultimatePhase !== 2 && this.ultimatePhase !== 4 && 
+          this.ultimatePhase !== 6 && this.ultimatePhase !== 8 && this.ultimatePhase !== 10) {
+        console.log('[ULTIMATE DEBUG] Ultimate ending, timer:', this.ultimateTimer, 'phase:', this.ultimatePhase);
+        this.endUltimate();
+      }
+    }
+  }
+
+  activateUltimate(opponent) {
+    if (!opponent || this.ultimateActive) return;
+    
+    // Initialize ultimate state
+    this.ultimateActive = true;
+    this.ultimatePhase = 0;
+    this.ultimateTimer = 999; // Will be set by character-specific logic
+    this.ultimateDamageDealt = 0;
+    this.ultimateTotalDamage = 0;
+    this.ultimateCameraZoom = 1;
+    this.ultimateBackgroundDim = 0;
+    
+    // Store opponent reference for character-specific logic
+    this.opponent = opponent;
+    
+    // Set ultimate to cutscene state
+    this.setState('ultimate');
+    opponent.setState('stagger'); // Enemy can't act during ultimate
+    opponent.ultimateActive = false; // Ensure opponent isn't also in ultimate
+    
+    console.log('[ULTIMATE DEBUG] Ultimate activated, phase:', this.ultimatePhase, 'timer:', this.ultimateTimer);
+    
+    // Execute character-specific ultimate activation
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.activateUltimate) {
+      character.activateUltimate(this, opponent);
+    }
+    
+    // Emit ultimate activation event
+    this.events.emit('ultimateActivated', {
+      character: this.characterKey,
+      target: opponent.characterKey
+    });
+  }
+
+  endUltimate() {
+    this.ultimateActive = false;
+    this.ultimatePhase = 0;
+    this.ultimateTimer = 0;
+    this.ultimateCameraZoom = 1;
+    this.ultimateBackgroundDim = 0;
+    
+    // Resume normal combat
+    this.setState('idle');
+    
+    // Execute character-specific ultimate cleanup
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.endUltimate) {
+      character.endUltimate(this);
+    }
+    
+    // Emit ultimate end event
+    this.events.emit('ultimateEnded', {
+      character: this.characterKey,
+      totalDamage: this.ultimateTotalDamage
+    });
   }
 
   // STEP 7: Unified update pipeline helper methods
@@ -945,6 +1055,17 @@ class Fighter {
       return;
     }
     
+    // Completely disable all actions if opponent is in ultimate
+    if (opponent && opponent.ultimateActive) {
+      this.ai.moveLeft = false;
+      this.ai.moveRight = false;
+      this.ai.moveUp = false;
+      this.ai.moveDown = false;
+      this.ai.attack = false;
+      this.ai.defend = false;
+      return;
+    }
+    
     const distance = opponent.pos.x - this.pos.x;
     const absDistance = abs(distance);
     
@@ -974,11 +1095,16 @@ class Fighter {
     // Attack regardless of whether opponent is in front or behind
     this.ai.attack = absDistance < 120 && this.attackTimer <= 0 && !opponentAttacking && opponent.state !== 'staggered' && random() < 0.05;
     
-    if (this.ai.attack) {
-      // Turn to face opponent before attacking
-      this.facing = distance > 0 ? 1 : -1;
-      // Execute attack directly for AI (no need for request/release cycle)
-      this.attackSystem.executeAttack(opponent);
+    if (this.ai.attack && !this.attackRequest && !this.ultimateActive && this.state !== 'ultimate') {
+      const distance = opponent.pos.x - this.pos.x;
+      const inRange = abs(distance) < this.attackRange && abs(this.pos.y - opponent.pos.y) < 50;
+      
+      if (inRange) {
+        // Turn to face opponent before attacking
+        this.facing = distance > 0 ? 1 : -1;
+        // Execute attack directly for AI (no need for request/release cycle)
+        this.attackSystem.executeAttack(opponent);
+      }
     }
     
     if (this.ai.defend) {
@@ -994,7 +1120,8 @@ class Fighter {
       this.state === 'parry' ||
       this.state === 'parried' ||
       (this.state === 'staggered' && this.staggerTimer > 0) || // Only block during actual stagger phase
-      this.parryStunTimer > 0
+      this.parryStunTimer > 0 ||
+      (opponent && opponent.ultimateActive) // Completely block movement during opponent's ultimate
     ) {
       return;
     }
@@ -1117,6 +1244,11 @@ class Fighter {
     if (this.state === 'staggered' && this.staggerTimer > 0) {
       return;
     }
+    
+    // Completely disable all actions if opponent is in ultimate
+    if (opponent && opponent.ultimateActive) {
+      return;
+    }
 
     if (this.evadeRequested) {
       this.startEvade(opponent);
@@ -1178,6 +1310,11 @@ class Fighter {
   }
 
   executeAttack(opponent, ignoreParry = false) {
+    // Prevent attacks during ultimate
+    if (this.ultimateActive || this.state === 'ultimate') {
+      return;
+    }
+    
     // If attacker has no parry count, interrupt their attack (it goes through as if they didn't attack)
     if (!ignoreParry && this.parryCount <= 0) {
       this.setState('idle');
@@ -1259,6 +1396,11 @@ class Fighter {
   }
 
   executeDashAttack(opponent) {
+    // Prevent attacks during ultimate
+    if (this.ultimateActive || this.state === 'ultimate') {
+      return;
+    }
+    
     // Dash attacks are unparrieable and do enhanced damage
     this.state = 'attack';
     this.strikeActive = true;
@@ -1464,6 +1606,21 @@ class Fighter {
     }
 
     if (this.state === 'hit' || this.hitCooldown > 0) {
+      return;
+    }
+
+    // Ultimate protection - prevent HP reduction until final attack
+    if (this.ultimateProtected) {
+      // Still apply hit effects but don't reduce HP
+      const wasGuarding = this.isGuarding;
+      this.setState('hit');
+      this.hitCooldown = 0.25;
+      
+      // Apply knockback but reduced
+      const awayFromAttacker = this.pos.x < attacker.pos.x ? -1 : 1;
+      this.vel.x = awayFromAttacker * knockback * 0.5;
+      this.vel.y = -5;
+      
       return;
     }
 

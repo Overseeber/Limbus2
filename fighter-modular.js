@@ -1078,7 +1078,7 @@ class Fighter {
     }
     
     // Dash attack when in close range
-    if (absDistance < 100 && this.dashCharges > 0 && this.attackTimer <= 0 && random() < 0.03) {
+    if (absDistance < 100 && this.dashCharges > 0 && this.attackTimer <= 0 && random() < 0.03 && !this.ultimateActive && !opponent.ultimateActive) {
       this.startDash();
     }
     
@@ -1283,7 +1283,7 @@ class Fighter {
   }
 
   startDash() {
-    if (this.dashCharges <= 0 || this.isDashing || !this.onGround()) {
+    if (this.dashCharges <= 0 || this.isDashing || !this.onGround() || this.ultimateActive) {
       return;
     }
     this.dashCharges -= 1;

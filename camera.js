@@ -6,6 +6,7 @@ let cameraY = 0;
 let screenShakeX = 0;
 let screenShakeY = 0;
 let screenShakeIntensity = 0;
+let isUltimateShake = false; // Track if current shake is from ultimate
 
 function beginCamera() {
   updateCamera();
@@ -61,14 +62,23 @@ function updateCamera() {
 // Screen shake functions
 function updateScreenShake() {
   if (screenShakeIntensity > 0) {
-    // Higher intensity decreases faster
-    const decayRate = screenShakeIntensity > 10 ? 0.15 : 0.08;
+    let decayRate;
+    
+    if (isUltimateShake) {
+      // Ultimate attacks: slower decay rate (longer duration)
+      decayRate = screenShakeIntensity > 10 ? 0.06 : 0.032;
+    } else {
+      // Regular attacks: 1.5x longer duration (slower decay rate)
+      decayRate = screenShakeIntensity > 10 ? 0.08 : 0.043;
+    }
+    
     screenShakeIntensity -= decayRate;
     
     if (screenShakeIntensity <= 0) {
       screenShakeIntensity = 0;
       screenShakeX = 0;
       screenShakeY = 0;
+      isUltimateShake = false;
     } else {
       // Generate random shake offset based on intensity
       const maxShake = min(screenShakeIntensity, 15); // Cap at 15 pixels for clarity
@@ -78,9 +88,30 @@ function updateScreenShake() {
   }
 }
 
-function addScreenShake(damage) {
-  // Scale shake with damage magnitude
-  // 5 damage = very little shake, 100 damage = good amount of shake
-  const shakeAmount = map(damage, 5, 100, 0.5, 12, true);
-  screenShakeIntensity = min(screenShakeIntensity + shakeAmount, 20); // Cap at 20 for clarity
+function addScreenShake(damage, isUltimate = false) {
+  let shakeAmount;
+  
+  if (isUltimate) {
+    // Ultimate attacks: capped at 30 damage
+    // 5 damage = 0.5 shake, 30 damage = 6 shake (max)
+    const cappedDamage = min(damage, 30);
+    shakeAmount = map(cappedDamage, 5, 30, 0.5, 6, true);
+    isUltimateShake = true;
+  } else {
+    // Regular attacks: capped at 30 damage
+    // 5 damage = 0.2 shake, 30 damage = 2.4 shake (max)
+    const cappedDamage = min(damage, 30);
+    shakeAmount = map(cappedDamage, 5, 30, 0.2, 2.4, true);
+    isUltimateShake = false;
+  }
+  
+  // Replace current shake if new shake is stronger, otherwise keep current
+  if (shakeAmount > screenShakeIntensity) {
+    screenShakeIntensity = min(shakeAmount, 20); // Cap at 20 for clarity
+    // Update shake type if this is a stronger shake
+    if (isUltimate) {
+      isUltimateShake = true;
+    }
+  }
+  // If new shake is weaker, don't change current intensity
 }

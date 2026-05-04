@@ -1069,10 +1069,13 @@ const CHARACTERS = {
       // Apply damage with custom knockback
       opponent.receiveHit(damage, fighter, knockbackAmount);
       
-      // Add screen shake based on damage
+      // Add screen shake based on damage (ultimate attacks)
       if (typeof addScreenShake === 'function') {
-        addScreenShake(damage);
+        addScreenShake(damage, true);
       }
+      
+      // Add sprite shake to character taking damage (ultimate)
+      opponent.addSpriteShake(damage, true);
       
       // ENFORCE BOUNDARIES AFTER KNOCKBACK - PREVENT CLIPPING
       this.enforceBoundaries(opponent);

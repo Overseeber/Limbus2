@@ -40,6 +40,12 @@ class Fighter {
     this.dashDuration = 0.16;
     this.dashCooldown = 3;
     this.stagger = 0;
+    
+    // Sprite shake properties
+    this.spriteShakeX = 0;
+    this.spriteShakeY = 0;
+    this.spriteShakeIntensity = 0;
+    this.isUltimateSpriteShake = false;
 
     this.controls = {};
     this.reset();
@@ -67,6 +73,12 @@ class Fighter {
     this.ultimateName = "";
     this.ultimateDialogue = "";
     this.ultimateCanActivate = true; // Always available for testing
+    
+    // Reset sprite shake
+    this.spriteShakeX = 0;
+    this.spriteShakeY = 0;
+    this.spriteShakeIntensity = 0;
+    this.isUltimateSpriteShake = false;
     this.ultimateActivationRequested = false;
     
     // STEP 1: Isolate state management - create stateMachine object
@@ -779,7 +791,10 @@ class Fighter {
     // 7. Status system
     this.statusSystem.applyStatuses(dt);
     
-    // 7. Dash recharge
+    // 8. Sprite shake update
+    this.updateSpriteShake(dt);
+    
+    // 9. Dash recharge
     this.applyDashRecharge(dt);
     
     // 8. State transitions
@@ -1637,9 +1652,10 @@ class Fighter {
     if (typeof addScreenShake === 'function') {
       console.log('[NORMAL ATTACK DEBUG] Adding screen shake for damage:', amount);
       addScreenShake(amount);
-    } else {
-      console.log('[NORMAL ATTACK DEBUG] addScreenShake function not found');
     }
+    
+    // Add sprite shake to character taking damage
+    this.addSpriteShake(amount, false);
     
     // Emit damageDealt event
     this.events.emit('damageDealt', {
@@ -1768,6 +1784,9 @@ receiveHit(amount, attacker, knockback) {
     console.log('[NORMAL ATTACK DEBUG] Adding screen shake for damage:', amount);
     addScreenShake(amount);
   }
+  
+  // Add sprite shake to character taking damage
+  this.addSpriteShake(amount, false);
   
   // Emit damageDealt event
   this.events.emit('damageDealt', {
@@ -2108,7 +2127,7 @@ addCombo(attacker) {
 
   draw() {
     push();
-    translate(this.pos.x, this.pos.y);
+    translate(this.pos.x + this.spriteShakeX, this.pos.y + this.spriteShakeY);
     
     // Debug: Show current sprite name
     if (this.characterKey === 'VALENCINA') {
@@ -2448,5 +2467,62 @@ addCombo(attacker) {
     
     // Sync stateMachine to match restored state
     this.syncState();
+  }
+
+  // Sprite shake functions
+  updateSpriteShake(dt) {
+    if (this.spriteShakeIntensity > 0) {
+      let decayRate;
+      
+      if (this.isUltimateSpriteShake) {
+        // Ultimate attacks: slower decay rate (longer duration)
+        decayRate = this.spriteShakeIntensity > 10 ? 0.06 : 0.032;
+      } else {
+        // Regular attacks: 1.5x longer duration (slower decay rate)
+        decayRate = this.spriteShakeIntensity > 10 ? 0.08 : 0.043;
+      }
+      
+      this.spriteShakeIntensity -= decayRate;
+      
+      if (this.spriteShakeIntensity <= 0) {
+        this.spriteShakeIntensity = 0;
+        this.spriteShakeX = 0;
+        this.spriteShakeY = 0;
+        this.isUltimateSpriteShake = false;
+      } else {
+        // Generate random shake offset based on intensity
+        const maxShake = min(this.spriteShakeIntensity, 15); // Cap at 15 pixels for clarity
+        this.spriteShakeX = random(-maxShake, maxShake);
+        this.spriteShakeY = random(-maxShake, maxShake);
+      }
+    }
+  }
+
+  addSpriteShake(damage, isUltimate = false) {
+    let shakeAmount;
+    
+    if (isUltimate) {
+      // Ultimate attacks: capped at 30 damage
+      // 5 damage = 0.5 shake, 30 damage = 6 shake (max)
+      const cappedDamage = min(damage, 30);
+      shakeAmount = map(cappedDamage, 5, 30, 0.5, 6, true);
+      this.isUltimateSpriteShake = true;
+    } else {
+      // Regular attacks: capped at 30 damage
+      // 5 damage = 0.2 shake, 30 damage = 2.4 shake (max)
+      const cappedDamage = min(damage, 30);
+      shakeAmount = map(cappedDamage, 5, 30, 0.2, 2.4, true);
+      this.isUltimateSpriteShake = false;
+    }
+    
+    // Replace current shake if new shake is stronger, otherwise keep current
+    if (shakeAmount > this.spriteShakeIntensity) {
+      this.spriteShakeIntensity = min(shakeAmount, 20); // Cap at 20 for clarity
+      // Update shake type if this is a stronger shake
+      if (isUltimate) {
+        this.isUltimateSpriteShake = true;
+      }
+    }
+    // If new shake is weaker, don't change current intensity
   }
 }

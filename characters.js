@@ -40,7 +40,7 @@ const SPRITES = {
   // ===== valdisposal =====
   de1:{ atlas:"valdisposal", x:2,y:0,w:4,h:2 },
   de2:{ atlas:"valdisposal", x:1,y:2,w:5,h:2 },
-  de3:{ atlas:"valdisposal", x:4,y:0,w:8,h:2 },
+  de3:{ atlas:"valdisposal", x:0,y:4,w:8,h:2 },
 
   // ===== slash1 =====
   s1s1:{ atlas:"vslash1", x:0,y:0,w:4,h:3 },
@@ -489,7 +489,7 @@ const CHARACTERS = {
       
       // Initialize ultimate state
       fighter.ultimatePhase = 0;
-      fighter.ultimateTimer = 3; // 3 seconds for initial pose
+      fighter.ultimateTimer = 1.0; // 1 second for initial pose
       fighter.ultimateAttackFrame = 0;
       fighter.ultimateAttackTimer = 0;
       fighter.ultimateEnemySide = 'right'; // Enemy starts on right
@@ -514,45 +514,48 @@ const CHARACTERS = {
       console.log('[ULTIMATE DEBUG] Update called - phase:', fighter.ultimatePhase, 'timer:', fighter.ultimateTimer.toFixed(3));
       
       switch (fighter.ultimatePhase) {
-        case 0: // Initial pose (3 seconds)
+        case 0: // Initial pose (1 second)
           if (fighter.ultimateTimer <= 0) {
             fighter.ultimatePhase = 1;
             fighter.ultimateTimer = 0.5; // Timing before first attack
-            fighter.currentSprite = 'idle';
+            fighter.currentSprite = 'dist1'; // Keep dist1 sprite instead of switching to idle
           }
           break;
           
-        case 1: // Attack 1: Move enemy to right, approach, then attack sequence
+        case 1: // Attack 1: Teleport enemy in front of Valencina, then attack sequence
           if (fighter.ultimateTimer <= 0) {
-            // Move enemy 100 pixels to Valencina's right
-            opponent.pos.x = fighter.pos.x + 100;
+            // Check if enemy would be near wall and teleport to middle if needed
+            let targetX = fighter.pos.x + (fighter.facing * 80);
+            const battlegroundWidth = 1200; // Assuming battleground width
+            const margin = 100; // Distance from edge to avoid
+            
+            if (targetX < margin || targetX > battlegroundWidth - margin) {
+              // Teleport enemy to middle of battleground
+              targetX = battlegroundWidth / 2;
+              fighter.pos.x = targetX - (fighter.facing * 80);
+            }
+            
+            opponent.pos.x = targetX;
             opponent.pos.y = fighter.pos.y;
             
-            // Start approach and attack sequence
+            // Start attack sequence immediately (no need to approach)
             fighter.ultimatePhase = 2;
             fighter.ultimateAttackFrame = 0;
             fighter.ultimateAttackTimer = 0.3;
             fighter.currentSprite = 's1f1';
-            fighter.ultimateMovingToEnemy = true;
+            fighter.ultimateMovingToEnemy = false; // Enemy is already in position
           }
           break;
           
         case 2: // Attack 1 sequence: s1f1 > s1f2 > s1f3
           fighter.ultimateAttackTimer -= dt;
           
-          // Move towards enemy until within attack range
-          if (fighter.ultimateMovingToEnemy) {
-            const distance = abs(opponent.pos.x - fighter.pos.x);
-            if (distance > fighter.attackRange) {
-              // Move towards enemy
-              if (opponent.pos.x > fighter.pos.x) {
-                fighter.pos.x += 5; // Move right
-              } else {
-                fighter.pos.x -= 5; // Move left
-              }
-            } else {
-              fighter.ultimateMovingToEnemy = false;
-            }
+          // Auto-adjust Valencina position to attack range
+          const distance = abs(opponent.pos.x - fighter.pos.x);
+          if (distance > fighter.attackRange) {
+            // Teleport to attack range instead of moving
+            fighter.pos.x = opponent.pos.x - (fighter.facing * fighter.attackRange);
+            fighter.pos.y = opponent.pos.y;
           }
           
           if (fighter.ultimateAttackTimer <= 0) {
@@ -573,10 +576,10 @@ const CHARACTERS = {
                 fighter.ultimateAttackTimer = 0.3;
                 break;
               case 3:
-                // End attack sequence
+                // End attack sequence - hold s1f3 sprite
                 fighter.ultimatePhase = 3;
                 fighter.ultimateTimer = 0.5; // Timing before next attack
-                fighter.currentSprite = 'idle';
+                fighter.currentSprite = 's1f3'; // Hold last attack sprite
                 fighter.ultimateMovingToEnemy = false;
                 break;
             }
@@ -594,6 +597,15 @@ const CHARACTERS = {
           
         case 4: // Attack 2 sequence: s4f2 > s4f1 with s1s4
           fighter.ultimateAttackTimer -= dt;
+          
+          // Auto-adjust Valencina position to attack range
+          const distance2 = abs(opponent.pos.x - fighter.pos.x);
+          if (distance2 > fighter.attackRange) {
+            // Teleport to attack range instead of moving
+            fighter.pos.x = opponent.pos.x - (fighter.facing * fighter.attackRange);
+            fighter.pos.y = opponent.pos.y;
+          }
+          
           if (fighter.ultimateAttackTimer <= 0) {
             fighter.ultimateAttackFrame++;
             
@@ -606,10 +618,10 @@ const CHARACTERS = {
                 fighter.spawnSlashEffect('s1s4', { x: 15, y: -5 });
                 break;
               case 2:
-                // End attack sequence
+                // End attack sequence - hold s4f1 sprite
                 fighter.ultimatePhase = 5;
                 fighter.ultimateTimer = 0.5; // Timing before next attack
-                fighter.currentSprite = 'idle';
+                fighter.currentSprite = 's4f1'; // Hold last attack sprite
                 break;
             }
           }
@@ -628,6 +640,14 @@ const CHARACTERS = {
           
         case 6: // Attack 3 sequence: s3f1 > s3f2 > s3f3 with teleport to other side
           fighter.ultimateAttackTimer -= dt;
+          
+          // Auto-adjust Valencina position to attack range
+          const distance3 = abs(opponent.pos.x - fighter.pos.x);
+          if (distance3 > fighter.attackRange) {
+            // Teleport to attack range instead of moving
+            fighter.pos.x = opponent.pos.x - (fighter.facing * fighter.attackRange);
+            fighter.pos.y = opponent.pos.y;
+          }
           
           if (fighter.ultimateAttackTimer <= 0) {
             fighter.ultimateAttackFrame++;
@@ -651,18 +671,23 @@ const CHARACTERS = {
                 fighter.ultimateAttackTimer = 1.0; // Wait 1 second
                 break;
               case 4:
-                // Teleport to 300 pixels on the right of enemy
-                fighter.pos.x = opponent.pos.x + 300;
-                fighter.pos.y = opponent.pos.y;
+                // Teleport to 300 pixels right of enemy with wall detection
+                let targetX = opponent.pos.x + 300;
+                const battlegroundWidth = 1200;
+                const margin = 100;
                 
-                // Handle edge of map - push enemy back if needed
-                if (fighter.pos.x > width - 100) {
-                  opponent.pos.x = fighter.pos.x - 300;
+                // Check if near wall and adjust
+                if (targetX > battlegroundWidth - margin) {
+                  targetX = battlegroundWidth / 2; // Teleport to middle
+                  opponent.pos.x = targetX - 300; // Adjust enemy position too
                 }
                 
-                // Change to d1 and face left for rest of ult
+                fighter.pos.x = targetX;
+                fighter.pos.y = opponent.pos.y;
+                
+                // Change sprite to d1 and face left
                 fighter.currentSprite = 'd1';
-                fighter.facing = -1; // Face left for rest of ult
+                fighter.facing = -1; // Face left for rest of ultimate
                 
                 // End attack sequence
                 fighter.ultimatePhase = 7;
@@ -681,34 +706,55 @@ const CHARACTERS = {
           }
           break;
           
-        case 8: // Attack 4 sequence: d2 > diss1 > teleport > de1 with s1s3
+        case 8: // Attack 4 sequence: d2 with diss1 (no damage), teleport, de1 with s1s3 (simultaneous)
           fighter.ultimateAttackTimer -= dt;
+          
+          // Lock enemy position in front of Valencina during de1 and de2 attacks
+          if (fighter.currentSprite === 'de1' || fighter.currentSprite === 'de2') {
+            opponent.pos.x = fighter.pos.x + (fighter.facing * 80);
+            opponent.pos.y = fighter.pos.y;
+            opponent.vel.x = 0; // Stop any movement
+            opponent.vel.y = 0;
+          }
+          
           if (fighter.ultimateAttackTimer <= 0) {
             fighter.ultimateAttackFrame++;
             
             switch (fighter.ultimateAttackFrame) {
               case 1:
-                // Spawn diss1 effect (no damage)
+                // d2 with diss1 (no damage) - d2 should not disappear when drawing diss1
+                fighter.currentSprite = 'd2';
                 fighter.spawnSlashEffect('diss1', { x: 15, y: -5 });
                 fighter.ultimateAttackTimer = 0.3;
                 break;
               case 2:
-                // Teleport 50 pixels to the right of enemy
-                fighter.pos.x = opponent.pos.x + 50;
+                // Teleport 50 pixels to the right of enemy with wall detection
+                let targetX = opponent.pos.x + 50;
+                const battlegroundWidth = 1200;
+                const margin = 100;
+                
+                // Check if near wall and adjust
+                if (targetX > battlegroundWidth - margin) {
+                  targetX = battlegroundWidth / 2; // Teleport to middle
+                  opponent.pos.x = targetX - 50; // Adjust enemy position too
+                }
+                
+                fighter.pos.x = targetX;
                 fighter.pos.y = opponent.pos.y;
                 fighter.currentSprite = 'de1';
                 fighter.ultimateAttackTimer = 0.3;
                 break;
               case 3:
-                // Deal damage with s1s3
+                // de1 with s1s3 (simultaneous) - deal damage at same time as showing de1
                 this.dealUltimateDamage(fighter, opponent, fighter.baseDamage);
                 fighter.spawnSlashEffect('s1s3', { x: 15, y: -5 });
+                fighter.ultimateAttackTimer = 0.3;
                 break;
               case 4:
-                // End attack sequence
+                // End attack sequence - hold de1 sprite
                 fighter.ultimatePhase = 9;
                 fighter.ultimateTimer = 0.5; // Timing before next attack
-                fighter.currentSprite = 'idle';
+                fighter.currentSprite = 'de1'; // Hold last attack sprite
                 break;
             }
           }
@@ -724,39 +770,46 @@ const CHARACTERS = {
           }
           break;
           
-        case 10: // Attack 5 sequence
+        case 10: // Attack 5 sequence: de2 with s1s3/js1 alternating 5 times, then de3 with 2x damage and knockback
           fighter.ultimateAttackTimer -= dt;
+          
+          // Lock enemy position in front of Valencina during de2 attacks
+          if (fighter.currentSprite === 'de2') {
+            opponent.pos.x = fighter.pos.x + (fighter.facing * 80);
+            opponent.pos.y = fighter.pos.y;
+            opponent.vel.x = 0; // Stop any movement
+            opponent.vel.y = 0;
+          }
+          
           if (fighter.ultimateAttackTimer <= 0) {
-            if (fighter.ultimateAlternateCounter < 10) { // 5 attacks x 2 frames each
-              if (fighter.ultimateAlternateCounter % 2 === 0) {
-                // s2f1
-                fighter.currentSprite = 's2f1';
-                this.dealUltimateDamage(fighter, opponent, fighter.baseDamage);
+            if (fighter.ultimateAttackFrame < 10) { // 5 alternating attacks
+              if (fighter.ultimateAttackFrame % 2 === 0) {
+                // s1s3 slash effect
+                fighter.spawnSlashEffect('s1s3', { x: 15, y: -5 });
               } else {
-                // joust
-                fighter.currentSprite = 'joust';
-                this.dealUltimateDamage(fighter, opponent, fighter.baseDamage);
+                // js1 slash effect
                 fighter.spawnSlashEffect('js1', { x: 0, y: -10 });
               }
-              fighter.ultimateAlternateCounter++;
+              // Deal damage for each attack
+              this.dealUltimateDamage(fighter, opponent, fighter.baseDamage);
+              fighter.ultimateAttackFrame++;
               fighter.ultimateAttackTimer = 0.3;
-            } else {
-              // Final attack - de3 with 2x damage
+            } else if (fighter.ultimateAttackFrame === 10) {
+              // Final attack - de3 with 2x damage and zoom out
               fighter.currentSprite = 'de3';
-              this.dealUltimateDamage(fighter, opponent, fighter.baseDamage * 2);
+              this.dealUltimateDamage(fighter, opponent, fighter.baseDamage * 2, true); // Mark as final attack
               
-              // Knockback opponent
+              // Knockback opponent (only happens at de3)
               opponent.vel.x = fighter.facing * 20;
-              opponent.vel.y = -10;
               
-              // Remove protection and zoom out
-              opponent.ultimateProtected = false;
-              fighter.ultimateCameraZoom = 1;
-              fighter.ultimateBackgroundDim = 0;
+              // Zoom out camera during knockback
+              fighter.ultimateCameraZoom = 1.0; // Reset zoom
+              fighter.ultimateBackgroundDim = 0; // Reset background dimming
+              console.log('[ULTIMATE DEBUG] Zooming out during final knockback');
               
-              // Hold position for 3 seconds
+              // End attack sequence
               fighter.ultimatePhase = 11;
-              fighter.ultimateTimer = 3;
+              fighter.ultimateTimer = 3.0; // Hold position for 3 seconds
             }
           }
           break;
@@ -783,19 +836,27 @@ const CHARACTERS = {
       }
     },
     
-    dealUltimateDamage: function(fighter, opponent, damage) {
-      console.log('[ULTIMATE DEBUG] Dealing damage:', damage, 'protected:', opponent?.ultimateProtected);
-      if (!opponent || opponent.ultimateProtected) {
-        // Store damage but don't actually reduce HP until final attack
-        fighter.ultimateDamageDealt += damage;
-        fighter.ultimateTotalDamage += damage;
-        console.log('[ULTIMATE DEBUG] Damage stored - total:', fighter.ultimateTotalDamage);
-      } else {
-        // Actually deal damage
-        opponent.receiveHit(damage, fighter, 5);
-        fighter.ultimateTotalDamage += damage;
-        console.log('[ULTIMATE DEBUG] Damage applied - total:', fighter.ultimateTotalDamage);
+    dealUltimateDamage: function(fighter, opponent, damage, isFinalAttack = false) {
+      console.log('[ULTIMATE DEBUG] Dealing damage:', damage, 'protected:', opponent?.ultimateProtected, 'final:', isFinalAttack);
+      if (!opponent) return;
+      
+      // Bypass hit cooldown during ultimate to ensure all attacks land
+      const previousState = opponent.state;
+      const previousCooldown = opponent.hitCooldown;
+      opponent.hitCooldown = 0;
+      opponent.setState('idle'); // Reset state to allow hit
+      
+      // Apply damage directly during ultimate for proper enemy response
+      opponent.receiveHit(damage, fighter, 5);
+      
+      // Add friction to knockback unless it's the final attack
+      if (!isFinalAttack && opponent.vel.x !== 0) {
+        opponent.vel.x *= 0.8; // Apply friction (20% reduction)
       }
+      
+      fighter.ultimateTotalDamage += damage;
+      fighter.ultimateDamageDealt += damage;
+      console.log('[ULTIMATE DEBUG] Damage applied - total:', fighter.ultimateTotalDamage);
     }
   }
 };

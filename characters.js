@@ -56,15 +56,39 @@ const SPRITES = {
 };
 
 // ==========================
-// 🔥 SPRITE LOADING FUNCTION
+// 🔥 PRE-SCALED SPRITE LOADING
 // ==========================
 function loadSpriteAtlases() {
+  // Load atlases first
   atlases.val1 = loadImage("data/valencina/val1.png");
   atlases.val2 = loadImage("data/valencina/val2.png");
   atlases.val3 = loadImage("data/valencina/val3.png");
   atlases.valdisposal = loadImage("data/valencina/valdisposal.png");
   atlases.vslash1 = loadImage("data/valencina/vslash1.png");
   atlases.vslash2 = loadImage("data/valencina/vslash2.png");
+  
+  // Pre-scale all atlas images to common sizes
+  setTimeout(() => {
+    for (const [atlasName, img] of Object.entries(atlases)) {
+      if (img && img.width > 0) {
+        // Create pre-scaled versions for common scales
+        for (const scale of COMMON_SCALES) {
+          if (scale !== 1.0) {
+            const newWidth = img.width * scale;
+            const newHeight = img.height * scale;
+            const pg = createGraphics(newWidth, newHeight);
+            pg.image(img, 0, 0, newWidth, newHeight);
+            
+            // Store pre-scaled version
+            const cacheKey = `${atlasName}_scaled_${scale}`;
+            if (!window.PRE_SCALED_ATLASES) window.PRE_SCALED_ATLASES = {};
+            window.PRE_SCALED_ATLASES[cacheKey] = pg;
+          }
+        }
+      }
+    }
+    console.log('Pre-scaled atlases loaded');
+  }, 1000);
   
   // Pre-cache sprite data after atlases start loading
   precacheSpriteData();

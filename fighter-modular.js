@@ -481,17 +481,21 @@ class Fighter {
   }
 
   spawnSlashEffect(slashType, targetOffset = null) {
-    // Spawn slash effect that shares character position and fades out slowly
+    // Cap slash effects to prevent performance issues
+    if (this.slashEffects.length >= 6) {
+      return; // Don't spawn more than 6 effects
+    }
+    
+    // Spawn slash effect that shares character position and fades out quickly
     const effect = {
       type: slashType,
-      pos: this.pos.copy(),
+      pos: { x: this.pos.x, y: this.pos.y }, // Avoid .copy() to reduce GC
       facing: this.facing,
-      timer: 0.8, // Fade out over 0.8 seconds (slower, more visible fade)
+      timer: 0.4, // Reduced from 0.8 to 0.4 seconds
       targetOffset: targetOffset,
       owner: this
     };
     
-    console.log(`Slash spawned: ${slashType} at (${effect.pos.x}, ${effect.pos.y}) facing: ${effect.facing}`);
     this.slashEffects.push(effect);
   }
 
@@ -523,40 +527,28 @@ class Fighter {
         continue;
       }
 
-      push();
-
       const owner = effect.owner;
-      
-      // Translate to character position first
-      translate(owner.pos.x, owner.pos.y);
-      
-      // Apply same flipping as character sprites
-      if (owner.spriteType === 'atlas') {
-        scale(owner.facing === 1 ? -1 : 1, 1);
-      } else {
-        scale(owner.facing, 1);
-      }
-      
-      // Apply target offset
       const offsetX = effect.targetOffset?.x || 0;
       const offsetY = effect.targetOffset?.y || 0;
+      
+      // Pre-calculate positions to avoid push/pop
+      const baseX = owner.pos.x;
+      const baseY = owner.pos.y;
+      const facing = owner.facing === 1 ? -1 : 1;
       
       // Apply same scaling as character sprites
       if (owner.spriteType === 'atlas') {
         // Use same scale factor as character (144/512)
         const scaleFactor = 144 / 512;
         
-        // Calculate alpha and color tint based on timer
-        const alpha = map(effect.timer, 0, 0.8, 0, 255); // 0.8 second fade time
-        const fadeProgress = map(effect.timer, 0.8, 0, 0, 1); // 0 = start, 1 = end
+        // Simplified alpha calculation (no map)
+        const alpha = effect.timer * 637.5; // 0.4 * 637.5 = 255
         
-        // Interpolate color from original (255, 200, 100) to target (255, 82, 111)
-        const startR = 255, startG = 200, startB = 100;
-        const targetR = 255, targetG = 82, targetB = 111;
-        
-        const r = lerp(startR, targetR, fadeProgress);
-        const g = lerp(startG, targetG, fadeProgress);
-        const b = lerp(startB, targetB, fadeProgress);
+        // Simplified color interpolation (no lerp)
+        const fadeProgress = 1 - (effect.timer / 0.4); // 0.4 second fade
+        const r = 255;
+        const g = 200 - (118 * fadeProgress); // 200 → 82
+        const b = 100 + (11 * fadeProgress);  // 100 → 111
         
         // Try to draw sprite with proper scaling and color tint
         const spriteInfo = SPRITES?.[effect.type];
@@ -564,12 +556,12 @@ class Fighter {
           // Apply alpha and color tint globally for sprite rendering
           push();
           tint(r, g, b, alpha); // Apply color and alpha tint
-          drawSpriteScaled(effect.type, offsetX, offsetY + 50, scaleFactor); 
+          drawSpriteScaled(effect.type, baseX + offsetX * facing, baseY + offsetY + 50, scaleFactor); 
           pop();
         } else {
           // Fallback: draw scaled slash effect with proper alpha and color tint
           push();
-          scale(scaleFactor);
+          scale(scaleFactor * facing, 1);
           stroke(r, g, b, alpha);
           strokeWeight(4);
           line(-30 + offsetX, -15 + offsetY + 50, 30 + offsetX, 15 + offsetY + 50);
@@ -579,7 +571,7 @@ class Fighter {
           
           fill(r, g, b, alpha * 0.6);
           noStroke();
-          ellipse(offsetX, offsetY + 50, 15, 15);
+          ellipse(baseX + offsetX, baseY + offsetY + 50, 15, 15);
           pop();
         }
       } else {
@@ -587,17 +579,14 @@ class Fighter {
         const targetHeight = 144;
         const scaleFactor = targetHeight / (owner.sprite?.height || 512);
         
-        // Calculate alpha and color tint based on timer
-        const alpha = map(effect.timer, 0, 0.8, 0, 255); // 0.8 second fade time
-        const fadeProgress = map(effect.timer, 0.8, 0, 0, 1); // 0 = start, 1 = end
+        // Simplified alpha calculation
+        const alpha = effect.timer * 637.5;
         
-        // Interpolate color from original (255, 200, 100) to target (255, 82, 111)
-        const startR = 255, startG = 200, startB = 100;
-        const targetR = 255, targetG = 82, targetB = 111;
-        
-        const r = lerp(startR, targetR, fadeProgress);
-        const g = lerp(startG, targetG, fadeProgress);
-        const b = lerp(startB, targetB, fadeProgress);
+        // Simplified color interpolation
+        const fadeProgress = 1 - (effect.timer / 0.4);
+        const r = 255;
+        const g = 200 - (118 * fadeProgress);
+        const b = 100 + (11 * fadeProgress);
         
         // Try to draw sprite with proper scaling and color tint
         const spriteInfo = SPRITES?.[effect.type];
@@ -605,12 +594,12 @@ class Fighter {
           // Apply alpha and color tint globally for sprite rendering
           push();
           tint(r, g, b, alpha); // Apply color and alpha tint
-          drawSpriteScaled(effect.type, offsetX, offsetY - 30, scaleFactor);
+          drawSpriteScaled(effect.type, baseX + offsetX * facing, baseY + offsetY - 30, scaleFactor);
           pop();
         } else {
           // Fallback: draw scaled slash effect with proper alpha and color tint
           push();
-          scale(scaleFactor);
+          scale(scaleFactor * facing, 1);
           stroke(r, g, b, alpha);
           strokeWeight(4);
           line(-30 + offsetX, -15 + offsetY, 30 + offsetX, 15 + offsetY);
@@ -620,12 +609,10 @@ class Fighter {
           
           fill(r, g, b, alpha * 0.6);
           noStroke();
-          ellipse(offsetX, offsetY, 15, 15);
+          ellipse(baseX + offsetX, baseY + offsetY, 15, 15);
           pop();
         }
       }
-      
-      pop();
     }
   }
 

@@ -292,15 +292,21 @@ class Fighter {
   }
 
   spawnSlashEffect(slashType, targetOffset = null) {
-    // Spawn slash effect that shares character position and fades out
+    // Cap slash effects to prevent performance issues
+    if (this.slashEffects.length >= 6) {
+      return; // Don't spawn more than 6 effects
+    }
+    
+    // Spawn slash effect that shares character position and fades out quickly
     const effect = {
       type: slashType,
-      pos: this.pos.copy(),
+      pos: { x: this.pos.x, y: this.pos.y }, // Avoid .copy() to reduce GC
       facing: this.facing,
-      timer: 1.0, // Fade out over 1 second
+      timer: 0.4, // Reduced from 0.8 to 0.4 seconds
       targetOffset: targetOffset,
       owner: this
     };
+    
     this.slashEffects.push(effect);
   }
 
@@ -335,25 +341,25 @@ class Fighter {
       const spriteInfo = SPRITES[effect.type];
       if (!spriteInfo) continue; // Prevent crash for missing sprites
 
-      push();
-
       const owner = effect.owner;
       const offsetX = effect.targetOffset ? effect.targetOffset.x : 0;
       const offsetY = effect.targetOffset ? effect.targetOffset.y : 0;
-      let x = owner.pos.x + offsetX;
-      let y = owner.pos.y + offsetY;
-
-      // Apply facing to slash effect
-      if (owner.facing === -1) {
-        scale(-1, 1);
-        x = x - offsetX;
-      }
-
-      translate(x, y);
       
-      // Draw sprite centered at origin after transform
-      drawSpriteScaled(effect.type, 0, 0, 1.0, effect.timer); // Fade with timer
+      // Pre-calculate positions to avoid push/pop
+      const baseX = owner.pos.x;
+      const baseY = owner.pos.y;
+      const facing = owner.facing === -1 ? -1 : 1;
       
+      // Simplified alpha calculation (no map)
+      const alpha = effect.timer * 637.5; // 0.4 * 637.5 = 255
+      
+      // Draw sprite with manual transform
+      const finalX = baseX + offsetX * facing;
+      const finalY = baseY + offsetY;
+      
+      push();
+      tint(255, 200, 100, alpha); // Apply color and alpha tint
+      drawSpriteScaled(effect.type, finalX, finalY, 1.0);
       pop();
     }
   }

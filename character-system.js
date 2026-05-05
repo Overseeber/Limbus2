@@ -1,6 +1,16 @@
-// Character System - Parent class and subclasses for easy character switching
+// ==========================
+// 🎭 CHARACTER SWITCHING SYSTEM
+// ==========================
+// 
+// This system provides easy character switching with:
+// - Parent class for common fighter functionality
+// - Subclasses for unique character traits
+// - Quick switching functions for instant character changes
+// - Adjustable properties for easy character addition
 
 class BaseFighter {
+  // 🏗️ CORE FIGHTER CLASS
+  // Handles all common fighter functionality that every character shares
   constructor(isAI = false, name = 'Enemy', characterKey = null) {
     this.isAI = isAI;
     this.name = name;
@@ -174,55 +184,68 @@ class BaseFighter {
   }
 }
 
-// Valencina character class
+// 👑 CHARACTER SUBCLASSES
+// Each character extends BaseFighter with unique traits
+
+// 🌸 VALENCINA - Fast, high damage character
 class Valencina extends BaseFighter {
   applyCharacterTraits() {
-    // Valencina-specific traits
-    this.color = '#4a90e2';
-    this.weapon = 'bus';
-    this.baseDamage = 18; // Slightly higher damage
-    this.speed = 8.0; // Slightly faster
-    this.ultimateCanActivate = true;
+    // 🎯 Valencina's unique abilities
+    this.color = '#4a90e2';        // Blue color scheme
+    this.weapon = 'bus';             // Bus weapon
+    this.baseDamage = 18;            // Higher damage than John
+    this.speed = 8.0;               // Faster movement
+    this.ultimateCanActivate = true;   // Can use ultimate
   }
 }
 
-// John character class  
+// 👤 JOHN - Balanced, standard character
 class John extends BaseFighter {
   applyCharacterTraits() {
-    // John-specific traits
-    this.color = '#3498db';
-    this.weapon = 'fist';
-    this.baseDamage = 15; // Standard damage
-    this.speed = 7.5; // Standard speed
-    this.ultimateCanActivate = true;
+    // 🎯 John's unique abilities
+    this.color = '#3498db';        // Blue color scheme
+    this.weapon = 'fist';            // Fist weapon
+    this.baseDamage = 15;            // Standard damage
+    this.speed = 7.5;               // Standard speed
+    this.ultimateCanActivate = true;   // Can use ultimate
   }
 }
 
-// Character switching manager
+// 🔄 CHARACTER SWITCHING MANAGER
+// Handles quick switching between available characters
 class CharacterManager {
   constructor() {
+    // 🎯 DEFAULT CHARACTER
     this.currentCharacter = 'JOHN';
+    
+    // 📋 AVAILABLE CHARACTERS (add new ones here!)
     this.availableCharacters = ['JOHN', 'VALENCINA'];
   }
   
+  // 🔄 Switch to specific character
   switchTo(characterKey) {
     if (this.availableCharacters.includes(characterKey)) {
       this.currentCharacter = characterKey;
+      console.log(`✅ Switched to ${characterKey}`);
       return true;
     }
+    console.log(`❌ Character ${characterKey} not found`);
     return false;
   }
   
+  // 📖 Get current character
   getCurrentCharacter() {
     return this.currentCharacter;
   }
   
+  // ⏭️ Get next character in list
   getNextCharacter() {
     const currentIndex = this.availableCharacters.indexOf(this.currentCharacter);
     const nextIndex = (currentIndex + 1) % this.availableCharacters.length;
     return this.availableCharacters[nextIndex];
   }
   
+  // ⏮️ Get previous character in list
   getPreviousCharacter() {
     const currentIndex = this.availableCharacters.indexOf(this.currentCharacter);
     const prevIndex = (currentIndex - 1 + this.availableCharacters.length) % this.availableCharacters.length;
@@ -230,14 +253,18 @@ class CharacterManager {
   }
 }
 
-// Quick character switching function
+// ⚡ QUICK CHARACTER SWITCHING
+// Instant character switching - call this from game controls
+// Usage: switchCharacterQuick('next') or switchCharacterQuick('prev')
 function switchCharacterQuick(direction = 'next') {
   const manager = new CharacterManager();
   
   if (direction === 'next') {
+    // ⏭️ Switch to next character
     const nextChar = manager.getNextCharacter();
     manager.switchTo(nextChar);
   } else if (direction === 'prev') {
+    // ⏮️ Switch to previous character
     const prevChar = manager.getPreviousCharacter();
     manager.switchTo(prevChar);
   }

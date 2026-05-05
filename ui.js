@@ -170,8 +170,9 @@ function drawStatusPanel(fighter, x, y) {
 
 function drawStatusRows(fighter, x, y) {
   const rowHeight = 22;
-  let offsetY = 0;
-  fighter.statuses.slice(0, 14).forEach((status, index) => {
+  const statusCount = min(14, fighter.statuses.length);
+  for (let index = 0; index < statusCount; index++) {
+    const status = fighter.statuses[index];
     const row = floor(index / 7);
     const col = index % 7;
     const px = x + col * 30;
@@ -182,7 +183,7 @@ function drawStatusRows(fighter, x, y) {
     textSize(10);
     textAlign(CENTER, CENTER);
     text(status.type.charAt(0), px + 13, py + 9);
-  });
+  }
 }
 
 function statusColor(type) {

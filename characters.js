@@ -83,17 +83,15 @@ function drawSprite(name, x, y) {
     return null;
   }
 
-  let sx = s.x * CELL;
-  let sy = s.y * CELL;
-  let sw = s.w * CELL;
-  let sh = s.h * CELL;
-
-  let offsetX = s.offsetX || 0;
-  let offsetY = s.offsetY || 0;
+  const sx = s.x * CELL;
+  const sy = s.y * CELL;
+  const sw = s.w * CELL;
+  const sh = s.h * CELL;
+  const offsetX = s.offsetX || 0;
+  const offsetY = s.offsetY || 0;
 
   push();
   translate(x, y);
-
   image(
     img,
     -sw/2 + offsetX,
@@ -102,26 +100,24 @@ function drawSprite(name, x, y) {
     sx, sy,
     sw, sh
   );
-
   pop();
   
   return { width: sw, height: sh };
 }
 
 function drawSpriteScaled(name, x, y, spriteScale = 1) {
-  let s = SPRITES[name];
+  const s = SPRITES[name];
   if (!s) return null;
   
-  let img = atlases[s.atlas];
+  const img = atlases[s.atlas];
   if (!img) return null;
 
-  let sx = s.x * CELL;
-  let sy = s.y * CELL;
-  let sw = s.w * CELL;
-  let sh = s.h * CELL;
-
-  let offsetX = s.offsetX || 0;
-  let offsetY = s.offsetY || 0;
+  const sx = s.x * CELL;
+  const sy = s.y * CELL;
+  const sw = s.w * CELL;
+  const sh = s.h * CELL;
+  const offsetX = s.offsetX || 0;
+  const offsetY = s.offsetY || 0;
 
   push();
   translate(x, y);
@@ -130,7 +126,6 @@ function drawSpriteScaled(name, x, y, spriteScale = 1) {
   if (spriteScale !== 1) {
     scale(spriteScale, spriteScale);
   }
-
   image(
     img,
     -sw/2 + offsetX,
@@ -139,7 +134,6 @@ function drawSpriteScaled(name, x, y, spriteScale = 1) {
     sx, sy,
     sw, sh
   );
-
   pop();
   
   return { width: sw * spriteScale, height: sh * spriteScale };

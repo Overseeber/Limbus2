@@ -59,29 +59,30 @@ class Particle {
     this.lifetime = 0;
     this.maxLifetime = 0.3;
     this.type = null;
+    this.config = null; // Cache config to avoid repeated lookups
     this.color = { r: 255, g: 255, b: 255 };
     this.alpha = 255;
     this.active = false;
   }
 
   initialize(x, y, type, angle = null) {
-    const config = PARTICLE_TYPES[type];
-    if (!config) return false;
+    this.config = PARTICLE_TYPES[type];
+    if (!this.config) return false;
 
     this.x = x;
     this.y = y;
     this.type = type;
-    this.maxLifetime = config.lifetime;
-    this.lifetime = config.lifetime;
+    this.maxLifetime = this.config.lifetime;
+    this.lifetime = this.config.lifetime;
     
     // Random velocity spread
-    const spreadAngle = angle !== null ? angle : random(-config.spread / 2, config.spread / 2);
-    const speed = random(config.speed.min, config.speed.max);
+    const spreadAngle = angle !== null ? angle : random(-this.config.spread / 2, this.config.spread / 2);
+    const speed = random(this.config.speed.min, this.config.speed.max);
     this.vx = cos(spreadAngle) * speed;
     this.vy = sin(spreadAngle) * speed - random(20, 50); // Add upward bias
     
-    this.size = random(config.size.min, config.size.max);
-    this.color = { ...config.color };
+    this.size = random(this.config.size.min, this.config.size.max);
+    this.color = { ...this.config.color };
     this.alpha = 255;
     this.active = true;
     
@@ -98,8 +99,8 @@ class Particle {
       return;
     }
 
-    // Get particle type config
-    const config = PARTICLE_TYPES[this.type];
+    // Use cached config
+    const config = this.config;
     if (!config) return;
 
     // Update position
@@ -171,10 +172,10 @@ function initializeParticlePool() {
 
 // Get particle from pool
 function getParticleFromPool() {
-  // Find inactive particle
-  for (let particle of particlePool) {
-    if (!particle.active) {
-      return particle;
+  // Find inactive particle - use indexed loop for better performance
+  for (let i = 0, len = particlePool.length; i < len; i++) {
+    if (!particlePool[i].active) {
+      return particlePool[i];
     }
   }
   
@@ -235,8 +236,8 @@ function updateParticles(dt) {
 
 // Draw all particles
 function drawParticles() {
-  for (let particle of activeParticles) {
-    particle.draw();
+  for (let i = 0, len = activeParticles.length; i < len; i++) {
+    activeParticles[i].draw();
   }
 }
 
@@ -247,10 +248,10 @@ function getParticleCount() {
 
 // Clear all particles
 function clearParticles() {
-  for (let particle of activeParticles) {
-    particle.active = false;
+  for (let i = 0, len = activeParticles.length; i < len; i++) {
+    activeParticles[i].active = false;
   }
-  activeParticles = [];
+  activeParticles.length = 0;
 }
 
 // Initialize system when script loads

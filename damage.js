@@ -28,17 +28,21 @@ let damageNumbers = [];
  * @param {number} dt - Delta time in seconds
  */
 function updateDamageNumbers(dt) {
-  damageNumbers = damageNumbers.filter((num) => {
-    num.update(dt);
-    return !num.finished;
-  });
+  for (let i = damageNumbers.length - 1; i >= 0; i--) {
+    damageNumbers[i].update(dt);
+    if (damageNumbers[i].finished) {
+      damageNumbers.splice(i, 1);
+    }
+  }
 }
 
 /**
  * Draws all active damage numbers and indicators
  */
 function drawDamageNumbers() {
-  damageNumbers.forEach((num) => num.draw());
+  for (let i = 0, len = damageNumbers.length; i < len; i++) {
+    damageNumbers[i].draw();
+  }
 }
 
 /**

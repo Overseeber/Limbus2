@@ -213,18 +213,19 @@ class Fighter {
     if (this.attackSequence === 1) {
       const sequence = ['prepat', 's1f1', 's1f2', 's1f3'];
       const damageFrames = [false, true, true, false]; // s1f1 and s1f2 deal damage
+      const frame = this.attackFrame;
       
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
+      if (frame < sequence.length) {
+        this.currentSprite = sequence[frame];
         
         // Spawn slash effects on specific frames
-        if (this.attackFrame === 1) {
+        if (frame === 1) {
           this.spawnSlashEffect('s1s1', { x: 0, y: -20 });
           this.spawnSlashEffect('s1s2', { x: 20, y: 0 });
         }
         
         // Deal damage on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+        if (damageFrames[frame] && !this.attackDamageDealt) {
           this.dealAttackDamage();
           this.attackDamageDealt = true;
         }
@@ -234,17 +235,18 @@ class Fighter {
     else if (this.attackSequence === 2) {
       const sequence = ['s2f1', 'halt1', 'halt2', 's3f1'];
       const damageFrames = [true, false, false, false]; // s2f1 deals damage
+      const frame = this.attackFrame;
       
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
+      if (frame < sequence.length) {
+        this.currentSprite = sequence[frame];
         
         // Spawn slash effects on specific frames
-        if (this.attackFrame === 0) {
+        if (frame === 0) {
           this.spawnSlashEffect('s1s3', { x: 0, y: -20 });
         }
         
         // Deal damage on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+        if (damageFrames[frame] && !this.attackDamageDealt) {
           this.dealAttackDamage();
           this.attackDamageDealt = true;
         }
@@ -254,25 +256,25 @@ class Fighter {
     else if (this.attackSequence === 3) {
       const sequence = ['s3f1', 's3f2', 's3f3'];
       const damageFrames = [false, true, false]; // s3f2 deals damage
-      const holdTimes = [0.2, 0.2, 0.5]; // s3f3 holds for 0.5s
+      const frame = this.attackFrame;
       
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
+      if (frame < sequence.length) {
+        this.currentSprite = sequence[frame];
         
         // Spawn slash effects on specific frames
-        if (this.attackFrame === 1) {
+        if (frame === 1) {
           this.spawnSlashEffect('s1s4', { x: 0, y: -20 });
         }
         
         // Use custom frame duration for s3f3
-        if (this.attackFrame === 2) {
+        if (frame === 2) {
           this.attackFrameDuration = 0.5;
         } else {
           this.attackFrameDuration = 0.2;
         }
         
         // Deal damage on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+        if (damageFrames[frame] && !this.attackDamageDealt) {
           this.dealAttackDamage();
           this.attackDamageDealt = true;
         }
@@ -299,8 +301,6 @@ class Fighter {
       targetOffset: targetOffset,
       owner: this
     };
-    
-    console.log(`Slash spawned: ${slashType} at (${effect.pos.x}, ${effect.pos.y}) facing: ${effect.facing}`);
     this.slashEffects.push(effect);
   }
 
@@ -332,19 +332,21 @@ class Fighter {
         continue;
       }
 
-      const spriteInfo = SPRITES?.[effect.type];
+      const spriteInfo = SPRITES[effect.type];
       if (!spriteInfo) continue; // Prevent crash for missing sprites
 
       push();
 
       const owner = effect.owner;
-      let x = owner.pos.x + (effect.targetOffset?.x || 0);
-      let y = owner.pos.y + (effect.targetOffset?.y || 0);
+      const offsetX = effect.targetOffset ? effect.targetOffset.x : 0;
+      const offsetY = effect.targetOffset ? effect.targetOffset.y : 0;
+      let x = owner.pos.x + offsetX;
+      let y = owner.pos.y + offsetY;
 
       // Apply facing to slash effect
       if (owner.facing === -1) {
         scale(-1, 1);
-        x = x - (effect.targetOffset?.x || 0);
+        x = x - offsetX;
       }
 
       translate(x, y);
@@ -781,60 +783,38 @@ class Fighter {
   enforceBoundaries() {
     // Define strict boundaries - no clipping allowed
     const boundaryMargin = 50;
-    const minX = boundaryMargin;
-    const maxX = width - boundaryMargin;
-    const minY = boundaryMargin;
-    const maxY = height - boundaryMargin;
     
     // Force position within boundaries
-    const originalX = this.pos.x;
-    const originalY = this.pos.y;
-    
-    this.pos.x = constrain(this.pos.x, minX, maxX);
-    this.pos.y = constrain(this.pos.y, minY, maxY);
-    
-    // Stop velocity if hitting boundary
-    if (this.pos.x <= minX || this.pos.x >= maxX) {
+    if (this.pos.x < boundaryMargin) {
+      this.pos.x = boundaryMargin;
+      this.vel.x = 0;
+    } else if (this.pos.x > width - boundaryMargin) {
+      this.pos.x = width - boundaryMargin;
       this.vel.x = 0;
     }
-    if (this.pos.y <= minY || this.pos.y >= maxY) {
-      this.vel.y = 0;
-    }
     
-    // Log if boundary was enforced (for debugging)
-    if (originalX !== this.pos.x || originalY !== this.pos.y) {
-      console.log('[BOUNDARY] Enforced boundaries for fighter - moved from', originalX, originalY, 'to', this.pos.x, this.pos.y);
+    if (this.pos.y < boundaryMargin) {
+      this.pos.y = boundaryMargin;
+      this.vel.y = 0;
+    } else if (this.pos.y > height - boundaryMargin) {
+      this.pos.y = height - boundaryMargin;
+      this.vel.y = 0;
     }
   }
 
   cleanupPosition(opponent) {
-    this.pos.x = constrain(this.pos.x, 60, width - 60);
+    // Horizontal boundary check
+    if (this.pos.x < 60) {
+      this.pos.x = 60;
+    } else if (this.pos.x > width - 60) {
+      this.pos.x = width - 60;
+    }
+    
+    // Vertical floor check
     if (this.pos.y >= this.spawnY) {
       this.pos.y = this.spawnY;
       this.vel.y = 0;
     }
-    
-    // DISABLED: Character collision to prevent glitching
-    // Characters can now pass through each other without collision issues
-    // Check hitbox collision with opponent and push back if overlapping
-    // const myBox = { x: this.pos.x - 25, y: this.pos.y - 36, w: 50, h: 72 };
-    // const oppBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
-    
-    // // Only check horizontal overlap to allow jumping over enemies
-    // const horizontalOverlap = !(myBox.x + myBox.w < oppBox.x || oppBox.x + oppBox.w < myBox.x);
-    
-    // if (horizontalOverlap) {
-    //   // Only apply collision if both fighters are on the ground or at similar heights
-    //   const heightDifference = abs(this.pos.y - opponent.pos.y);
-    //   if (heightDifference < 40) { // Allow jumping over when height difference is significant
-    //     // Push back based on which side we're on
-    //     if (this.pos.x < opponent.pos.x) {
-    //       this.pos.x = opponent.pos.x - 25 - 25 - 5; // Left of opponent
-    //     } else {
-    //       this.pos.x = opponent.pos.x + 25 + 25 + 5; // Right of opponent
-    //     }
-    //   }
-    // }
   }
 
   processActions(opponent, dt) {
@@ -1070,9 +1050,17 @@ class Fighter {
   }
 
   hitOpponent(opponent, box) {
-    const playerBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
-    const attackBox = { x: box.x - box.w / 2, y: box.y, w: box.w, h: box.h };
-    return this.rectOverlap(playerBox, attackBox) && opponent.hitCooldown <= 0;
+    // Inline opponent box calculation to reduce object allocation
+    const opX = opponent.pos.x - 25;
+    const opY = opponent.pos.y - 36;
+    const opW = 50;
+    const opH = 72;
+    
+    const atX = box.x - box.w / 2;
+    const atY = box.y;
+    
+    // Check collision using direct coordinate comparison
+    return !(opX + opW < atX || atX + box.w < opX || opY + opH < atY || atY + box.h < opY) && opponent.hitCooldown <= 0;
   }
 
   rectOverlap(r1, r2) {
@@ -1082,23 +1070,25 @@ class Fighter {
 
 
   calculateDamage(base, opponent) {
-    let damage = base;
-    
-    // Scale with combo counter
-    damage += this.combo * 2;
+    let damage = base + this.combo * 2;
     
     // 3-hit combo system: 100%, 100%, 200% damage
     if (this.attackCounter === 3) {
       damage *= 2.0; // 200% damage on third hit
     }
     
-    if (this.chargeAttack) damage *= 1.4;
+    if (this.chargeAttack) {
+      damage *= 1.4;
+    }
+    
     if (this.hasStatus('Poise')) {
       damage *= 1.15;
     }
+    
     if (opponent.state === 'staggered') {
       damage *= 2;
     }
+    
     return damage;
   }
 
@@ -1239,8 +1229,14 @@ class Fighter {
   }
 
   applyStatuses(dt) {
-    this.statuses.forEach((status) => {
+    let bleedStatus = null;
+    let sinkingStatus = null;
+    
+    // Update statuses using indexed loop for better performance
+    for (let i = this.statuses.length - 1; i >= 0; i--) {
+      const status = this.statuses[i];
       status.timer -= dt;
+      
       if (status.timer <= 0) {
         status.timer = 1;
         const oldCount = status.count;
@@ -1248,70 +1244,67 @@ class Fighter {
         
         // Trigger status effects when count goes down
         if (oldCount > status.count) {
-          if (status.type === 'Burn') {
-            this.hp -= status.potency;
-            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
-          }
-          if (status.type === 'Rupture') {
-            this.hp -= status.potency;
-            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
-          }
-          if (status.type === 'Bleed') {
-            this.hp -= status.potency;
-            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
-          }
-          if (status.type === 'Tremor') {
-            this.stagger += status.potency;
-          }
-          if (status.type === 'Sinking') {
-            this.speed = max(1.6, this.speed - 0.04 * status.potency);
-            this.hp -= status.potency;
-            spawnDamageNumber(status.potency, this.pos.copy(), 1, false); // Show as self-damage
-          }
-          if (status.type === 'Poise') {
-            // +5% crit chance and 1.5x damage on crit
-            // Note: Crit logic would need to be implemented in calculateDamage
-          }
-          if (status.type === 'Game Target') {
-            // Set speed to 1 and track duration
-            this.speed = 1;
-            status.duration = max(5, status.count); // 5 hits or 10 seconds
-          }
-          if (status.type === 'Precognition') {
-            // Track precognition count
-            // Evade logic handled in receiveHit
-          }
-          if (status.type === 'Overheat') {
-            // -20% damage dealt
-            this.damageResistance = 0.8;
+          switch(status.type) {
+            case 'Burn':
+            case 'Rupture':
+            case 'Bleed':
+              this.hp -= status.potency;
+              spawnDamageNumber(status.potency, this.pos.copy(), 1, false);
+              break;
+            case 'Tremor':
+              this.stagger += status.potency;
+              break;
+            case 'Sinking':
+              this.speed = max(1.6, this.speed - 0.04 * status.potency);
+              this.hp -= status.potency;
+              spawnDamageNumber(status.potency, this.pos.copy(), 1, false);
+              break;
+            case 'Poise':
+              // +5% crit chance and 1.5x damage on crit
+              break;
+            case 'Game Target':
+              this.speed = 1;
+              status.duration = max(5, status.count);
+              break;
+            case 'Precognition':
+              // Track precognition count
+              break;
+            case 'Overheat':
+              this.damageResistance = 0.8;
+              break;
           }
         }
       }
-    });
-    
-    // Stagger recovery disabled - stagger bar only increases
+      
+      // Track status references for later use
+      if (status.type === 'Bleed' && status.count > 0) {
+        bleedStatus = status;
+      } else if (status.type === 'Sinking' && status.count > 0) {
+        sinkingStatus = status;
+      }
+    }
     
     // Apply Bleed status resistance penalty (continuous effect)
-    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
-    if (bleedStatus && bleedStatus.count > 0) {
-      // Lose 1% damage resistance per bleed count
+    if (bleedStatus) {
       const resistancePenalty = bleedStatus.count * 0.01;
       this.damageResistance = min(0.5, 1 - resistancePenalty);
     }
 
     // Apply Sinking status resistance and speed penalties (continuous effects)
-    const sinkingStatus = this.statuses.find((s) => s.type === 'Sinking');
-    if (sinkingStatus && sinkingStatus.count > 0) {
-      // Apply damage resistance penalty
+    if (sinkingStatus) {
       const resistancePenalty = sinkingStatus.potency * 0.05;
       this.damageResistance = min(0.5, 1 - resistancePenalty);
       
-      // Apply speed penalty (lose 1% speed per 5 potency)
       const speedPenalty = sinkingStatus.potency * 0.01;
       this.speed = max(1.6, this.speed - speedPenalty);
     }
     
-    this.statuses = this.statuses.filter((status) => status.count > 0);
+    // Remove finished statuses
+    for (let i = this.statuses.length - 1; i >= 0; i--) {
+      if (this.statuses[i].count <= 0) {
+        this.statuses.splice(i, 1);
+      }
+    }
   }
 
   drawStatusEffects() {
@@ -1320,21 +1313,21 @@ class Fighter {
     const baseY = this.pos.y + 10;
     const rowLimit = 7;
     const cellWidth = 48;
-    
-    // Calculate total rows needed
     const totalRows = Math.ceil(this.statuses.length / rowLimit);
     
     for (let row = 0; row < totalRows; row++) {
       const startIndex = row * rowLimit;
       const endIndex = Math.min(startIndex + rowLimit, this.statuses.length);
-      const rowStatuses = this.statuses.slice(startIndex, endIndex);
+      const rowCount = endIndex - startIndex;
       
       // Center the row
-      const rowWidth = rowStatuses.length * cellWidth;
+      const rowWidth = rowCount * cellWidth;
       const startX = this.pos.x - rowWidth * 0.5;
       
-      rowStatuses.forEach((status, colIndex) => {
-        const x = startX + colIndex * cellWidth;
+      // Draw each status in the row
+      for (let col = 0; col < rowCount; col++) {
+        const status = this.statuses[startIndex + col];
+        const x = startX + col * cellWidth;
         const y = baseY + row * 24;
         
         push();
@@ -1355,7 +1348,7 @@ class Fighter {
         textAlign(RIGHT, CENTER);
         text(status.count, x + 15, y);
         pop();
-      });
+      }
     }
   }
 

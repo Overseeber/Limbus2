@@ -244,6 +244,36 @@ const CHARACTERS = {
     baseDamage: 15,
     staggerThreshold: 1000,
     staggerLength: 5,
+    color: '#3498db',
+    weapon: 'fist',
+    sprite: 'dummy/idle.png',
+    // Character-specific methods
+    onSuccessfulHit: function(damage, opponent, fighter) {
+      // Default implementation - no special effects
+    },
+    onReceiveHit: function(amount, attacker, fighter) {
+      // Default implementation - no special effects
+    },
+    onUpdate: function(dt, opponent, fighter) {
+      // Default implementation - no special effects
+    },
+    processKeyPressed: function(key, fighter) {
+      // Default implementation - no special abilities
+    },
+    initializeCharacter: function(fighter) {
+      // Default initialization
+      fighter.weapon = this.weapon;
+    }
+  },
+  VALENCINA: {
+    name: 'Valencina',
+    title: 'Saintess of the Crimson Merger',
+    hp: 9999,
+    speed: 7.5,
+    attackInterval: 1,
+    baseDamage: 15,
+    staggerThreshold: 1000,
+    staggerLength: 5,
     color: '#4a90e2',
     weapon: 'bus',
     sprite: 'dummy/idle.png',
@@ -1227,7 +1257,7 @@ const CHARACTERS = {
   }
 };
 
-let currentCharacter = 'JOHN';
+let currentCharacter = 'VALENCINA';
 
 function switchCharacter(characterKey) {
   if (CHARACTERS[characterKey]) {

@@ -126,15 +126,15 @@ export class Fighter {
     this.name = name;
     
     // Safe character selection with fallback
-    const fallbackCharacter = (typeof currentCharacter !== 'undefined' ? currentCharacter : 'JOHN');
-    this.characterKey = characterKey || (isAI ? 'JOHN' : fallbackCharacter);
+    const fallbackCharacter = (typeof currentCharacter !== 'undefined' ? currentCharacter : 'VALENCINA');
+    this.characterKey = characterKey || (isAI ? 'VALENCINA' : fallbackCharacter);
     
     // Get character from roster
     const characterData = CHARACTERS[this.characterKey];
     if (!characterData) {
       console.error("Invalid characterKey:", this.characterKey);
-      this.characterKey = 'JOHN';
-      characterData = CHARACTERS[this.characterKey];
+      this.characterKey = 'VALENCINA';
+      character = CHARACTERS[this.characterKey];
     }
     
     this.character = characterData;

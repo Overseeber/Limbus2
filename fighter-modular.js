@@ -3,8 +3,8 @@ class Fighter {
     this.isAI = isAI;
     this.name = name;
     // Safe character selection with fallback
-    const fallbackCharacter = (typeof currentCharacter !== 'undefined' ? currentCharacter : 'JOHN');
-    this.characterKey = characterKey || (isAI ? 'JOHN' : fallbackCharacter);
+    const fallbackCharacter = (typeof currentCharacter !== 'undefined' ? currentCharacter : 'VALENCINA');
+    this.characterKey = characterKey || (isAI ? 'VALENCINA' : fallbackCharacter);
     
     // Get character stats from roster
     let character = CHARACTERS[this.characterKey];
@@ -12,7 +12,7 @@ class Fighter {
     // Safety check in case character is not found
     if (!character) {
       console.error("Invalid characterKey:", this.characterKey);
-      this.characterKey = 'JOHN';
+      this.characterKey = 'VALENCINA';
       character = CHARACTERS[this.characterKey];
     }
     

@@ -49,10 +49,10 @@ function testModularSystem() {
     
     // Simulate fighter creation (would normally import)
     const testFighter = {
-      isAI: false,
+      isAI: true,
       name: 'TestFighter',
-      characterKey: 'JOHN',
-      character: CHARACTERS.JOHN,
+      characterKey: 'VALENCINA',
+      character: CHARACTERS.VALENCINA,
       hp: 100,
       maxHp: 100,
       speed: 5,

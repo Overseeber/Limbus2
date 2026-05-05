@@ -81,7 +81,7 @@ function drawEnemyHud() {
   const panelX = width - 256;
   const panelY = 16;
   const panelWidth = 240;
-  const panelHeight = 84;
+  const panelHeight = 132;
   const comboSize = 16 + min(18, enemy.combo * 1.5);
   const comboRatio = constrain(enemy.comboTimer / enemy.comboTimeout, 0, 1);
 
@@ -99,7 +99,32 @@ function drawEnemyHud() {
   rect(panelX + 12, panelY + 12 + comboSize + 8, panelWidth - 24, 10, 5);
   fill('#ffcc33');
   rect(panelX + 12, panelY + 12 + comboSize + 8, (panelWidth - 24) * comboRatio, 10, 5);
-  drawDashCharges(enemy, panelX + 12, panelY + 12 + comboSize + 30, panelWidth - 24);
+
+  fill(255);
+  textSize(14);
+  text(`Name: ${enemy.name}`, panelX + 12, panelY + 52);
+  text(`HP: ${enemy.hp.toFixed(0)} / ${enemy.maxHp}`, panelX + 12, panelY + 72);
+  text(`State: ${enemy.state}`, panelX + 12, panelY + 92);
+  
+  
+  const hpBarX = panelX + 12;
+  const hpBarY = panelY + 110;
+  const hpWidth = panelWidth - 24;
+  fill('#222');
+  rect(hpBarX, hpBarY, hpWidth, 8, 4);
+  fill('#42d492');
+  rect(hpBarX, hpBarY, hpWidth * (enemy.hp / enemy.maxHp), 8, 4);
+  
+  // Stagger Bar
+  fill('#222');
+  rect(hpBarX, hpBarY + 14, hpWidth, 6, 3);
+  const staggerPercent = constrain(enemy.stagger / enemy.staggerThreshold, 0, 1);
+  if (staggerPercent > 0) {
+    fill(255, 100 + staggerPercent * 50, 50);
+    rect(hpBarX, hpBarY + 14, hpWidth * staggerPercent, 6, 3);
+  }
+  
+  drawDashCharges(enemy, panelX + 12, panelY + 24, hpWidth);
   pop();
 }
 

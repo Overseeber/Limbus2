@@ -901,7 +901,7 @@ class Fighter {
 
   executeAttack(opponent) {
 
-    // Update attack counter for 3-hit combo
+    // Update attack sequence counter for 1-3 rotation
     this.attackCounter = min(3, this.attackCounter + 1);
     this.attackCounterDisplay = this.attackCounter;
     this.attackCounterTimer = 1.0; // Show for 1 second
@@ -910,6 +910,8 @@ class Fighter {
     this.attackSequence = this.attackCounter;
     this.attackFrame = 0;
     this.attackFrameTimer = 0;
+    
+    // Combo is handled when the attack actually lands (in addCombo)
     this.attackDamageDealt = false;
     this.attackFrameDuration = 0.2;
     
@@ -1027,12 +1029,12 @@ class Fighter {
       }
       spawnDamageNumber(finalDamage, opponent.pos.copy(), this.facing, false);
       
-      // Ground slams build combo counter
+      // Ground slams build attack sequence counter (1-3 rotation)
       this.attackCounter = min(3, this.attackCounter + 1);
       this.attackCounterDisplay = this.attackCounter;
       this.attackCounterTimer = 1.0; // Show for 1 second
-      this.comboTimer = this.comboTimeout; // Reset combo timer
-      this.combo += 1;
+      
+      // Combo is handled by addCombo when opponent receives hit
     }
     
     // Hold slam position until input detected
@@ -1185,17 +1187,16 @@ class Fighter {
     }
     
     // Normal combo logic for non-ultimate
-    if (attacker === this && this.comboTimer > 0) {
-      console.log('[COMBO DEBUG] addCombo early return - same attacker with active timer');
+    // If this fighter is the attacker and already has an active combo, don't increase
+    if (this === attacker && this.comboTimer > 0) {
+      console.log('[COMBO DEBUG] addCombo early return - attacker with active combo');
       return;
     }
+    
+    // Otherwise, increase combo for this fighter (who was hit)
     this.comboTimer = this.comboTimeout;
-    this.combo += 1; // Actually increase the combo count
+    this.combo += 1;
     console.log('[COMBO DEBUG] addCombo completed - combo after:', this.combo);
-  }
-
-  hasStatus(type) {
-    return this.statuses.some((status) => status.type === type);
   }
 
   addStatus(type, count, potency) {

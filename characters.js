@@ -65,78 +65,148 @@ function loadSpriteAtlases() {
   atlases.valdisposal = loadImage("data/valencina/valdisposal.png");
   atlases.vslash1 = loadImage("data/valencina/vslash1.png");
   atlases.vslash2 = loadImage("data/valencina/vslash2.png");
+  
+  // Pre-cache sprite data after atlases start loading
+  precacheSpriteData();
 }
 
 // ==========================
-// 🧩 SPRITE DRAWING FUNCTION
+// 🧩 CACHED SPRITE DRAWING SYSTEM
 // ==========================
+
+// Cache for sprite calculations
+const SPRITE_CACHE = new Map();
+
+// Pre-resized sprite cache for common scales
+const RESIZED_SPRITE_CACHE = new Map();
+const COMMON_SCALES = [0.8, 1.0, 1.2, 1.5, 2.0];
+
+// Pre-calculate sprite data
+function precacheSpriteData() {
+  for (const [name, sprite] of Object.entries(SPRITES)) {
+    const sx = sprite.x * CELL;
+    const sy = sprite.y * CELL;
+    const sw = sprite.w * CELL;
+    const sh = sprite.h * CELL;
+    const offsetX = sprite.offsetX || 0;
+    const offsetY = sprite.offsetY || 0;
+    
+    SPRITE_CACHE.set(name, {
+      sprite, sx, sy, sw, sh, offsetX, offsetY,
+      img: null // Will be set when atlases load
+    });
+  }
+}
+
+// Get or create pre-resized sprite
+function getResizedSprite(name, scale) {
+  const cacheKey = `${name}_${scale}`;
+  
+  // Return cached version if exists
+  if (RESIZED_SPRITE_CACHE.has(cacheKey)) {
+    return RESIZED_SPRITE_CACHE.get(cacheKey);
+  }
+  
+  // Create new resized sprite
+  const cached = SPRITE_CACHE.get(name);
+  if (!cached || !cached.img) return null;
+  
+  const newWidth = cached.sw * scale;
+  const newHeight = cached.sh * scale;
+  
+  // Create offscreen graphics for resizing
+  const pg = createGraphics(newWidth, newHeight);
+  pg.image(cached.img, 0, 0, newWidth, newHeight, cached.sx, cached.sy, cached.sw, cached.sh);
+  
+  // Cache the resized version
+  const resizedSprite = {
+    img: pg,
+    width: newWidth,
+    height: newHeight,
+    offsetX: cached.offsetX * scale,
+    offsetY: cached.offsetY * scale
+  };
+  
+  RESIZED_SPRITE_CACHE.set(cacheKey, resizedSprite);
+  return resizedSprite;
+}
+
 function drawSprite(name, x, y) {
-  let s = SPRITES[name];
-  if (!s) {
-    console.error("Missing sprite definition:", name);
+  const cached = SPRITE_CACHE.get(name);
+  if (!cached) {
+    console.error("Missing cached sprite:", name);
     return null;
   }
   
-  let img = atlases[s.atlas];
+  let img = atlases[cached.sprite.atlas];
   if (!img) {
-    console.error("Missing atlas:", s.atlas);
+    console.error("Missing atlas:", cached.sprite.atlas);
     return null;
   }
-
-  const sx = s.x * CELL;
-  const sy = s.y * CELL;
-  const sw = s.w * CELL;
-  const sh = s.h * CELL;
-  const offsetX = s.offsetX || 0;
-  const offsetY = s.offsetY || 0;
+  
+  // Update cache with image reference
+  cached.img = img;
 
   push();
   translate(x, y);
   image(
     img,
-    -sw/2 + offsetX,
-    -sh + offsetY,
-    sw, sh,
-    sx, sy,
-    sw, sh
+    -cached.sw/2 + cached.offsetX,
+    -cached.sh + cached.offsetY,
+    cached.sw, cached.sh,
+    cached.sx, cached.sy,
+    cached.sw, cached.sh
   );
   pop();
   
-  return { width: sw, height: sh };
+  return { width: cached.sw, height: cached.sh };
 }
 
 function drawSpriteScaled(name, x, y, spriteScale = 1) {
-  const s = SPRITES[name];
-  if (!s) return null;
+  const cached = SPRITE_CACHE.get(name);
+  if (!cached) return null;
   
-  const img = atlases[s.atlas];
+  // Use pre-resized sprite for common scales
+  if (COMMON_SCALES.includes(spriteScale)) {
+    const resized = getResizedSprite(name, spriteScale);
+    if (resized) {
+      push();
+      translate(x, y);
+      image(
+        resized.img,
+        -resized.width/2 + resized.offsetX,
+        -resized.height + resized.offsetY,
+        resized.width, resized.height,
+        0, 0, resized.width, resized.height
+      );
+      pop();
+      return { width: resized.width, height: resized.height };
+    }
+  }
+  
+  // Fallback to runtime scaling for uncommon scales
+  let img = cached.img || atlases[cached.sprite.atlas];
   if (!img) return null;
-
-  const sx = s.x * CELL;
-  const sy = s.y * CELL;
-  const sw = s.w * CELL;
-  const sh = s.h * CELL;
-  const offsetX = s.offsetX || 0;
-  const offsetY = s.offsetY || 0;
 
   push();
   translate(x, y);
   
-  // Apply scale
+  // Only apply scale if needed
   if (spriteScale !== 1) {
     scale(spriteScale, spriteScale);
   }
+  
   image(
     img,
-    -sw/2 + offsetX,
-    -sh + offsetY,
-    sw, sh,
-    sx, sy,
-    sw, sh
+    -cached.sw/2 + cached.offsetX,
+    -cached.sh + cached.offsetY,
+    cached.sw, cached.sh,
+    cached.sx, cached.sy,
+    cached.sw, cached.sh
   );
   pop();
   
-  return { width: sw * spriteScale, height: sh * spriteScale };
+  return { width: cached.sw * spriteScale, height: cached.sh * spriteScale };
 }
 
 // Character roster system

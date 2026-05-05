@@ -66,6 +66,7 @@ function draw() {
     player.draw();
     enemy.draw();
     drawDamageNumbers();
+    drawParticles();
     
     // Draw ultimate damage counter
     if (ultimateActive && ultimateFighter) {
@@ -117,6 +118,7 @@ function updateBattle() {
   // Collision is handled in Fighter.cleanupPosition() method
 
   updateDamageNumbers(dt);
+  updateParticles(dt);
 
   if (player.isDead() || enemy.isDead()) {
     battleState = 'summary';

@@ -1436,6 +1436,9 @@ class Fighter {
   onSlamLanding(opponent) {
     if (!this.slamLandingHitbox) return;
     
+    // Spawn debris particles at slam landing point
+    spawnSlamDebris(this.slamLandingHitbox.x, this.slamLandingHitbox.y, 12);
+    
     // Calculate final damage with 50% bonus stagger damage
     const finalDamage = this.calculateDamage(this.slamLandingHitbox.damage, opponent);
     const staggerDamage = finalDamage * 0.5; // 50% of damage as stagger
@@ -1540,6 +1543,9 @@ class Fighter {
   receiveHit(amount, attacker, knockback) {
     if (this.isGuarding) {
       amount *= 0.45;
+      // Spawn guard sparks at impact point
+      spawnGuardSparks(this.pos.x, this.pos.y - 30, 8);
+      
       if (this.isCountering) {
         attacker.receiveHit(amount * 0.8, this, knockback * 0.8);
         this.isCountering = false;

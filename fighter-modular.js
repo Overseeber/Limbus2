@@ -544,32 +544,22 @@ class Fighter {
         // Simplified alpha calculation (no map)
         const alpha = effect.timer * 637.5; // 0.4 * 637.5 = 255
         
-        // Simplified color interpolation (no lerp)
-        const fadeProgress = 1 - (effect.timer / 0.4); // 0.4 second fade
-        const r = 255;
-        const g = 200 - (118 * fadeProgress); // 200 → 82
-        const b = 100 + (11 * fadeProgress);  // 100 → 111
-        
-        // Try to draw sprite with proper scaling and color tint
+        // Try to draw sprite with proper scaling and alpha fade
         const spriteInfo = SPRITES?.[effect.type];
         if (spriteInfo) {
-          // Apply alpha and color tint globally for sprite rendering
           push();
-          tint(r, g, b, alpha); // Apply color and alpha tint
-          drawSpriteScaled(effect.type, baseX + offsetX * facing, baseY + offsetY + 50, scaleFactor); 
+          // Apply alpha fade only and facing transformation
+          tint(255, 255, 255, alpha);
+          translate(baseX + offsetX * facing, baseY + offsetY + 50);
+          if (facing === -1) {
+            scale(-1, 1); // Flip horizontally when facing right
+          }
+          drawSpriteScaled(effect.type, 0, 0, scaleFactor); 
           pop();
         } else {
-          // Fallback: draw scaled slash effect with proper alpha and color tint
+          // Fallback: draw scaled slash effect
           push();
           scale(scaleFactor * facing, 1);
-          stroke(r, g, b, alpha);
-          strokeWeight(4);
-          line(-30 + offsetX, -15 + offsetY + 50, 30 + offsetX, 15 + offsetY + 50);
-          stroke(255, 255, 255, alpha * 0.8);
-          strokeWeight(2);
-          line(-25 + offsetX, -10 + offsetY + 50, 25 + offsetX, 10 + offsetY + 50);
-          
-          fill(r, g, b, alpha * 0.6);
           noStroke();
           ellipse(baseX + offsetX, baseY + offsetY + 50, 15, 15);
           pop();
@@ -582,32 +572,22 @@ class Fighter {
         // Simplified alpha calculation
         const alpha = effect.timer * 637.5;
         
-        // Simplified color interpolation
-        const fadeProgress = 1 - (effect.timer / 0.4);
-        const r = 255;
-        const g = 200 - (118 * fadeProgress);
-        const b = 100 + (11 * fadeProgress);
-        
-        // Try to draw sprite with proper scaling and color tint
+        // Try to draw sprite with proper scaling and alpha fade
         const spriteInfo = SPRITES?.[effect.type];
         if (spriteInfo) {
-          // Apply alpha and color tint globally for sprite rendering
           push();
-          tint(r, g, b, alpha); // Apply color and alpha tint
-          drawSpriteScaled(effect.type, baseX + offsetX * facing, baseY + offsetY - 30, scaleFactor);
+          // Apply alpha fade only and facing transformation
+          tint(255, 255, 255, alpha);
+          translate(baseX + offsetX * facing, baseY + offsetY - 30);
+          if (facing === -1) {
+            scale(-1, 1); // Flip horizontally when facing right
+          }
+          drawSpriteScaled(effect.type, 0, 0, scaleFactor);
           pop();
         } else {
-          // Fallback: draw scaled slash effect with proper alpha and color tint
+          // Fallback: draw scaled slash effect
           push();
           scale(scaleFactor * facing, 1);
-          stroke(r, g, b, alpha);
-          strokeWeight(4);
-          line(-30 + offsetX, -15 + offsetY, 30 + offsetX, 15 + offsetY);
-          stroke(255, 255, 255, alpha * 0.8);
-          strokeWeight(2);
-          line(-25 + offsetX, -10 + offsetY, 25 + offsetX, 10 + offsetY);
-          
-          fill(r, g, b, alpha * 0.6);
           noStroke();
           ellipse(baseX + offsetX, baseY + offsetY, 15, 15);
           pop();

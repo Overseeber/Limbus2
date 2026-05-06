@@ -1027,48 +1027,54 @@ class Fighter {
     const distance = opponent.pos.x - this.pos.x;
     const absDistance = abs(distance);
     
-    // Basic movement
-    this.ai.moveLeft = distance < -80;
-    this.ai.moveRight = distance > 80;
-    this.ai.moveUp = random() < 0.003 && absDistance < 220;
+    // AI completely disabled - enemy is mindless and non-reactive
+    this.ai.moveLeft = false;
+    this.ai.moveRight = false;
+    this.ai.moveUp = false;
     this.ai.moveDown = false;
     
     // Check if opponent is about to attack
     const opponentAttacking = opponent.strikeActive;
     const opponentInRange = absDistance < 150;
     
-    // Block when opponent is in attack range
-    if (opponentInRange) {
-      this.ai.defend = random() < 0.03;
-    } else {
-      this.ai.defend = false;
-    }
+    // All AI behavior disabled - enemy is mindless and non-reactive
+    this.ai.defend = false;
     
-    // Dash attack when in close range
-    if (absDistance < 100 && this.dashCharges > 0 && this.attackTimer <= 0 && random() < 0.03 && !this.ultimateActive && !opponent.ultimateActive) {
-      this.startDash();
-    }
+    // Dash attack disabled
+    // if (absDistance < 100 && this.dashCharges > 0 && this.attackTimer <= 0 && random() < 0.03 && !this.ultimateActive && !opponent.ultimateActive) {
+    //   this.startDash();
+    // }
     
-    // Regular attack when in range and not on cooldown and opponent is not staggered
+    // Regular attack disabled
     // Attack regardless of whether opponent is in front or behind
-    this.ai.attack = absDistance < 120 && this.attackTimer <= 0 && !opponentAttacking && opponent.state !== 'staggered' && random() < 0.05;
+    // this.ai.attack = absDistance < 120 && this.attackTimer <= 0 && !opponentAttacking && opponent.state !== 'staggered' && random() < 0.05;
     
-    if (this.ai.attack && !this.attackRequest && !this.ultimateActive && this.state !== 'ultimate') {
-      const distance = opponent.pos.x - this.pos.x;
-      const inRange = abs(distance) < this.attackRange && abs(this.pos.y - opponent.pos.y) < 50;
-      
-      if (inRange) {
-        // Turn to face opponent before attacking
-        this.facing = distance > 0 ? 1 : -1;
-        // Execute attack directly for AI (no need for request/release cycle)
-        this.attackSystem.executeAttack(opponent);
-      }
-    }
+    // AI attack execution completely disabled
+    // if (this.ai.attack && !this.attackRequest && !this.ultimateActive && this.state !== 'ultimate') {
+    //   const distance = opponent.pos.x - this.pos.x;
+    //   const inRange = abs(distance) < this.attackRange && abs(this.pos.y - opponent.pos.y) < 50;
+    //   
+    //   if (inRange) {
+    //     // Turn to face opponent before attacking
+    //       this.facing = distance > 0 ? 1 : -1;
+    //     // Execute attack directly for AI (no need for request/release cycle)
+    //       this.attackSystem.executeAttack(opponent);
+    //   }
+    // }
     
+    // AI as human player controller - basic input handling
     if (this.ai.defend) {
       this.requestGuard(opponent);
     } else {
       this.releaseGuard();
+    }
+    
+    // Basic AI input simulation for testing
+    if (random() < 0.02) { // 2% chance to attack
+      this.attackRelease = true;
+    }
+    if (random() < 0.01) { // 1% chance to dash
+      this.startDash();
     }
   }
 

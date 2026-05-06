@@ -603,17 +603,14 @@ class Fighter {
     
     // Disable player movement during ultimate
     if (this.ultimateActive) {
-      this.ai.moveLeft = false;
-      this.ai.moveRight = false;
-      this.ai.moveUp = false;
-      this.ai.moveDown = false;
       return;
     }
     
-    this.ai.moveLeft = keyIsDown(this.controls.left.toUpperCase().charCodeAt(0));
-    this.ai.moveRight = keyIsDown(this.controls.right.toUpperCase().charCodeAt(0));
-    this.ai.moveUp = keyIsDown(this.controls.up.toUpperCase().charCodeAt(0));
-    this.ai.moveDown = keyIsDown(this.controls.down.toUpperCase().charCodeAt(0));
+    // AI properties should only be set in AI functions
+    // this.ai.moveLeft = keyIsDown(this.controls.left.toUpperCase().charCodeAt(0));
+    // this.ai.moveRight = keyIsDown(this.controls.right.toUpperCase().charCodeAt(0));
+    // this.ai.moveUp = keyIsDown(this.controls.up.toUpperCase().charCodeAt(0));
+    // this.ai.moveDown = keyIsDown(this.controls.down.toUpperCase().charCodeAt(0));
   }
 
   processKeyPressed(keyValue) {
@@ -635,6 +632,9 @@ class Fighter {
       if (this.attackRequest && !this.onGround()) {
         this.slamAttackRequested = true;
       }
+    }
+    if (keyLower === this.controls.attack) {
+      this.requestAttack();
     }
     if (keyLower === this.controls.evade) {
       this.requestEvade();
@@ -1028,14 +1028,13 @@ class Fighter {
     const absDistance = abs(distance);
     
     // AI completely disabled - enemy is mindless and non-reactive
+    // All AI properties set to false to ensure truly passive behavior
     this.ai.moveLeft = false;
     this.ai.moveRight = false;
     this.ai.moveUp = false;
     this.ai.moveDown = false;
-    
-    // Check if opponent is about to attack
-    const opponentAttacking = opponent.strikeActive;
-    const opponentInRange = absDistance < 150;
+    this.ai.attack = false;
+    this.ai.defend = false;
     
     // All AI behavior disabled - enemy is mindless and non-reactive
     this.ai.defend = false;
@@ -1088,13 +1087,22 @@ class Fighter {
     }
 
     let moveDir = 0;
-    if (this.ai.moveLeft) moveDir -= 1;
-    if (this.ai.moveRight) moveDir += 1;
+    
+    // Only process AI movement if AI is enabled
+    if (this.isAI) {
+      if (this.ai.moveLeft) moveDir -= 1;
+      if (this.ai.moveRight) moveDir += 1;
+    } else {
+      // For player, check actual input (not AI properties)
+      if (keyIsDown(this.controls.left.toUpperCase().charCodeAt(0))) moveDir -= 1;
+      if (keyIsDown(this.controls.right.toUpperCase().charCodeAt(0))) moveDir += 1;
+    }
 
     if (moveDir !== 0) {
       this.facing = moveDir;
     }
 
+    // Movement should work for both player and AI
     if (!this.isDashing) {
       this.vel.x = moveDir * this.speed;
     }
@@ -1231,9 +1239,7 @@ class Fighter {
 
     if (this.isGuarding && this.state !== 'staggered') {
       this.setState('guard');
-      if (this.ai.defend && random() < 0.02) {
-        this.isCountering = true;
-      }
+      // AI defend property should only be set in AI functions
     }
     
     // Cancel guard when attack is requested

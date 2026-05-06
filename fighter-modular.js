@@ -1,7 +1,8 @@
 class Fighter {
-  constructor(isAI = false, name = 'Enemy', characterKey = null) {
+  constructor(isAI = false, name = 'Enemy', characterKey = null, isPlayerControlled = false) {
     this.isAI = isAI;
     this.name = name;
+    this.isPlayerControlled = isPlayerControlled;
     // Safe character selection with fallback
     const fallbackCharacter = (typeof currentCharacter !== 'undefined' ? currentCharacter : 'VALENCINA');
     this.characterKey = characterKey || (isAI ? 'VALENCINA' : fallbackCharacter);
@@ -597,7 +598,7 @@ class Fighter {
   }
 
   handleInput() {
-    if (this.isAI || !this.controls) {
+    if (this.isAI || !this.controls || !this.isPlayerControlled) {
       return;
     }
     
@@ -1092,11 +1093,12 @@ class Fighter {
     if (this.isAI) {
       if (this.ai.moveLeft) moveDir -= 1;
       if (this.ai.moveRight) moveDir += 1;
-    } else {
-      // For player, check actual input (not AI properties)
+    } else if (this.isPlayerControlled) {
+      // For player-controlled fighter, check actual input (not AI properties)
       if (keyIsDown(this.controls.left.toUpperCase().charCodeAt(0))) moveDir -= 1;
       if (keyIsDown(this.controls.right.toUpperCase().charCodeAt(0))) moveDir += 1;
     }
+    // If not AI and not player-controlled, don't move (for second player control later)
 
     if (moveDir !== 0) {
       this.facing = moveDir;
@@ -1537,7 +1539,7 @@ class Fighter {
       return;
     }
 
-    if (this.state === 'hit' || this.hitCooldown > 0) {
+    if (this.hitCooldown > 0) {
       return;
     }
 

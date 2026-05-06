@@ -269,7 +269,7 @@ const CHARACTERS = {
     name: 'Valencina',
     title: 'The Accelerating Future',
     hp: 3204,
-    speed: 3,                    // Updated from 9 to 3
+    speed: 9,                    // Updated from 9 to 3
     attackInterval: 1,          // Updated from 0.5 to 1 sec
     baseDamage: 21,
     staggerThreshold: 1300,

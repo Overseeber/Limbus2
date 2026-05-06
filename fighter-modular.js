@@ -1438,7 +1438,7 @@ class Fighter {
   }
 
   resolveAttack(opponent) {
-    this.attackHitResolved = true;
+    // Don't set attackHitResolved immediately - only set when damage lands
     if (!this.strikeActive) {
       return;
     }
@@ -1463,6 +1463,7 @@ class Fighter {
       }
       
       this.onSuccessfulHit(finalDamage, opponent);
+      this.attackHitResolved = true; // Only set when damage actually lands
     }
   }
 

@@ -94,9 +94,9 @@ function addScreenShake(damage, isUltimate = false) {
   
   if (isUltimate) {
     // Ultimate attacks: capped at 30 damage
-    // 5 damage = 0.5 shake, 30 damage = 6 shake (max)
+    // 5 damage = 1 shake, 30 damage = 12 shake (max) - DOUBLED INTENSITY
     const cappedDamage = min(damage, 30);
-    shakeAmount = map(cappedDamage, 5, 30, 0.5, 6, true);
+    shakeAmount = map(cappedDamage, 5, 30, 1, 12, true);
     isUltimateShake = true;
   } else {
     // Regular attacks: capped at 30 damage

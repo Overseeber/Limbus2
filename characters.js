@@ -506,7 +506,7 @@ const CHARACTERS = {
     applyAcceleratingFuture: function(fighter) {
       // For every 1 combo: Gain 1 movement speed (max +5), Lower attack interval by 5% (max -50%)
       const speedBuff = Math.min(fighter.combo, 5); // Cap speed buff at +5
-      fighter.speed = 3 + speedBuff; // Base 3 + buff (max 8)
+      fighter.speed = 9 + speedBuff; // Base 9 + buff (max 14)
       
       const intervalReduction = Math.min(fighter.combo * 0.05, 0.5); // Cap reduction at 50%
       fighter.attackInterval = 1 * (1 - intervalReduction); // Base 1 second
@@ -1160,6 +1160,11 @@ const CHARACTERS = {
       
       // Apply damage with custom knockback
       opponent.receiveHit(damage, fighter, knockbackAmount);
+      
+      // Add doubled ultimate screenshake
+      if (typeof addScreenShake === 'function') {
+        addScreenShake(damage, true); // isUltimate = true for doubled intensity
+      }
       
       // ENFORCE BOUNDARIES AFTER KNOCKBACK - PREVENT CLIPPING
       this.enforceBoundaries(opponent);

@@ -269,8 +269,8 @@ const CHARACTERS = {
     name: 'Valencina',
     title: 'The Accelerating Future',
     hp: 3204,
-    speed: 9,                    // Updated from 9 to 3
-    attackInterval: 1,          // Updated from 0.5 to 1 sec
+    speed: 9,
+    attackInterval: 1,
     baseDamage: 21,
     staggerThreshold: 1300,
     staggerLength: 5,
@@ -287,6 +287,7 @@ const CHARACTERS = {
     maxOverheat: 30,             // Maximum overheat
     combo: 0,                    // Current combo counter
     shinActive: false,           // Shin (心) - Valencina status
+    knockbackMultiplier: 1.0,    // 100% knockback
     protection: 0,               // Protection stacks
     poiseCount: 0,               // Poise count
     poisePotency: 0,             // Poise potency
@@ -309,16 +310,16 @@ const CHARACTERS = {
       // Track last hit opponent for Time to Hunt ability
       fighter.lastHitOpponent = opponent;
       
-      // 🎯 ON HIT: Inflict 2 burn potency and count
+      // ON HIT: Inflict 2 burn potency and count
       opponent.addStatus('Burn', 2, 2);
-      // 🎯 ON HIT: Inflict 2 tremor potency and count
+      // ON HIT: Inflict 2 tremor potency and count
       opponent.addStatus('Tremor', 2, 2);
       
-      // 🔄 Accelerating Future: Gain combo and apply effects
+      // Accelerating Future: Gain combo and apply effects
       fighter.combo++;
       this.applyAcceleratingFuture(fighter);
       
-      // 👁️ Eye of Precognition: Gain 1 precognition on hit
+      // Eye of Precognition: Gain 1 precognition on hit
       if (fighter.precognition < fighter.maxPrecognition) {
         fighter.precognition++;
       }
@@ -492,6 +493,14 @@ const CHARACTERS = {
       // For every 1 combo: Gain 1 movement speed, Lower attack interval by 5%
       fighter.speed += fighter.combo * 1;
       fighter.attackInterval *= (1 - fighter.combo * 0.05);
+      // Cap attack interval reduction to 50%
+      if (fighter.attackInterval < 0.5) {
+        fighter.attackInterval = 0.5;
+      }
+      // Cap movement speed buff from accelerating future to 5
+      if (fighter.speed > 9) {
+        fighter.speed = 9;
+      }
     },
     
     // ❤️ Shin (心) - Valencina passive

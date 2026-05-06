@@ -20,14 +20,14 @@ function setup() {//test
   createCanvas(ARENA_WIDTH, ARENA_HEIGHT);
   document.oncontextmenu = () => false;
   // Initialize fighters
-  player = new Fighter(false, 'Player', 'VALENCINA');
-  enemy = new Fighter(true, 'Enemy');
+  player = new Fighter(true, 'Player', 'VALENCINA');
+  enemy = new Fighter(true, 'Enemy', 'JOHN');
   initBattle();
 }
 
 function initBattle() {
-  player = new Fighter(false, 'Player', 'VALENCINA');
-  enemy = new Fighter(true, 'Enemy');
+  player = new Fighter(true, 'Player', 'VALENCINA');
+  enemy = new Fighter(true, 'Enemy', 'JOHN');
 
   battleState = 'ready';
   winner = null;
@@ -110,7 +110,7 @@ function updateBattle() {
   if (!player.ultimateActive) {
     player.handleInput();
   }
-  enemy.updateAI(player);
+//  enemy.updateAI(player);
 
   player.update(dt, enemy);
   enemy.update(dt, player);

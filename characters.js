@@ -269,7 +269,7 @@ const CHARACTERS = {
     name: 'Valencina',
     title: 'The Accelerating Future',
     hp: 3204,
-    speed: 9,
+    speed: 3,
     attackInterval: 1,
     baseDamage: 21,
     staggerThreshold: 1300,
@@ -393,10 +393,12 @@ const CHARACTERS = {
     useTimeToHunt: function(fighter) {
       if (!fighter.lastHitOpponent) return;
       
-      // Apply Game Target status to opponent
+      // Apply Game Target status to opponent (duration: 5 hits or 10 sec, whichever comes first)
       fighter.lastHitOpponent.gameTimeTarget = true;
       fighter.lastHitOpponent.speed = 1; // Set speed to 1
       fighter.lastHitOpponent.gameTargetDuration = 10; // 10 seconds
+      fighter.lastHitOpponent.gameTargetHits = 5; // 5 hits
+      fighter.lastHitOpponent.gameTargetHitsTaken = 0; // Track hits received
       
       fighter.timeToHuntCooldown = 15; // 15 second cooldown
       console.log('⚡ Time to Hunt activated!');
@@ -439,13 +441,19 @@ const CHARACTERS = {
     
     // 👁️ Eye of Precognition system
     updatePrecognition: function(fighter, dt) {
-      // Check for passive evade chance
+      // Check for passive evade chance (3% x current precognition, max 90%)
       if (fighter.precognition > 0 && !fighter.isEvading) {
-        const evadeChance = Math.min(0.03 * 30, 0.9); // 3% x 30 = 90% max
+        const evadeChance = Math.min(0.03 * fighter.precognition, 0.9); // 3% per precognition count, max 90%
         if (Math.random() < evadeChance) {
           // Trigger precognition evade
           fighter.triggerEvade();
           fighter.precognition--;
+          
+          // Acceleration Round reload: once per precognition stage
+          if (fighter.accelerationRounds < fighter.maxAccelerationRounds) {
+            fighter.accelerationRounds++;
+            console.log(`🔄 Acceleration Round reloaded on evade! Stack: ${fighter.accelerationRounds}`);
+          }
         }
       }
       
@@ -490,16 +498,15 @@ const CHARACTERS = {
     
     // 🔄 Accelerating Future passive
     applyAcceleratingFuture: function(fighter) {
-      // For every 1 combo: Gain 1 movement speed, Lower attack interval by 5%
-      fighter.speed += fighter.combo * 1;
-      fighter.attackInterval *= (1 - fighter.combo * 0.05);
-      // Cap attack interval reduction to 50%
-      if (fighter.attackInterval < 0.5) {
-        fighter.attackInterval = 0.5;
-      }
-      // Cap movement speed buff from accelerating future to 5
-      if (fighter.speed > 9) {
-        fighter.speed = 9;
+      // For every 1 combo: Gain 1 movement speed (max +5), Lower attack interval by 5% (max -50%)
+      const speedBuff = Math.min(fighter.combo, 5); // Cap speed buff at +5
+      fighter.speed = 3 + speedBuff; // Base 3 + buff (max 8)
+      
+      const intervalReduction = Math.min(fighter.combo * 0.05, 0.5); // Cap reduction at 50%
+      fighter.attackInterval = 1 * (1 - intervalReduction); // Base 1 second
+      
+      if (fighter.addStatus) {
+        fighter.addStatus('Accelerating Future', fighter.combo, 1);
       }
     },
     
@@ -508,6 +515,11 @@ const CHARACTERS = {
       if (fighter.hp < fighter.maxHp * 0.5 && !fighter.shinActive) {
         fighter.shinActive = true;
         fighter.protection = 1; // Gain 1 protection (10% damage reduction)
+        
+        if (fighter.addStatus) {
+          fighter.addStatus('Shin (心) - Valencina', 999, 1); // Permanent until HP restored
+          console.log('❤️ Shin (心) - Valencina status applied!');
+        }
         console.log('❤️ Shin (心) - Valencina activated!');
       }
     },
@@ -1177,6 +1189,291 @@ const CHARACTERS = {
       fighter.ultimateTotalDamage += damage;
       fighter.ultimateDamageDealt += damage;
       console.log('[ULTIMATE DEBUG] Damage applied - total:', fighter.ultimateTotalDamage);
+    }
+  },
+  KIT: {
+    name: 'Kit',
+    title: 'The Blade Master',
+    hp: 3200,
+    speed: 3,
+    attackInterval: 1,
+    baseDamage: 21,
+    staggerThreshold: 1300,
+    staggerLength: 5,
+    color: '#c0392b',
+    weapon: 'La Spada di Palermo',
+    spriteType: 'atlas',
+    
+    // 🎯 KIT'S UNIQUE ABILITIES
+    accelerationRounds: 0,        // Current acceleration round stacks
+    maxAccelerationRounds: 10,    // Maximum acceleration round stacks
+    poiseCount: 0,               // Poise count
+    poisePotency: 0,             // Poise potency
+    burnPotency: 0,              // Burn potency
+    burnCount: 0,                // Burn count
+    tremorPotency: 0,            // Tremor potency
+    tremorCount: 0,              // Tremor count
+    combo: 0,                    // Current combo counter
+    gameTimeTarget: false,       // Game target status
+    accelerationActive: false,   // Acceleration round active
+    timeToHuntCooldown: 0,       // Time to Hunt cooldown
+    disposialActive: false,      // Disposial ultimate active
+    disposialPhase: 0,           // Disposial phase (1-5)
+    lastEvadeTime: 0,            // Last evade time
+    lastHitTime: 0,              // Last hit time
+    lastHitOpponent: null,       // Last opponent hit
+    
+    // Character-specific methods
+    onSuccessfulHit: function(damage, opponent, fighter) {
+      if (!opponent) return;
+      
+      // Track last hit opponent for Time to Hunt ability
+      fighter.lastHitOpponent = opponent;
+      
+      // ON HIT: Inflict 2 burn potency and count
+      opponent.addStatus('Burn', 2, 2);
+      // ON HIT: Inflict 2 tremor potency and count
+      opponent.addStatus('Tremor', 2, 2);
+      
+      // Gain combo
+      fighter.combo++;
+    },
+    
+    onReceiveHit: function(amount, attacker, fighter) {
+      // Default implementation
+    },
+    
+    onUpdate: function(dt, opponent, fighter) {
+      // Update cooldowns
+      this.updateTimeToHuntCooldown(fighter, dt);
+    },
+    
+    processKeyPressed: function(key, fighter) {
+      // ⚡ Time to Hunt ability (Q key)
+      if (key === 'q' && fighter.timeToHuntCooldown <= 0) {
+        this.useTimeToHunt(fighter);
+      }
+      
+      // 🚀 Acceleration Round activation (E key)
+      if (key === 'e' && fighter.accelerationRounds > 0) {
+        this.useAccelerationRound(fighter);
+      }
+    },
+    
+    initializeCharacter: function(fighter) {
+      // 🎯 Initialize Kit's unique properties
+      fighter.weapon = this.weapon;
+      fighter.accelerationRounds = 0;
+      fighter.combo = 0;
+      fighter.poiseCount = 0;
+      fighter.poisePotency = 0;
+      fighter.burnPotency = 0;
+      fighter.burnCount = 0;
+      fighter.tremorPotency = 0;
+      fighter.tremorCount = 0;
+      fighter.gameTimeTarget = false;
+      fighter.accelerationActive = false;
+      fighter.timeToHuntCooldown = 0;
+      fighter.disposialActive = false;
+      fighter.disposialPhase = 0;
+      fighter.lastEvadeTime = Date.now();
+      fighter.lastHitTime = Date.now();
+      fighter.lastHitOpponent = null;
+    },
+    
+    // ⚡ Time to Hunt - Q key ability
+    useTimeToHunt: function(fighter) {
+      if (!fighter.lastHitOpponent) return;
+      
+      // Apply Game Target status to opponent
+      fighter.lastHitOpponent.addStatus('Game Target', 10, 1);
+      fighter.lastHitOpponent.speed = 1; // Set speed to 1
+      console.log('⚡ Time to Hunt activated! Target speed set to 1 for 10 seconds');
+      
+      fighter.timeToHuntCooldown = 15; // 15 second cooldown
+    },
+    
+    // 🚀 Acceleration Round ability
+    useAccelerationRound: function(fighter) {
+      if (fighter.accelerationRounds >= fighter.maxAccelerationRounds) return;
+      
+      fighter.accelerationRounds++;
+      fighter.accelerationActive = true;
+      
+      // Range +100%
+      fighter.attackRange *= 2;
+      
+      // Deal +30% damage (150% against shields)
+      fighter.baseDamage *= 1.3;
+      
+      // Gain 4 poise count and potency
+      fighter.poiseCount += 4;
+      fighter.poisePotency += 4;
+      
+      // Trigger tremor burst
+      this.triggerTremorBurst(fighter);
+      
+      if (fighter.addStatus) {
+        fighter.addStatus('Acceleration Rounds', fighter.accelerationRounds, 1);
+        console.log(`🚀 Acceleration Rounds status: ${fighter.accelerationRounds} stacks`);
+      }
+      
+      console.log(`🚀 Acceleration Round activated! Stack: ${fighter.accelerationRounds}`);
+    },
+    
+    // 💥 Trigger Tremor Burst
+    triggerTremorBurst: function(fighter) {
+      const damage = Math.floor((fighter.burnPotency + fighter.tremorPotency) / 2);
+      if (fighter.lastHitOpponent && damage > 0) {
+        fighter.lastHitOpponent.takeDamage(damage);
+        console.log(`💥 Tremor Burst dealt ${damage} damage!`);
+      }
+    },
+    
+    // 🔄 Update cooldowns
+    updateTimeToHuntCooldown: function(fighter, dt) {
+      if (fighter.timeToHuntCooldown > 0) {
+        fighter.timeToHuntCooldown -= dt;
+      }
+    },
+    
+    // ⚡ Disposial Ultimate
+    activateUltimate: function(fighter, opponent) {
+      fighter.ultimateActive = true;
+      fighter.ultimatePhase = 0;
+      fighter.ultimateTimer = 1; // 1 second initial pose
+      fighter.ultimateTotalDamage = 0;
+      fighter.ultimateDamageDealt = 0;
+      
+      // Gain 3 poise count and 5 poise potency
+      fighter.poiseCount += 3;
+      fighter.poisePotency += 5;
+      
+      // Set ultimate properties
+      fighter.ultimateName = "DISPOSIAL";
+      fighter.ultimateDialogue = "It's time to dispose of you!";
+      
+      // Set opponent as protected during ultimate
+      if (opponent) {
+        opponent.ultimateProtected = true;
+        opponent.setState('idle');
+      }
+      
+      console.log('⚡ DISPOSIAL ULTIMATE ACTIVATED!');
+    },
+    
+    updateUltimate: function(fighter, opponent, dt) {
+      if (!fighter.ultimateActive) return;
+      
+      // Disposial Attack Sequence:
+      // Attack 1: inflict 3 burn and tremor potency
+      // Attack 2: inflict 3 burn and tremor potency
+      // Attack 3: inflict 6 burn and tremor count
+      // Attack 4: trigger tremor burst
+      // Attack 5: trigger tremor burst and deal [(burn potency + tremor potency)/2] damage 3 times
+      
+      fighter.ultimateTimer -= dt;
+      
+      if (fighter.ultimatePhase === 0 && fighter.ultimateTimer <= 0) {
+        // Start attack sequence
+        fighter.ultimatePhase = 1;
+        fighter.ultimateTimer = 0.3;
+        fighter.ultimateAttackFrame = 0;
+      }
+      
+      if (fighter.ultimatePhase === 1) {
+        // Attack 1: inflict 3 burn and 3 tremor potency
+        if (fighter.ultimateAttackFrame === 0) {
+          if (opponent) {
+            opponent.addStatus('Burn', 0, 3); // potency only
+            opponent.addStatus('Tremor', 0, 3);
+          }
+          fighter.ultimateAttackFrame++;
+          fighter.ultimateTimer = 0.2;
+        } else if (fighter.ultimateTimer <= 0) {
+          fighter.ultimatePhase = 2;
+          fighter.ultimateTimer = 0.2;
+          fighter.ultimateAttackFrame = 0;
+        }
+      }
+      
+      if (fighter.ultimatePhase === 2) {
+        // Attack 2: inflict 3 burn and 3 tremor potency
+        if (fighter.ultimateAttackFrame === 0) {
+          if (opponent) {
+            opponent.addStatus('Burn', 0, 3);
+            opponent.addStatus('Tremor', 0, 3);
+          }
+          fighter.ultimateAttackFrame++;
+          fighter.ultimateTimer = 0.2;
+        } else if (fighter.ultimateTimer <= 0) {
+          fighter.ultimatePhase = 3;
+          fighter.ultimateTimer = 0.2;
+          fighter.ultimateAttackFrame = 0;
+        }
+      }
+      
+      if (fighter.ultimatePhase === 3) {
+        // Attack 3: inflict 6 burn and tremor count
+        if (fighter.ultimateAttackFrame === 0) {
+          if (opponent) {
+            opponent.addStatus('Burn', 6, 0); // count only
+            opponent.addStatus('Tremor', 6, 0);
+          }
+          fighter.ultimateAttackFrame++;
+          fighter.ultimateTimer = 0.2;
+        } else if (fighter.ultimateTimer <= 0) {
+          fighter.ultimatePhase = 4;
+          fighter.ultimateTimer = 0.2;
+          fighter.ultimateAttackFrame = 0;
+        }
+      }
+      
+      if (fighter.ultimatePhase === 4) {
+        // Attack 4: trigger tremor burst
+        if (fighter.ultimateAttackFrame === 0) {
+          this.triggerTremorBurst(fighter);
+          fighter.ultimateAttackFrame++;
+          fighter.ultimateTimer = 0.2;
+        } else if (fighter.ultimateTimer <= 0) {
+          fighter.ultimatePhase = 5;
+          fighter.ultimateTimer = 0.2;
+          fighter.ultimateAttackFrame = 0;
+        }
+      }
+      
+      if (fighter.ultimatePhase === 5) {
+        // Attack 5: trigger tremor burst 3 times and deal damage
+        if (fighter.ultimateAttackFrame < 3) {
+          if (fighter.ultimateTimer <= 0) {
+            this.triggerTremorBurst(fighter);
+            const damage = Math.floor((fighter.burnPotency + fighter.tremorPotency) / 2);
+            if (opponent) {
+              opponent.takeDamage(damage);
+            }
+            fighter.ultimateAttackFrame++;
+            fighter.ultimateTimer = 0.2;
+          }
+        } else if (fighter.ultimateTimer <= 0) {
+          // End ultimate
+          fighter.ultimateActive = false;
+          fighter.disposialActive = false;
+          if (opponent) {
+            opponent.ultimateProtected = false;
+          }
+        }
+      }
+    },
+    
+    calculateDamage: function(baseDamage) {
+      // Calculate damage with combo bonus
+      const comboMultiplier = 1 + (this.combo * 0.1);
+      return Math.floor(baseDamage * comboMultiplier);
+    },
+    
+    addCombo: function(fighter) {
+      // Add combo to fighter
+      fighter.combo = (fighter.combo || 0) + 1;
     }
   }
 };

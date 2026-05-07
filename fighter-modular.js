@@ -1325,7 +1325,7 @@ class Fighter {
           const burnStatus = this.statuses.find((s) => s.type === 'Burn');
           const damage = (burnStatus?.potency || 0 + tremorStatus.potency) / 2;
           opponent.hp -= damage;
-          spawnDamageNumber(damage, opponent.pos.copy(), this.facing, false);
+          spawnDamageNumber(damage, opponent.pos.copy(), this.facing, false, 'tremor', false, 'slam');
           
           // Tremor bursts are impactful - add screen shake
           if (typeof addScreenShake === 'function' && damage > 0) {
@@ -1436,7 +1436,7 @@ class Fighter {
       if (opponent.state !== 'staggered') {
         opponent.stagger += staggerDamage;
       }
-      spawnDamageNumber(finalDamage, opponent.pos.copy(), this.facing, false);
+      spawnDamageNumber(finalDamage, opponent.pos.copy(), this.facing, false, 'normal', false, 'slam');
       
       // Ground slams build attack sequence counter (1-3 rotation)
       this.attackCounter = min(3, this.attackCounter + 1);
@@ -1562,7 +1562,7 @@ class Fighter {
 
     this.hp -= amount;
     const wasGuarding = this.isGuarding;
-    spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding);
+    spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding, 'normal', false, 'normal');
     
     // Add screen shake based on damage
     if (typeof addScreenShake === 'function') {
@@ -1766,7 +1766,7 @@ addCombo(attacker) {
         status.count -= 1;
         if (type === 'Rupture') {
           this.hp -= status.potency;
-          spawnDamageNumber(status.potency, this.pos.copy(), 1, false);
+          spawnDamageNumber(status.potency, this.pos.copy(), 1, false, 'rupture', false, 'status');
           
           // Status effects don't cause screen shake (only direct combat damage)
         }
@@ -1795,7 +1795,7 @@ addCombo(attacker) {
           status.timer = 0;
           status.count -= 1;
           this.hp -= status.potency;
-          spawnDamageNumber(status.potency, this.pos.copy(), 1, false);
+          spawnDamageNumber(status.potency, this.pos.copy(), 1, false, 'burn', false, 'status');
           
           // Status effects don't cause screen shake (only direct combat damage)
         }
@@ -2381,7 +2381,7 @@ addCombo(attacker) {
     
     if (damage > 0) {
       this.hp -= damage;
-      spawnDamageNumber(damage, this.pos.copy(), 1, false);
+      spawnDamageNumber(damage, this.pos.copy(), 1, false, 'tremor', false, 'status');
       
       // Tremor bursts are impactful - add screen shake
       if (typeof addScreenShake === 'function') {

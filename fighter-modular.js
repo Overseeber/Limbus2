@@ -1539,9 +1539,7 @@ class Fighter {
       return;
     }
 
-    if (this.hitCooldown > 0) {
-      return;
-    }
+    // hitCooldown removed to allow consecutive hits
 
     // Ultimate protection - prevent HP reduction until final attack
     if (this.ultimateProtected) {
@@ -1682,10 +1680,6 @@ receiveHit(amount, attacker, knockback) {
 
   if (this.isEvading) {
     spawnEvadeIndicator(this.pos.copy());
-    return;
-  }
-
-  if (this.state === 'hit' || this.hitCooldown > 0) {
     return;
   }
 

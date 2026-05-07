@@ -19,14 +19,14 @@ function setup() {//test
   createCanvas(ARENA_WIDTH, ARENA_HEIGHT);
   document.oncontextmenu = () => false;
   // Initialize fighters
-  player = new Fighter(false, 'Player', 'VALENCINA', false);
-  enemy = new Fighter(false, 'Enemy', 'VALENCINA', true);
+  player = new Fighter(true, 'Player', 'VALENCINA', false);
+  enemy = new Fighter(true, 'Enemy', 'VALENCINA', false);
   initBattle();
 }
 
 function initBattle() {
-  player = new Fighter(false, 'Player', 'VALENCINA', false);
-  enemy = new Fighter(false, 'Enemy', 'VALENCINA', true);
+  player = new Fighter(true, 'Player', 'VALENCINA', false);
+  enemy = new Fighter(true, 'Enemy', 'VALENCINA', false);
 
   battleState = 'ready';
   winner = null;
@@ -66,6 +66,9 @@ function draw() {
     enemy.draw();
     drawDamageNumbers();
     drawParticles();
+    
+    // Draw overhead healthbar for non-player fighter
+    drawOverheadHealthbar();
     
     // Draw ultimate damage counter
     if (ultimateActive && ultimateFighter) {

@@ -28,12 +28,15 @@ function drawHud() {
 }
 
 function drawPlayerHud() {
+  const controlledFighter = getPlayerControlledFighter();
+  if (!controlledFighter) return;
+  
   const panelX = 16;
   const panelY = height - 148;
   const panelWidth = 240;
   const panelHeight = 132;
-  const comboSize = 16 + min(18, player.combo * 1.5);
-  const comboRatio = constrain(player.comboTimer / player.comboTimeout, 0, 1);
+  const comboSize = 16 + min(18, controlledFighter.combo * 1.5);
+  const comboRatio = constrain(controlledFighter.comboTimer / controlledFighter.comboTimeout, 0, 1);
 
   push();
   fill(20, 180);
@@ -43,7 +46,7 @@ function drawPlayerHud() {
   fill(255);
   textAlign(LEFT, TOP);
   textSize(comboSize);
-  text(`Combo: ${player.combo}`, panelX + 12, panelY + 12);
+  text(`Combo: ${controlledFighter.combo}`, panelX + 12, panelY + 12);
   textSize(12);
   fill('#222');
   rect(panelX + 12, panelY + 12 + comboSize + 8, panelWidth - 24, 10, 5);
@@ -52,9 +55,9 @@ function drawPlayerHud() {
 
   fill(255);
   textSize(14);
-  text(`Name: ${player.name}`, panelX + 12, panelY + 52);
-  text(`HP: ${player.hp.toFixed(0)} / ${player.maxHp}`, panelX + 12, panelY + 72);
-  text(`State: ${player.state}`, panelX + 12, panelY + 92);
+  text(`Name: ${controlledFighter.name}`, panelX + 12, panelY + 52);
+  text(`HP: ${controlledFighter.hp.toFixed(0)} / ${controlledFighter.maxHp}`, panelX + 12, panelY + 72);
+  text(`State: ${controlledFighter.state}`, panelX + 12, panelY + 92);
 
   const hpBarX = panelX + 12;
   const hpBarY = panelY + 110;
@@ -62,28 +65,37 @@ function drawPlayerHud() {
   fill('#222');
   rect(hpBarX, hpBarY, hpWidth, 8, 4);
   fill('#42d492');
-  rect(hpBarX, hpBarY, hpWidth * (player.hp / player.maxHp), 8, 4);
+  rect(hpBarX, hpBarY, hpWidth * (controlledFighter.hp / controlledFighter.maxHp), 8, 4);
   
   // Stagger Bar
   fill('#222');
   rect(hpBarX, hpBarY + 14, hpWidth, 6, 3);
-  const staggerPercent = constrain(player.stagger / player.staggerThreshold, 0, 1);
+  const staggerPercent = constrain(controlledFighter.stagger / controlledFighter.staggerThreshold, 0, 1);
   if (staggerPercent > 0) {
     fill(255, 100 + staggerPercent * 50, 50);
     rect(hpBarX, hpBarY + 14, hpWidth * staggerPercent, 6, 3);
   }
   
-  drawDashCharges(player, hpBarX, hpBarY + 24, hpWidth);
+  drawDashCharges(controlledFighter, hpBarX, hpBarY + 24, hpWidth);
   pop();
 }
 
+function getOpponentFighter() {
+  const controlledFighter = getPlayerControlledFighter();
+  if (!controlledFighter) return null;
+  return controlledFighter === player ? enemy : player;
+}
+
 function drawEnemyHud() {
+  const opponentFighter = getOpponentFighter();
+  if (!opponentFighter) return;
+  
   const panelX = width - 256;
   const panelY = 16;
   const panelWidth = 240;
   const panelHeight = 132;
-  const comboSize = 16 + min(18, enemy.combo * 1.5);
-  const comboRatio = constrain(enemy.comboTimer / enemy.comboTimeout, 0, 1);
+  const comboSize = 16 + min(18, opponentFighter.combo * 1.5);
+  const comboRatio = constrain(opponentFighter.comboTimer / opponentFighter.comboTimeout, 0, 1);
 
   push();
   fill(20, 180);
@@ -93,7 +105,7 @@ function drawEnemyHud() {
   fill(255);
   textAlign(LEFT, TOP);
   textSize(comboSize);
-  text(`Combo: ${enemy.combo}`, panelX + 12, panelY + 12);
+  text(`Combo: ${opponentFighter.combo}`, panelX + 12, panelY + 12);
   textSize(12);
   fill('#222');
   rect(panelX + 12, panelY + 12 + comboSize + 8, panelWidth - 24, 10, 5);
@@ -102,9 +114,9 @@ function drawEnemyHud() {
 
   fill(255);
   textSize(14);
-  text(`Name: ${enemy.name}`, panelX + 12, panelY + 52);
-  text(`HP: ${enemy.hp.toFixed(0)} / ${enemy.maxHp}`, panelX + 12, panelY + 72);
-  text(`State: ${enemy.state}`, panelX + 12, panelY + 92);
+  text(`Name: ${opponentFighter.name}`, panelX + 12, panelY + 52);
+  text(`HP: ${opponentFighter.hp.toFixed(0)} / ${opponentFighter.maxHp}`, panelX + 12, panelY + 72);
+  text(`State: ${opponentFighter.state}`, panelX + 12, panelY + 92);
   
   
   const hpBarX = panelX + 12;
@@ -113,18 +125,64 @@ function drawEnemyHud() {
   fill('#222');
   rect(hpBarX, hpBarY, hpWidth, 8, 4);
   fill('#42d492');
-  rect(hpBarX, hpBarY, hpWidth * (enemy.hp / enemy.maxHp), 8, 4);
+  rect(hpBarX, hpBarY, hpWidth * (opponentFighter.hp / opponentFighter.maxHp), 8, 4);
   
   // Stagger Bar
   fill('#222');
   rect(hpBarX, hpBarY + 14, hpWidth, 6, 3);
-  const staggerPercent = constrain(enemy.stagger / enemy.staggerThreshold, 0, 1);
+  const staggerPercent = constrain(opponentFighter.stagger / opponentFighter.staggerThreshold, 0, 1);
   if (staggerPercent > 0) {
     fill(255, 100 + staggerPercent * 50, 50);
     rect(hpBarX, hpBarY + 14, hpWidth * staggerPercent, 6, 3);
   }
   
-  drawDashCharges(enemy, panelX + 12, panelY + 24, hpWidth);
+  drawDashCharges(opponentFighter, panelX + 12, panelY + 24, hpWidth);
+  pop();
+}
+
+function drawOverheadHealthbar() {
+  const nonPlayerFighter = getOpponentFighter();
+  if (!nonPlayerFighter) return;
+  
+  // Only show overhead healthbar for the non-player-controlled fighter
+  if (nonPlayerFighter.isPlayerControlled) return;
+  
+  push();
+  
+  // Calculate position above fighter's head
+  const barWidth = 60; // Smaller width for better scaling
+  const barHeight = 4;
+  const nameOffset = 15;
+  const barOffset = 3;
+  
+  // Get fighter's position and apply camera transforms
+  const fighterX = nonPlayerFighter.pos.x;
+  const fighterY = nonPlayerFighter.pos.y - 60; // Above head (adjusted for character height)
+  
+  // Draw name with smaller text for better scaling
+  fill(255);
+  textAlign(CENTER, CENTER);
+  textSize(10);
+  stroke(0, 0, 0, 150);
+  strokeWeight(2);
+  text(nonPlayerFighter.name, fighterX, fighterY - nameOffset);
+  
+  // Draw healthbar background
+  noStroke();
+  fill(0, 0, 0, 150);
+  rect(fighterX - barWidth/2, fighterY - barOffset, barWidth, barHeight, 2);
+  
+  // Draw healthbar fill
+  const healthPercent = nonPlayerFighter.hp / nonPlayerFighter.maxHp;
+  if (healthPercent > 0.6) {
+    fill(66, 212, 146); // Green
+  } else if (healthPercent > 0.3) {
+    fill(255, 204, 51); // Yellow
+  } else {
+    fill(217, 77, 77); // Red
+  }
+  rect(fighterX - barWidth/2, fighterY - barOffset, barWidth * healthPercent, barHeight, 2);
+  
   pop();
 }
 

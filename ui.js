@@ -236,9 +236,11 @@ function drawStatusRows(fighter, x, y) {
     const px = x + col * 30;
     const py = y + row * rowHeight;
     
-    // Draw status background
-    fill(statusColor(status.type));
-    rect(px, py, 26, 18, 4);
+    // Draw potency on the left
+    fill(255);
+    textSize(8);
+    textAlign(LEFT, CENTER);
+    text(status.potency, px, py + 9);
     
     // Draw placeholder shape in the middle
     drawStatusPlaceholder(status.type, px + 13, py + 9);

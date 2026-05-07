@@ -20,13 +20,13 @@ function setup() {//test
   document.oncontextmenu = () => false;
   // Initialize fighters
   player = new Fighter(false, 'Player', 'VALENCINA', false);
-  enemy = new Fighter(false, 'Enemy', 'JOHN', true);
+  enemy = new Fighter(false, 'Enemy', 'VALENCINA', true);
   initBattle();
 }
 
 function initBattle() {
   player = new Fighter(false, 'Player', 'VALENCINA', false);
-  enemy = new Fighter(false, 'Enemy', 'JOHN', true);
+  enemy = new Fighter(false, 'Enemy', 'VALENCINA', true);
 
   battleState = 'ready';
   winner = null;
@@ -126,6 +126,16 @@ function updateBattle() {
   }
 }
 
+function getPlayerControlledFighter() {
+  if (player && player.isPlayerControlled) {
+    return player;
+  }
+  if (enemy && enemy.isPlayerControlled) {
+    return enemy;
+  }
+  return null; // No player-controlled fighter found
+}
+
 function keyPressed() {
   if (battleState === 'ready' && keyCode === ENTER) {
     battleState = 'battle';
@@ -136,16 +146,22 @@ function keyPressed() {
     return;
   }
   if (battleState === 'battle') {
-    player.processKeyPressed(key);
-    if (key === ' ' || keyCode === 32) {
-      player.startDash();
+    const controlledFighter = getPlayerControlledFighter();
+    if (controlledFighter) {
+      controlledFighter.processKeyPressed(key);
+      if (key === ' ' || keyCode === 32) {
+        controlledFighter.startDash();
+      }
     }
   }
 }
 
 function keyReleased() {
   if (battleState === 'battle') {
-    player.processKeyReleased(key);
+    const controlledFighter = getPlayerControlledFighter();
+    if (controlledFighter) {
+      controlledFighter.processKeyReleased(key);
+    }
   }
 }
 
@@ -154,11 +170,12 @@ function mousePressed() {
     return;
   }
 
+  const controlledFighter = getPlayerControlledFighter();
   if (mouseButton === LEFT) {
-    player.requestAttack();
+    controlledFighter.requestAttack();
     lastMouseDown = millis();
   } else if (mouseButton === RIGHT) {
-    player.requestGuard(enemy);
+    controlledFighter.requestGuard(enemy);
   }
 }
 
@@ -212,12 +229,13 @@ function mouseReleased() {
     return;
   }
 
+  const controlledFighter = getPlayerControlledFighter();
   if (mouseButton === LEFT) {
     const held = millis() - (lastMouseDown || 0);
-    player.releaseAttack(held > 300);
+    controlledFighter.releaseAttack(held > 300);
     lastMouseDown = null;
   } else if (mouseButton === RIGHT) {
-    player.releaseGuard();
+    controlledFighter.releaseGuard();
   }
 }
 

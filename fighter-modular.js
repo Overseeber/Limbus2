@@ -292,13 +292,14 @@ class Fighter {
     this.title = character.title;
     this.baseDamage = character.baseDamage;
     
-    // Set controls for player
-    if (!this.isAI) {
+    // Set controls for player-controlled fighter
+    if (this.isPlayerControlled) {
       this.controls = {
         left: 'a',
         right: 'd',
         up: 'w',
         down: 's',
+        attack: 'f',
         evade: 'e',
       };
     } else {
@@ -660,6 +661,9 @@ class Fighter {
     }
     if (keyLower === this.controls.up) {
       this.jumpRequest = false;
+    }
+    if (keyLower === this.controls.attack) {
+      this.releaseAttack(this.chargeAttack);
     }
   }
 

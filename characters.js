@@ -1132,10 +1132,12 @@ const CHARACTERS = {
       const damage = fighter.calculateDamage(baseDamage);
       console.log('[ULTIMATE DEBUG] Calculated damage with combo bonus:', damage, '(base:', baseDamage, ', combo:', fighter.combo, ')');
       
-      // Bypass hit cooldown during ultimate to ensure all attacks land
+      // Bypass hit cooldown and ultimate protection during ultimate to ensure all attacks land
       const previousState = opponent.state;
       const previousCooldown = opponent.hitCooldown;
+      const previousProtected = opponent.ultimateProtected;
       opponent.hitCooldown = 0;
+      opponent.ultimateProtected = false; // Disable ultimate protection
       opponent.setState('idle'); // Reset state to allow hit
       
       // Store original stagger values
@@ -1160,6 +1162,10 @@ const CHARACTERS = {
       
       // Apply damage with custom knockback
       opponent.receiveHit(damage, fighter, knockbackAmount);
+      
+      // Restore ultimate protection and cooldown after damage is applied
+      opponent.ultimateProtected = previousProtected;
+      opponent.hitCooldown = previousCooldown;
       
       // Add doubled ultimate screenshake
       if (typeof addScreenShake === 'function') {
@@ -1212,6 +1218,12 @@ const CHARACTERS = {
       console.log('[ULTIMATE DEBUG] Before addCombo - fighter combo:', fighter.combo);
       fighter.addCombo(fighter);
       console.log('[ULTIMATE DEBUG] After addCombo - fighter combo:', fighter.combo);
+      
+      // Apply character-specific onSuccessfulHit effects (status effects, etc.)
+      const character = CHARACTERS[fighter.characterKey];
+      if (character && character.onSuccessfulHit) {
+        character.onSuccessfulHit(damage, opponent, fighter);
+      }
       
       fighter.ultimateTotalDamage += damage;
       fighter.ultimateDamageDealt += damage;

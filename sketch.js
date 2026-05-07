@@ -19,14 +19,14 @@ function setup() {//test
   createCanvas(ARENA_WIDTH, ARENA_HEIGHT);
   document.oncontextmenu = () => false;
   // Initialize fighters
-  player = new Fighter(false, 'Player', 'VALENCINA', true);
-  enemy = new Fighter(false, 'Enemy', 'JOHN', false);
+  player = new Fighter(false, 'Player', 'VALENCINA', false);
+  enemy = new Fighter(false, 'Enemy', 'JOHN', true);
   initBattle();
 }
 
 function initBattle() {
-  player = new Fighter(false, 'Player', 'VALENCINA', true);
-  enemy = new Fighter(false, 'Enemy', 'JOHN', false);
+  player = new Fighter(false, 'Player', 'VALENCINA', false);
+  enemy = new Fighter(false, 'Enemy', 'JOHN', true);
 
   battleState = 'ready';
   winner = null;

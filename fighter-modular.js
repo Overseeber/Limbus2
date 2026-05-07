@@ -931,9 +931,9 @@ class Fighter {
     }
 
     // Deal damage during attack sequences when strike is active
-    // Only resolve if not already resolved by timer expiration
     if (this.strikeActive && this.attackSequence > 0 && !this.attackHitResolved && this.attackTimer > 0) {
       this.attackSystem.resolveAttack(opponent);
+      this.attackHitResolved = true; // Set immediately to prevent timer expiration from resolving
     }
   }
 
@@ -1669,81 +1669,11 @@ calculateDamage(base, opponent) {
   return damage;
 }
 
-receiveHit(amount, attacker, knockback) {
-  if (this.isGuarding) {
-    amount *= 0.45;
-    if (this.isCountering) {
-      attacker.receiveHit(amount * 0.8, this, knockback * 0.8);
-      this.isCountering = false;
-    }
-  }
-
-  if (this.isEvading) {
-    spawnEvadeIndicator(this.pos.copy());
-    return;
-  }
-
-  this.hp -= amount;
-  const wasGuarding = this.isGuarding;
-  spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding);
-  
-  // Add screen shake based on damage
-  if (typeof addScreenShake === 'function') {
-    console.log('[NORMAL ATTACK DEBUG] Adding screen shake for damage:', amount);
-    addScreenShake(amount);
-  }
-  
-  // Add sprite shake to character taking damage
-  this.addSpriteShake(amount, false);
-  
-  // Emit damageDealt event
-  this.events.emit('damageDealt', {
-    attacker: attacker.characterKey,
-    target: this.characterKey,
-    damage: amount,
-    knockback: knockback
-  });
-  
-  // Apply hitstun
-  if (this.state !== 'staggered') {
-    this.setState('hit');
-    this.staggerTimer = 0.18;
-    // Face towards attacker when hurt
-    this.facing = attacker.pos.x > this.pos.x ? 1 : -1;
-  }
-  
-  // Only add stagger if not already staggered (applies to both players and enemies)
-  if (this.state !== 'staggered') {
-    this.stagger += amount * 1.2;
-    this.staggerRecoveryTimer = 0;
-  }
-  
-  const strength = max(1, amount * 0.05);
-  const awayFromAttacker = this.pos.x < attacker.pos.x ? -1 : 1;
-  this.vel.x = awayFromAttacker * knockback * strength;
-  this.vel.y = -5;
-  this.hitCooldown = 0.25;
-
-  if (this.stagger >= this.staggerThreshold) {
-    this.setStaggerState(this.staggerLength);
-  }
-
-  // Consume status effects when hit
-  this.statusSystem.consumeOnHit();
-  
-  // Call character-specific onReceiveHit method
-  const character = CHARACTERS[this.characterKey];
-  if (character && character.onReceiveHit) {
-    character.onReceiveHit(amount, attacker, this);
-  }
-
-  this.addCombo(attacker);
-}
 
 onSuccessfulHit(damage, opponent) {
   this.lastAttackHit = true;
   this.comboTimer = this.comboTimeout;
-  this.combo += 1;
+  // Combo already increased by 1 in addCombo, don't double increment
   
   // Combo system: combo continues as long as timer is active
   // Attack sequence system: handled separately in update function
@@ -1766,6 +1696,12 @@ onSuccessfulHit(damage, opponent) {
 addCombo(attacker) {
   console.log('[COMBO DEBUG] addCombo called - attacker:', attacker, 'this:', this, 'comboTimer:', this.comboTimer, 'combo before:', this.combo);
   
+  // Only the attacker should gain combo, not the victim
+  if (this !== attacker) {
+    console.log('[COMBO DEBUG] addCombo early return - not the attacker');
+    return;
+  }
+  
   // During ultimate, always increase combo regardless of timer state
   if (this.ultimateActive) {
     console.log('[COMBO DEBUG] Ultimate active - forcing combo increase');
@@ -1776,13 +1712,7 @@ addCombo(attacker) {
   }
   
   // Normal combo logic for non-ultimate
-  // If this fighter is the attacker and already has an active combo, don't increase
-  if (this === attacker && this.comboTimer > 0) {
-    console.log('[COMBO DEBUG] addCombo early return - attacker with active combo');
-    return;
-  }
-  
-  // Otherwise, increase combo for this fighter (who was hit)
+  // Increase combo for the attacker only
   this.comboTimer = this.comboTimeout;
   this.combo += 1;
   console.log('[COMBO DEBUG] addCombo completed - combo after:', this.combo);

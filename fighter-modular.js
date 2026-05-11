@@ -1,149 +1,217 @@
+/**
+ * ============================================================================
+ * FIGHTER CLASS - Core combat entity for the fighting game
+ * ============================================================================
+ * 
+ * The Fighter class represents a combat character in the game. Each fighter can
+ * be controlled by AI or a human player, has unique stats based on their character
+ * type, and handles all combat mechanics including movement, attacks, damage,
+ * status effects, and defeat conditions.
+ * 
+ * Key Features:
+ * - Multi-player support (2-4 fighters in battle)
+ * - AI and human player control
+ * - Character-specific stats and abilities
+ * - Comprehensive combat system (attacks, guards, evades, ultimates)
+ * - Status effects and damage system
+ * - Defeat and respawn mechanics
+ * 
+ * @param {boolean} isAI - Whether this fighter is AI-controlled (default: false)
+ * @param {string} name - Display name for this fighter (default: 'Enemy')
+ * @param {string} characterKey - Character type from CHARACTERS roster (default: null)
+ * @param {boolean} isPlayerControlled - Whether this fighter is human-controlled (default: false)
+ */
 class Fighter {
   constructor(isAI = false, name = 'Enemy', characterKey = null, isPlayerControlled = false) {
-    this.isAI = isAI;
-    this.name = name;
-    this.isPlayerControlled = isPlayerControlled;
-    // Safe character selection with fallback
+    // CORE IDENTITY PROPERTIES
+    this.isAI = isAI;                    // AI vs Human control flag
+    this.name = name;                     // Display name for UI
+    this.isPlayerControlled = isPlayerControlled; // Human control flag
+    
+    // CHARACTER SELECTION WITH FALLBACK
+    // Safely select character with fallback to prevent errors
     const fallbackCharacter = (typeof currentCharacter !== 'undefined' ? currentCharacter : 'VALENCINA');
     this.characterKey = characterKey || (isAI ? 'VALENCINA' : fallbackCharacter);
     
-    // Get character stats from roster
+    // CHARACTER DATA RETRIEVAL
+    // Get character stats from the global CHARACTERS roster
     let character = CHARACTERS[this.characterKey];
     
-    // Safety check in case character is not found
+    // SAFETY CHECK: Ensure character exists
+    // Prevents crashes if invalid characterKey is provided
     if (!character) {
       console.error("Invalid characterKey:", this.characterKey);
-      this.characterKey = 'VALENCINA';
+      this.characterKey = 'VALENCINA'; // Fallback to default character
       character = CHARACTERS[this.characterKey];
     }
     
-    this.pos = createVector(width / 2 + (isAI ? 200 : -200), height - 100);
-    this.vel = createVector(0, 0);
-    this.facing = isAI ? -1 : 1;
-    this.spawnY = height - 100;
+    // POSITION AND MOVEMENT PROPERTIES
+    this.pos = createVector(width / 2 + (isAI ? 200 : -200), height - 100); // Initial spawn position
+    this.vel = createVector(0, 0);      // Velocity vector for physics
+    this.facing = isAI ? -1 : 1;       // Facing direction: 1 = right, -1 = left
+    this.spawnY = height - 100;        // Y-coordinate for spawning/resetting
 
-    // Combat stats from character roster
-    this.hp = character.hp;
-    this.maxHp = character.hp;
-    this.speed = character.speed;
-    this.baseDamage = character.baseDamage;
-    this.attackInterval = character.attackInterval;
-    this.staggerThreshold = character.staggerThreshold;
-    this.staggerLength = character.staggerLength;
-    this.staggerRecoveryTimer = 0;
-    this.stagger = 0;
-    this.staggerTimer = 0;
-    this.staggeredDisplay = 0;
-    this.staggeredDisplayTimer = 0;
-    this.color = isAI ? '#e74c3c' : character.color;
-    this.dashTimer = 0;
-    this.isDashing = false;
-    this.dashDuration = 0.16;
-    this.dashCooldown = 3;
-    this.stagger = 0;
+    // COMBAT STATS (from character roster)
+    this.hp = character.hp;                    // Current health points
+    this.maxHp = character.hp;                 // Maximum health points
+    this.speed = character.speed;              // Movement speed multiplier
+    this.baseDamage = character.baseDamage;    // Base attack damage
+    this.attackInterval = character.attackInterval; // Attack cooldown time
+    this.staggerThreshold = character.staggerThreshold; // Stagger resistance
+    this.staggerLength = character.staggerLength;     // Stagger duration
     
-    // Sprite shake properties
-    this.spriteShakeX = 0;
-    this.spriteShakeY = 0;
-    this.spriteShakeIntensity = 0;
-    this.isUltimateSpriteShake = false;
-    this.isDefeated = false;
-
-    this.controls = {};
-    this.reset();
+    // STAGGER SYSTEM PROPERTIES
+    this.staggerRecoveryTimer = 0;       // Timer for stagger recovery
+    this.stagger = 0;                    // Current stagger amount
+    this.staggerTimer = 0;                // Timer for active stagger
+    this.staggeredDisplay = 0;            // Visual stagger display value
+    this.staggeredDisplayTimer = 0;       // Timer for visual stagger effects
+    
+    // VISUAL PROPERTIES
+    this.color = isAI ? '#e74c3c' : character.color; // Fighter color (AI gets red)
+    
+    // DASH ATTACK PROPERTIES
+    this.dashTimer = 0;                  // Cooldown timer for dash attacks
+    this.isDashing = false;              // Flag for active dash state
+    this.dashDuration = 0.16;            // Duration of dash attack in seconds
+    this.dashCooldown = 3;               // Cooldown time between dash attacks
+    
+    // SPRITE EFFECTS PROPERTIES
+    this.spriteShakeX = 0;               // Horizontal sprite shake amount
+    this.spriteShakeY = 0;               // Vertical sprite shake amount
+    this.spriteShakeIntensity = 0;       // Intensity of sprite shake effect
+    this.isUltimateSpriteShake = false;  // Flag for ultimate attack shake effect
+    
+    // DEFEAT STATE PROPERTIES
+    this.isDefeated = false;             // Flag for defeated state
+    // INPUT CONTROLS SYSTEM
+    this.controls = {};                 // Object to store input mappings
+    this.reset();                        // Initialize all combat systems
   }
 
+  /**
+   * RESET METHOD: Initialize or reset all fighter properties to default state
+   * Called during construction and when respawning after defeat
+   * Ensures fighter starts with clean state for combat
+   */
   reset() {
-    this.setState('idle');
-    this.attackTimer = 0;
-    this.attackDamage = 0;
-    this.attackKnockback = 0;
-    this.attackRange = 0;
-    this.attackHitResolved = false;
-    this.statusEffectsApplied = false;
-    this.slashEffectsSpawned = false;
+    // STATE MANAGEMENT
+    this.setState('idle');               // Set to idle state for combat readiness
     
-    // Ultimate system properties
-    this.ultimateActive = false;
-    this.ultimatePhase = 0;
-    this.ultimateTimer = 0;
-    this.ultimateDamageDealt = 0;
-    this.ultimateTotalDamage = 0;
-    this.ultimateCameraZoom = 1;
-    this.ultimateBackgroundDim = 0;
-    this.ultimateName = "";
-    this.ultimateDialogue = "";
-    this.ultimateCanActivate = true; // Always available for testing
+    // ATTACK SYSTEM RESET
+    this.attackTimer = 0;                // Reset attack cooldown timer
+    this.attackDamage = 0;               // Clear current attack damage
+    this.attackKnockback = 0;            // Clear current knockback value
+    this.attackRange = 0;                // Reset attack range to default
+    this.attackHitResolved = false;      // Reset damage resolution flag
+    this.statusEffectsApplied = false;   // Reset status effect application flag
+    this.slashEffectsSpawned = false;    // Reset visual effect spawning flag
     
-    // Reset sprite shake
-    this.spriteShakeX = 0;
-    this.spriteShakeY = 0;
-    this.spriteShakeIntensity = 0;
-    this.isUltimateSpriteShake = false;
-    this.ultimateActivationRequested = false;
+    // ULTIMATE ATTACK SYSTEM RESET
+    this.ultimateActive = false;         // Clear ultimate activation state
+    this.ultimatePhase = 0;              // Reset ultimate phase counter
+    this.ultimateTimer = 0;              // Reset ultimate duration timer
+    this.ultimateDamageDealt = 0;       // Clear damage dealt this ultimate
+    this.ultimateTotalDamage = 0;       // Clear total ultimate damage
+    this.ultimateCameraZoom = 1;         // Reset camera zoom effect
+    this.ultimateBackgroundDim = 0;     // Reset background dimming effect
+    this.ultimateName = "";              // Clear ultimate name display
+    this.ultimateDialogue = "";         // Clear ultimate dialogue text
+    this.ultimateCanActivate = true;     // Allow ultimate activation (testing flag)
     
-    // STEP 1: Isolate state management - create stateMachine object
+    // VISUAL EFFECTS RESET
+    this.spriteShakeX = 0;               // Clear horizontal sprite shake
+    this.spriteShakeY = 0;               // Clear vertical sprite shake
+    this.spriteShakeIntensity = 0;       // Clear shake intensity
+    this.isUltimateSpriteShake = false;  // Clear ultimate shake flag
+    this.ultimateActivationRequested = false; // Clear ultimate request flag
+    
+    // STEP 1: STATE MACHINE ISOLATION
+    // Create dedicated stateMachine object for cleaner state management
     this.stateMachine = {
-      state: 'idle',
-      attackTimer: 0,
-      attackSequence: 0,
-      attackFrame: 0,
-      attackFrameTimer: 0,
-      staggerTimer: 0,
-      staggerRecoveryTimer: 0,
-      evadeTimer: 0
+      state: 'idle',                     // Current animation state
+      attackTimer: 0,                   // Attack sequence timer
+      attackSequence: 0,                // Current attack combo sequence
+      attackFrame: 0,                   // Current attack animation frame
+      attackFrameTimer: 0,               // Timer for attack frame progression
+      staggerTimer: 0,                  // Stagger duration timer
+      staggerRecoveryTimer: 0,          // Stagger recovery cooldown
+      evadeTimer: 0                     // Evade action duration timer
     };
     
-    // Initialize attackSequence and attackFrame variables for compatibility
-    this.attackSequence = 0;
-    this.attackFrame = 0;
-    this.attackFrameTimer = 0;
-    this.kbResist = 0.08;
-    this.dashCharges = 3;
-    this.staggerRecovery = 0; // Disabled stagger recovery
-    this.staggerRecoveryTimer = 0;
-    this.staggerTimer = 0;
-    this.staggerLength = 5;
-    this.combo = 0;
-    this.comboTimer = 0;
-    this.comboTimeout = 1.4;
-    this.attackCounter = 0;
-    this.attackCounterDisplay = 0;
-    this.attackCounterTimer = 0;
-    this.staggeredDisplay = 0;
-    this.staggeredDisplayTimer = 0;
-    this.statuses = [];
-    this.remainingSlide = 0;
-    this.isDucking = false;
-    this.isGuarding = false;
-    this.isCountering = false;
-    this.isEvading = false;
-    this.evadeTimer = 0;
-    this.chargeMeter = 0;
-    this.attackRequest = false;
-    this.attackRelease = false;
-    this.guardRequest = false;
-    this.strikeActive = false;
-    this.pendingCounter = false;
-    this.lastAttackHit = false;
-    this.hitCooldown = 0;
-    this.dashAttacked = false;
-    this.evadeRequested = false;
-    this.slamAttackRequested = false;
-    this.isSlamAttacking = false;
-    this.slamLandingHitbox = null;
-    this.pendingSlamDamage = null;
+    // COMPATIBILITY PROPERTIES
+    // Maintain these properties for backward compatibility with existing code
+    this.attackSequence = 0;             // Attack combo counter (legacy)
+    this.attackFrame = 0;                // Animation frame counter (legacy)
+    this.attackFrameTimer = 0;           // Frame timing counter (legacy)
+    
+    // COMBAT MECHANICS PROPERTIES
+    this.kbResist = 0.08;                // Knockback resistance multiplier
+    this.dashCharges = 3;               // Number of available dash charges
+    
+    // STAGGER SYSTEM PROPERTIES (continued)
+    this.staggerRecovery = 0;            // Stagger recovery rate (disabled)
+    this.staggerRecoveryTimer = 0;       // Stagger recovery cooldown timer
+    this.staggerTimer = 0;               // Current stagger duration timer
+    this.staggerLength = 5;              // Maximum stagger duration
+    
+    // COMBO SYSTEM PROPERTIES (continued)
+    this.combo = 0;                     // Current combo counter
+    this.comboTimer = 0;                // Combo timeout timer
+    this.comboTimeout = 1.4;             // Time before combo resets
+    this.attackCounter = 0;              // Total attacks landed counter
+    this.attackCounterDisplay = 0;       // Visual display counter for attacks
+    this.attackCounterTimer = 0;         // Timer for attack counter display
+    
+    // VISUAL AND STATUS PROPERTIES
+    this.staggeredDisplay = 0;           // Visual stagger display value
+    this.staggeredDisplayTimer = 0;      // Timer for visual stagger effects
+    this.statuses = [];                  // Array of active status effects
+    this.remainingSlide = 0;             // Remaining slide distance from knockback
+    
+    // ACTION STATE FLAGS (continued)
+    this.isDucking = false;             // Duck/crouch state flag
+    this.isGuarding = false;             // Guard/block state flag
+    this.isCountering = false;           // Counter-attack state flag
+    this.isEvading = false;              // Evade/dodge state flag
+    
+    // COMBAT TIMERS AND REQUESTS
+    this.evadeTimer = 0;                 // Evade action duration timer
+    this.chargeMeter = 0;                // Charge attack meter (0-100)
+    this.attackRequest = false;          // Flag for pending attack request
+    this.attackRelease = false;           // Flag for attack release timing
+    this.guardRequest = false;           // Flag for guard request
+    
+    // COMBAT STATE FLAGS (continued)
+    this.strikeActive = false;           // Flag for active damage-dealing state
+    this.pendingCounter = false;         // Flag for pending counter-attack
+    this.lastAttackHit = false;          // Flag indicating if last attack connected
+    this.hitCooldown = 0;                // Cooldown timer between taking hits
+    this.dashAttacked = false;           // Flag for dash attack execution in current dash
+    
+    // SPECIAL ATTACK REQUEST FLAGS
+    this.evadeRequested = false;         // Flag for evade action request
+    this.slamAttackRequested = false;    // Flag for slam attack request
+    
+    // SLAM ATTACK SYSTEM
+    this.isSlamAttacking = false;        // Flag for active slam attack state
+    this.slamLandingHitbox = null;       // Hitbox for slam landing damage
+    this.pendingSlamDamage = null;       // Pending damage to apply on slam landing
+    
+    // AI CONTROL SYSTEM (continued)
+    // Object to store AI action flags and decision-making state
     this.ai = {
-      moveLeft: false,
-      moveRight: false,
-      moveUp: false,
-      moveDown: false,
-      attack: false,
-      defend: false,
-      evade: false,
+      moveLeft: false,                   // AI movement request: left
+      moveRight: false,                  // AI movement request: right
+      moveUp: false,                     // AI movement request: up (jump)
+      moveDown: false,                   // AI movement request: down (duck)
+      attack: false,                     // AI combat request: attack
+      defend: false,                     // AI combat request: defend/guard
+      evade: false,                      // AI combat request: evade/dodge
     };
     
-    // STEP 3: Create attack system subsystem
+    // STEP 3: ATTACK SYSTEM SUBSYSTEM (continued)
+    // Encapsulates all attack-related functionality for cleaner code organization
     this.attackSystem = {
       executeAttack: (opponent, ignoreParry = false) => this.executeAttack(opponent, ignoreParry),
       resolveAttack: (opponent) => this.resolveAttack(opponent),
@@ -151,7 +219,8 @@ class Fighter {
       resetAttack: () => this.resetAttack()
     };
     
-    // STEP 4: Create status system subsystem
+    // STEP 4: STATUS SYSTEM SUBSYSTEM (continued)
+    // Manages all status effects, buffs, and debuffs on the fighter
     this.statusSystem = {
       addStatus: (type, count, potency) => this.addStatus(type, count, potency),
       removeStatus: (type) => this.removeStatus(type),
@@ -160,41 +229,66 @@ class Fighter {
       applyStatuses: (dt) => this.applyStatuses(dt)
     };
     
-    // STEP 5: Create event emission layer (SERVER PREP)
+    // STEP 5: EVENT EMISSION LAYER (SERVER PREPARATION) (continued)
+    // Provides event-driven communication for game systems and UI updates
     this.events = {
       emit: (eventName, data) => {
-        // Local logging for now - future server sync
+        // Local logging for now - future server sync capability
         console.log(`[EVENT] ${eventName}:`, data);
       }
     };
     
-    // STEP 6: Create movement system subsystem (SEPARATE PHYSICS)
+    // STEP 6: MOVEMENT SYSTEM SUBSYSTEM (SEPARATE PHYSICS) (continued)
+    // Handles all movement physics and collision detection separately from combat
     this.movementSystem = {
       applyMovement: (dt, opponent) => this.applyMovement(dt, opponent),
       applyGravity: (dt, opponent) => this.applyGravity(dt, opponent),
       cleanupPosition: (opponent) => this.cleanupPosition(opponent)
     };
     
-    // Call syncState to initialize stateMachine values
+    // FINAL INITIALIZATION
+    // Call syncState to initialize stateMachine values with current properties
     this.syncState();
     
     // Initialize character-specific properties including controls
+    // This loads character-specific abilities, stats, and control mappings
     this.initializeCharacter();
   }
 
-  // STEP 2: Centralize state changes - helper methods (NO LOGIC CHANGE)
+  /**
+   * ============================================================================
+   * STATE MANAGEMENT SYSTEM
+   * ============================================================================
+   * 
+   * Centralized state management for the Fighter class. All state changes should
+   * go through these methods to ensure consistency and proper synchronization
+   * between the main properties and the stateMachine subsystem.
+   */
+  
+  /**
+   * SET STATE METHOD: Centralized state change management
+   * Updates both the main state property and the stateMachine subsystem
+   * Ensures consistency across all state tracking systems
+   * @param {string} newState - The new state to set (e.g., 'idle', 'attack', 'guard')
+   */
   setState(newState) {
-    this.state = newState;
-    if (this.stateMachine) {
+    this.state = newState;                 // Update main state property
+    if (this.stateMachine) {               // Sync with stateMachine subsystem
       this.stateMachine.state = newState;
     }
   }
 
+  /**
+   * SET ATTACK STATE METHOD: Initialize attack-specific state properties
+   * Called when starting an attack to set up proper attack state tracking
+   * @param {number} sequence - Attack sequence number (for combo tracking)
+   * @param {number} frame - Attack animation frame number
+   */
   setAttackState(sequence, frame) {
-    this.state = 'attack';
-    this.attackSequence = sequence;
-    this.attackFrame = frame;
-    this.attackFrameTimer = 0;
+    this.state = 'attack';                // Set to attack state
+    this.attackSequence = sequence;         // Set attack combo sequence
+    this.attackFrame = frame;              // Set current animation frame
+    this.attackFrameTimer = 0;             // Reset frame progression timer
     
     // Update stateMachine
     if (this.stateMachine) {
@@ -701,7 +795,8 @@ class Fighter {
     this.guardRequest = true;
     this.isGuarding = true;
     
-    // Auto-face towards closest opponent when guarding
+    // AUTO-FACE DIRECTION: Face towards closest opponent when guarding
+    // This ensures the guard animation faces the nearest threat
     const closestOpponent = this.getClosestOpponent();
     if (closestOpponent) {
       this.faceTowards(closestOpponent);
@@ -723,7 +818,8 @@ class Fighter {
       return;
     }
     this.setEvadeState(0.22);
-    // Face towards specific opponent when evading
+    // FACE TOWARDS SPECIFIC OPPONENT: Face the specific opponent being evaded from
+    // This ensures the evade animation faces the correct direction
     if (opponent) {
       this.faceTowards(opponent);
     }
@@ -965,19 +1061,28 @@ class Fighter {
     }
   }
   
+  /**
+   * MULTI-TARGET ATTACK RESOLUTION: Handle attacks that hit multiple opponents
+   * Used by dash attacks and slam attacks to damage all targets in range
+   * @param {Fighter|Fighter[]} opponents - Single opponent or array of opponents to check
+   */
   resolveAttackForMultipleOpponents(opponents) {
+    // Exit if no opponents provided
     if (!opponents) return;
     
+    // Normalize input: ensure we have an array of targets
     // Handle both single opponent and array of opponents
     const targets = Array.isArray(opponents) ? opponents : [opponents];
     
-    // Check each opponent for hit detection
+    // Check each opponent for hit detection and apply damage if valid
     targets.forEach(target => {
       if (target) {
         // Use enhanced dash hit detection if this is a dash attack
+        // Dash attacks get 50% increased range for more forgiving hit detection
         const canHit = (this.state === 'attack' && this.isDashing) ? 
           this.canDashHitTarget(target) : this.canHitTarget(target);
           
+        // If target can be hit, apply damage through the attack system
         if (canHit) {
           this.attackSystem.resolveAttack(target);
         }
@@ -985,21 +1090,37 @@ class Fighter {
     });
   }
   
+  /**
+   * STANDARD HIT DETECTION: Check if a target is within normal attack range
+   * Used by regular attacks, guard actions, and most combat mechanics
+   * @param {Fighter} target - The opponent to check range against
+   * @returns {boolean} - True if target is within attack range
+   */
   canHitTarget(target) {
+    // Validate target: must exist and not be self
     if (!target || target === this) return false;
     
-    // Check if target is in range
+    // Calculate distance between this fighter and target
     const distance = dist(this.pos.x, this.pos.y, target.pos.x, target.pos.y);
+    // Check if distance is within this fighter's attack range
     return distance <= this.attackRange;
   }
   
-  // Enhanced dash attack hit detection with larger range and immediate damage
+  /**
+   * ENHANCED DASH HIT DETECTION: Check if target is within dash attack range
+   * Dash attacks get 50% increased range for more forgiving hit detection
+   * This compensates for the high-speed movement of dash attacks
+   * @param {Fighter} target - The opponent to check dash range against
+   * @returns {boolean} - True if target is within enhanced dash range
+   */
   canDashHitTarget(target) {
+    // Validate target: must exist, not be self, and not be defeated
     if (!target || target === this || target.isDefeated) return false;
     
-    // Dash attacks have extended range and more forgiving hit detection
+    // Calculate distance between this fighter and target
     const distance = dist(this.pos.x, this.pos.y, target.pos.x, target.pos.y);
-    const dashRange = this.attackRange * 1.5; // 50% increased range for dash attacks
+    // Dash attacks get 50% increased range for more forgiving hit detection
+    const dashRange = this.attackRange * 1.5; // 50% increased range
     return distance <= dashRange;
   }
 
@@ -1200,17 +1321,31 @@ class Fighter {
         this.haltFrame = 0;
         this.haltFrameTimer = 0;
       }
-      // Dash attack: move in and strike, then dash through enemy.
+      // DASH ATTACK TRIGGER: Check for dash attack opportunity during dash movement
+      // Dash attacks trigger when any opponent is within 80 pixels during a dash
       if (!this.dashAttacked) {
-        // Check if any opponent is within dash range
+        // Get all fighters from the global battle array for multi-target checking
         const allFighters = window.allFighters || [];
+        // Filter out self and defeated players to get valid targets
         const targets = allFighters.filter(f => f !== this && !f.isDefeated);
+        
+        // Check if ANY opponent is within dash trigger range (80 pixels)
+        // This ensures dash attacks can trigger regardless of which opponent is closest
         const hasTargetInRange = targets.some(f => abs(this.pos.x - f.pos.x) < 80);
         
+        // If any opponent is in range, execute the dash attack
         if (hasTargetInRange) {
+          // Execute dash attack with all valid targets (multi-target damage)
           this.executeDashAttack(targets);
+          
+          // Mark dash as executed to prevent multiple dash attacks in same dash
           this.dashAttacked = true;
+          
+          // Apply dash velocity (60 pixels/frame in facing direction)
+          // This creates the high-speed movement characteristic of dash attacks
           this.vel.x = this.facing * 60;
+          
+          // Extend dash duration to ensure full dash attack animation plays
           this.dashDuration += 0.16;
         }
       }
@@ -1409,7 +1544,8 @@ class Fighter {
       }
     }
 
-    // Auto-face towards closest opponent when attacking
+    // AUTO-FACE DIRECTION: Face towards closest opponent when attacking
+    // This ensures the attack animation faces the nearest target
     const closestOpponent = this.getClosestOpponent();
     if (closestOpponent) {
       this.faceTowards(closestOpponent);
@@ -1440,40 +1576,49 @@ class Fighter {
     }
   }
 
+  /**
+   * DASH ATTACK EXECUTION: Perform a high-speed dash attack that hits multiple opponents
+   * Dash attacks are unparrieable, do enhanced damage, and hit all targets in extended range
+   * @param {Fighter[]} targets - Array of all valid opponents to potentially hit
+   */
   executeDashAttack(targets) {
-    // Prevent attacks during ultimate
+    // Prevent attacks during ultimate (can't dash while ultimate is active)
     if (this.ultimateActive || this.state === 'ultimate') {
       return;
     }
     
-    // Dash attacks are unparrieable and do enhanced damage
-    this.state = 'attack';
-    this.strikeActive = true;
-    this.attackTimer = this.attackInterval;
-    this.attackHitResolved = false;
-    this.statusEffectsApplied = false;
-    this.slashEffectsSpawned = false;
-    this.lastAttackHit = false;
+    // Set up dash attack state and properties
+    this.state = 'attack';           // Enter attack state for animation and damage
+    this.strikeActive = true;         // Enable strike detection for damage application
+    this.attackTimer = this.attackInterval; // Reset attack timer for sequence timing
+    this.attackHitResolved = false;  // Track whether damage has been applied
+    this.statusEffectsApplied = false; // Track status effect application
+    this.slashEffectsSpawned = false;  // Track visual effect spawning
+    this.lastAttackHit = false;       // Track if this attack hit (for combo system)
 
     // Auto-face towards closest opponent when dash attacking
+    // This ensures the dash attack animation faces the right direction
     const closestOpponent = this.getClosestOpponent();
     if (closestOpponent) {
       this.faceTowards(closestOpponent);
     }
     
-    // Dash attacks do 1.5x damage and have increased range
+    // Dash attacks deal 1.5x normal damage for high-impact strikes
     this.attackDamage = this.baseDamage * 1.5;
-    this.attackRange = 168; // 40% increase: 120→168
+    // Dash attacks have 40% increased range (120→168 pixels) for better hit detection
+    this.attackRange = 168;
+    // Dash attacks apply moderate knockback to opponents
     this.attackKnockback = 15;
 
-    // Set flag for post-dash attack sprite
+    // Set flag for post-dash attack sprite (special animation after dash completes)
     this.usePostDashSprite = true;
 
-    // Spawn joust slash effect for dash attack
+    // Spawn visual joust slash effect for dash attack
+    // Positioned slightly above the fighter for visual impact
     this.spawnSlashEffect('js1', { x: 0, y: -10 });
 
-    // Immediately resolve the attack since dash attacks are instant
-    // Use multi-target system for dash attacks
+    // Immediately resolve the attack since dash attacks are instant damage
+    // Use multi-target system to hit all opponents within enhanced range
     this.resolveAttackForMultipleOpponents(targets);
   }
 
@@ -1546,20 +1691,29 @@ class Fighter {
     this.spawnSlashEffect('s2s2', { x: 0, y: -10 });
   }
 
+  /**
+   * ATTACK RESOLUTION: Apply damage to an opponent when attack connects
+   * This is the core damage application function called by all attack types
+   * @param {Fighter} opponent - The opponent to apply damage to
+   */
   resolveAttack(opponent) {
-    // Don't set attackHitResolved immediately - only set when damage lands
+    // Don't resolve if strike is not active (attack not in damage phase)
     if (!this.strikeActive) {
       return;
     }
 
-    // Use enhanced range for dash attacks
+    // Use enhanced range for dash attacks, standard range for other attacks
+    // Dash attacks get 50% increased range for more forgiving hit detection
     const attackRange = (this.state === 'attack' && this.isDashing) ? 
       this.attackRange * 1.5 : this.attackRange;
 
+    // Check if opponent is within attack range using collision detection
+    // calcAttackBox creates the hitbox, hitOpponent checks collision
     if (this.hitOpponent(opponent, this.calcAttackBox(attackRange))) {
+      // Calculate final damage after all modifiers (resistance, critical, etc.)
       const finalDamage = this.calculateDamage(this.attackDamage, opponent);
       
-      // Emit attackHit event
+      // Emit attackHit event for game systems (combos, sound effects, etc.)
       this.events.emit('attackHit', {
         attacker: this.characterKey,
         target: opponent.characterKey,
@@ -1567,15 +1721,23 @@ class Fighter {
         knockback: this.attackKnockback
       });
       
+      // Apply damage to opponent through their receiveHit method
+      // This handles damage reduction, status effects, defeat conditions, etc.
       opponent.receiveHit(finalDamage, this, this.attackKnockback);
       
-      // Trigger tremor burst on third basic attack for Valencina
+      // Special character interaction: Valencina's tremor burst on 3rd attack
+      // This is character-specific logic that triggers on certain attack counts
       if (this.characterKey === 'VALENCINA' && this.attackCounter === 3) {
         opponent.triggerTremorBurst();
       }
       
+      // Call character-specific onSuccessfulHit method for additional effects
+      // This allows characters to have unique behaviors when they land hits
       this.onSuccessfulHit(finalDamage, opponent);
-      this.attackHitResolved = true; // Only set when damage actually lands
+      
+      // Mark attack as resolved to prevent duplicate damage
+      // Only set when damage actually lands (not just when attack starts)
+      this.attackHitResolved = true;
     }
   }
 
@@ -1691,7 +1853,8 @@ class Fighter {
     if (this.state !== 'staggered') {
       this.setState('hit');
       this.staggerTimer = 0.18;
-      // Face towards specific attacker when hurt
+      // FACE TOWARDS SPECIFIC ATTACKER: Face the direction damage came from
+      // This ensures the hurt animation faces the correct direction
       this.faceTowards(attacker);
     }
     
@@ -1766,18 +1929,29 @@ class Fighter {
     return this.isDefeated;
   }
   
-  // Helper function to find closest opponent
+  /**
+   * HELPER FUNCTION: Find the closest opponent for facing direction
+   * Used by attack and guard actions to face the nearest threat
+   * @returns {Fighter|null} - Closest non-defeated opponent or null if none found
+   */
   getClosestOpponent() {
+    // Get all fighters from the global battle array
     const allFighters = window.allFighters || [];
+    // Filter out self and defeated players to get valid opponents
     const opponents = allFighters.filter(f => f !== this && !f.isDefeated);
     
+    // If no valid opponents, return null
     if (opponents.length === 0) return null;
     
+    // Start with the first opponent as the closest
     let closest = opponents[0];
+    // Calculate initial distance to this opponent
     let minDistance = dist(this.pos.x, this.pos.y, closest.pos.x, closest.pos.y);
     
+    // Check all other opponents to find the closest one
     for (let i = 1; i < opponents.length; i++) {
       const distance = dist(this.pos.x, this.pos.y, opponents[i].pos.x, opponents[i].pos.y);
+      // If this opponent is closer, update the closest
       if (distance < minDistance) {
         minDistance = distance;
         closest = opponents[i];
@@ -1787,9 +1961,17 @@ class Fighter {
     return closest;
   }
   
-  // Helper function to face towards a specific target
+  /**
+   * HELPER FUNCTION: Set facing direction towards a specific target
+   * Used by all actions that need to face a particular opponent
+   * @param {Fighter} target - The opponent to face towards
+   */
   faceTowards(target) {
+    // Don't try to face if no target provided
     if (!target) return;
+    
+    // Set facing direction based on target's relative position
+    // If target is to the right (x > this.x), face right (1), else face left (-1)
     this.facing = target.pos.x > this.pos.x ? 1 : -1;
   }
 

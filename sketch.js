@@ -4,11 +4,19 @@
 
 let player;
 let enemy;
-let battleState = 'ready';
+let battleState = 'characterSelect';
 let winner = null;
 let summaryText = '';
 let lastMouseDown = null;
 let battleTimer = 0;
+
+// Character selection variables
+let selectedPlayerCharacter = 'VALENCINA';
+let selectedEnemyCharacter = 'VALENCINA';
+let playerControlled = 'player';
+let playerAI = false;
+let enemyAI = true;
+let characterSelectOption = 0; // 0: player character, 1: enemy character, 2: player control, 3: player AI, 4: enemy AI
 
 function preload() {
   // Load sprite atlases for character sprites
@@ -18,15 +26,31 @@ function preload() {
 function setup() {//test
   createCanvas(ARENA_WIDTH, ARENA_HEIGHT);
   document.oncontextmenu = () => false;
-  // Initialize fighters
-  player = new Fighter(true, 'Player', 'VALENCINA', false);
-  enemy = new Fighter(true, 'Enemy', 'VALENCINA', false);
-  initBattle();
+  // Don't initialize fighters here - let character select handle it
 }
 
 function initBattle() {
-  player = new Fighter(true, 'Player', 'VALENCINA', false);
-  enemy = new Fighter(true, 'Enemy', 'VALENCINA', false);
+  // Initialize fighters with selected settings
+  // AI and player control are mutually exclusive for each fighter
+  
+  // Player fighter setup
+  let playerIsAI = playerAI;
+  let playerIsPlayerControlled = playerControlled === 'player';
+  
+  // Enemy fighter setup  
+  let enemyIsAI = enemyAI;
+  let enemyIsPlayerControlled = playerControlled === 'enemy';
+  
+  // Apply mutual exclusivity: if player controls a fighter, disable AI for that fighter
+  if (playerIsPlayerControlled) {
+    playerIsAI = false;
+  }
+  if (enemyIsPlayerControlled) {
+    enemyIsAI = false;
+  }
+  
+  player = new Fighter(playerIsAI, 'Player', selectedPlayerCharacter, playerIsPlayerControlled);
+  enemy = new Fighter(enemyIsAI, 'Enemy', selectedEnemyCharacter, enemyIsPlayerControlled);
 
   battleState = 'ready';
   winner = null;
@@ -38,21 +62,17 @@ function initBattle() {
 }
 
 function draw() {
-  // Check for ultimate background dimming
-  const ultimateActive = (player && player.ultimateActive) || (enemy && enemy.ultimateActive);
-  const ultimateFighter = (player && player.ultimateActive) ? player : (enemy && enemy.ultimateActive) ? enemy : null;
-  
-  if (ultimateActive && ultimateFighter) {
-    // Apply background dimming during ultimate
-    const dimAmount = ultimateFighter.ultimateBackgroundDim || 0.7;
-    background(28 * (1 - dimAmount));
-  } else {
-    background(28);
-  }
-
-  if (battleState === 'ready') {
+  if (battleState === 'characterSelect') {
+    drawCharacterSelect();
+  } else if (battleState === 'ready') {
     drawReadyScreen();
   } else if (battleState === 'battle') {
+    // Check for ultimate background dimming
+    const ultimateActive = (player && player.ultimateActive) || (enemy && enemy.ultimateActive);
+    const ultimateFighter = (player && player.ultimateActive) ? player : (enemy && enemy.ultimateActive) ? enemy : null;
+    
+    background(28);
+    
     updateBattle();
     beginCamera();
     drawArena();
@@ -86,7 +106,9 @@ function draw() {
     drawSummary();
   }
 
-  drawHud();
+  if (battleState !== 'characterSelect') {
+    drawHud();
+  }
 }
 
 function drawArena() {
@@ -130,22 +152,97 @@ function updateBattle() {
 }
 
 function getPlayerControlledFighter() {
-  if (player && player.isPlayerControlled) {
+  if (playerControlled === 'player' && player) {
     return player;
   }
-  if (enemy && enemy.isPlayerControlled) {
+  if (playerControlled === 'enemy' && enemy) {
     return enemy;
   }
   return null; // No player-controlled fighter found
 }
 
 function keyPressed() {
+  if (battleState === 'characterSelect') {
+    if (keyCode === TAB) {
+      characterSelectOption = (characterSelectOption + 1) % 5;
+      return;
+    }
+    
+    if (keyCode === LEFT_ARROW) {
+      switch (characterSelectOption) {
+        case 0:
+          selectedPlayerCharacter = selectedPlayerCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
+          break;
+        case 1:
+          selectedEnemyCharacter = selectedEnemyCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
+          break;
+        case 2:
+          playerControlled = playerControlled === 'player' ? 'enemy' : 'player';
+          break;
+        case 3:
+          playerAI = !playerAI;
+          break;
+        case 4:
+          enemyAI = !enemyAI;
+          break;
+      }
+      return;
+    }
+    
+    if (keyCode === RIGHT_ARROW) {
+      switch (characterSelectOption) {
+        case 0:
+          selectedPlayerCharacter = selectedPlayerCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
+          break;
+        case 1:
+          selectedEnemyCharacter = selectedEnemyCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
+          break;
+        case 2:
+          playerControlled = playerControlled === 'player' ? 'enemy' : 'player';
+          break;
+        case 3:
+          playerAI = !playerAI;
+          break;
+        case 4:
+          enemyAI = !enemyAI;
+          break;
+      }
+      return;
+    }
+    
+    if (keyCode === ENTER) {
+      // Initialize fighters with selected settings
+      // AI and player control are mutually exclusive for each fighter
+      
+      // Player fighter setup
+      let playerIsAI = playerAI;
+      let playerIsPlayerControlled = playerControlled === 'player';
+      
+      // Enemy fighter setup  
+      let enemyIsAI = enemyAI;
+      let enemyIsPlayerControlled = playerControlled === 'enemy';
+      
+      // Apply mutual exclusivity: if player controls a fighter, disable AI for that fighter
+      if (playerIsPlayerControlled) {
+        playerIsAI = false;
+      }
+      if (enemyIsPlayerControlled) {
+        enemyIsAI = false;
+      }
+      
+      player = new Fighter(playerIsAI, 'Player', selectedPlayerCharacter, playerIsPlayerControlled);
+      enemy = new Fighter(enemyIsAI, 'Enemy', selectedEnemyCharacter, enemyIsPlayerControlled);
+      battleState = 'ready';
+      return;
+    }
+  }
+  
   if (battleState === 'ready' && keyCode === ENTER) {
     battleState = 'battle';
     return;
   }
   if (battleState === 'summary' && keyCode === ENTER) {
-    initBattle();
+    battleState = 'characterSelect';
     return;
   }
   if (battleState === 'battle') {
@@ -169,6 +266,49 @@ function keyReleased() {
 }
 
 function mousePressed() {
+  if (battleState === 'characterSelect') {
+    // Check clicks on character select options
+    const mx = mouseX;
+    const my = mouseY;
+    
+    // Player character selection area
+    if (mx > width/2 - 200 && mx < width/2 + 50 && my > 140 && my < 200) {
+      selectedPlayerCharacter = selectedPlayerCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
+      characterSelectOption = 0;
+      return;
+    }
+    
+    // Enemy character selection area  
+    if (mx > width/2 + 50 && mx < width/2 + 300 && my > 140 && my < 200) {
+      selectedEnemyCharacter = selectedEnemyCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
+      characterSelectOption = 1;
+      return;
+    }
+    
+    // Player control selection area
+    if (mx > width/2 - 200 && mx < width/2 + 50 && my > 240 && my < 300) {
+      playerControlled = playerControlled === 'player' ? 'enemy' : 'player';
+      characterSelectOption = 2;
+      return;
+    }
+    
+    // Player AI selection area
+    if (mx > width/2 - 200 && mx < width/2 + 50 && my > 340 && my < 400) {
+      playerAI = !playerAI;
+      characterSelectOption = 3;
+      return;
+    }
+    
+    // Enemy AI selection area
+    if (mx > width/2 + 50 && mx < width/2 + 300 && my > 340 && my < 400) {
+      enemyAI = !enemyAI;
+      characterSelectOption = 4;
+      return;
+    }
+    
+    return;
+  }
+  
   if (battleState !== 'battle') {
     return;
   }
@@ -240,6 +380,126 @@ function mouseReleased() {
   } else if (mouseButton === RIGHT) {
     controlledFighter.releaseGuard();
   }
+}
+
+function drawCharacterSelect() {
+  background(20);
+  
+  // Title
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(32);
+  fill(255);
+  stroke(0);
+  strokeWeight(3);
+  text('CHARACTER SELECT', width / 2, 80);
+  pop();
+  
+  // Player Character Selection
+  push();
+  textAlign(LEFT, CENTER);
+  textSize(20);
+  fill(255);
+  text('Player Character:', width / 2 - 200, 150);
+  
+  // Highlight selected option
+  if (characterSelectOption === 0) {
+    fill(100, 150, 255);
+  } else {
+    fill(255);
+  }
+  text(`> ${selectedPlayerCharacter}`, width / 2 - 200, 180);
+  
+  // Available characters
+  textSize(16);
+  fill(200);
+  text('Available: JOHN, VALENCINA', width / 2 - 200, 210);
+  pop();
+  
+  // Enemy Character Selection
+  push();
+  textAlign(LEFT, CENTER);
+  textSize(20);
+  fill(255);
+  text('Enemy Character:', width / 2 + 50, 150);
+  
+  if (characterSelectOption === 1) {
+    fill(100, 150, 255);
+  } else {
+    fill(255);
+  }
+  text(`> ${selectedEnemyCharacter}`, width / 2 + 50, 180);
+  
+  textSize(16);
+  fill(200);
+  text('Available: JOHN, VALENCINA', width / 2 + 50, 210);
+  pop();
+  
+  // Player Control Selection
+  push();
+  textAlign(LEFT, CENTER);
+  textSize(20);
+  fill(255);
+  text('Player Controls:', width / 2 - 200, 250);
+  
+  if (characterSelectOption === 2) {
+    fill(100, 150, 255);
+  } else {
+    fill(255);
+  }
+  text(`> ${playerControlled.toUpperCase()}`, width / 2 - 200, 280);
+  
+  textSize(16);
+  fill(200);
+  text('Options: player, enemy', width / 2 - 200, 310);
+  pop();
+  
+  // Player AI Selection
+  push();
+  textAlign(LEFT, CENTER);
+  textSize(20);
+  fill(255);
+  text('Player AI:', width / 2 - 200, 350);
+  
+  if (characterSelectOption === 3) {
+    fill(100, 150, 255);
+  } else {
+    fill(255);
+  }
+  text(`> ${playerAI ? 'ON' : 'OFF'}`, width / 2 - 200, 380);
+  
+  textSize(16);
+  fill(200);
+  text('Options: ON, OFF', width / 2 - 200, 410);
+  pop();
+  
+  // Enemy AI Selection
+  push();
+  textAlign(LEFT, CENTER);
+  textSize(20);
+  fill(255);
+  text('Enemy AI:', width / 2 + 50, 350);
+  
+  if (characterSelectOption === 4) {
+    fill(100, 150, 255);
+  } else {
+    fill(255);
+  }
+  text(`> ${enemyAI ? 'ON' : 'OFF'}`, width / 2 + 50, 380);
+  
+  textSize(16);
+  fill(200);
+  text('Options: ON, OFF', width / 2 + 50, 410);
+  pop();
+  
+  // Instructions
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(16);
+  fill(150);
+  text('Use TAB to cycle options, ENTER to confirm', width / 2, 380);
+  text('Arrow keys to change selections', width / 2, 400);
+  pop();
 }
 
 function windowResized() {

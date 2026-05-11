@@ -233,6 +233,10 @@ function drawSpriteScaled(name, x, y, spriteScale = 1) {
   return { width: cached.sw * spriteScale, height: cached.sh * spriteScale };
 }
 
+// Fighter management system
+let fighterCount = 2;
+let nextFighterId = 3;
+
 // Character roster system
 const CHARACTERS = {
   JOHN: {
@@ -1243,6 +1247,61 @@ function switchCharacter(characterKey) {
 
 function getCurrentCharacter() {
   return CHARACTERS[currentCharacter];
+}
+
+// Fighter management functions
+function addNewFighter() {
+  const playerId = `player${nextFighterId}`;
+  const newPlayer = {
+    name: playerId,
+    title: `Player ${nextFighterId}`,
+    hp: 5000,
+    speed: 5,
+    attackInterval: 1,
+    baseDamage: 18,
+    staggerThreshold: 1200,
+    staggerLength: 5,
+    color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'),
+    weapon: 'Default Weapon',
+    sprite: 'dummy/idle.png',
+    
+    // Default methods
+    onSuccessfulHit: function(damage, opponent, fighter) {
+      // Default implementation - no special effects
+    },
+    onReceiveHit: function(amount, attacker, fighter) {
+      // Default implementation - no special effects
+    },
+    onUpdate: function(dt, opponent, fighter) {
+      // Default implementation - no special effects
+    },
+    processKeyPressed: function(key, fighter) {
+      // Default implementation - no special abilities
+    },
+    initializeCharacter: function(fighter) {
+      // Default initialization
+      fighter.weapon = this.weapon;
+    }
+  };
+  
+  CHARACTERS[playerId] = newPlayer;
+  nextFighterId++;
+  fighterCount++;
+  
+  return playerId;
+}
+
+function removeFighter(fighterId) {
+  if (CHARACTERS[fighterId] && fighterCount > 1) {
+    delete CHARACTERS[fighterId];
+    fighterCount--;
+    return true;
+  }
+  return false;
+}
+
+function getAvailableFighters() {
+  return Object.keys(CHARACTERS);
 }
 
 // Add new status effects to statusColor function

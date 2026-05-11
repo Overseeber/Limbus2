@@ -10,13 +10,14 @@ let summaryText = '';
 let lastMouseDown = null;
 let battleTimer = 0;
 
-// Character selection variables
-let selectedPlayerCharacter = 'VALENCINA';
-let selectedEnemyCharacter = 'VALENCINA';
-let playerControlled = 'player';
-let playerAI = false;
-let enemyAI = true;
-let characterSelectOption = 0; // 0: player character, 1: enemy character, 2: player control, 3: player AI, 4: enemy AI
+// Character selection variables - Super Smash Bros style
+let players = [
+  { active: true, character: 'player1', ai: false, controlled: true, ready: false },
+  { active: true, character: 'player2', ai: true, controlled: false, ready: true },
+  { active: false, character: 'JOHN', ai: true, controlled: false, ready: true }
+];
+let selectedPlayerSlot = 0; // Which player slot is currently selected
+let characterSelectOption = 0; // 0: character, 1: AI, 2: ready, 3: remove player
 
 function preload() {
   // Load sprite atlases for character sprites
@@ -30,34 +31,49 @@ function setup() {//test
 }
 
 function initBattle() {
-  // Initialize fighters with selected settings
-  // AI and player control are mutually exclusive for each fighter
+  // Initialize active fighters from Super Smash Bros style player system
+  const activePlayers = players.filter(p => p.active);
   
-  // Player fighter setup
-  let playerIsAI = playerAI;
-  let playerIsPlayerControlled = playerControlled === 'player';
-  
-  // Enemy fighter setup  
-  let enemyIsAI = enemyAI;
-  let enemyIsPlayerControlled = playerControlled === 'enemy';
-  
-  // Apply mutual exclusivity: if player controls a fighter, disable AI for that fighter
-  if (playerIsPlayerControlled) {
-    playerIsAI = false;
-  }
-  if (enemyIsPlayerControlled) {
-    enemyIsAI = false;
+  if (activePlayers.length === 0) {
+    console.log('No active players!');
+    return;
   }
   
-  player = new Fighter(playerIsAI, 'Player', selectedPlayerCharacter, playerIsPlayerControlled);
-  enemy = new Fighter(enemyIsAI, 'Enemy', selectedEnemyCharacter, enemyIsPlayerControlled);
+  // Find the player-controlled fighter
+  let playerControlledFighter = activePlayers.find(p => p.controlled);
+  if (!playerControlledFighter) {
+    // If no player is controlled, make the first active player controlled
+    activePlayers[0].controlled = true;
+    playerControlledFighter = activePlayers[0];
+  }
+  
+  // Create fighters for all active players
+  const fighters = [];
+  for (let i = 0; i < activePlayers.length; i++) {
+    const playerData = activePlayers[i];
+    let isAI = playerData.ai;
+    let isPlayerControlled = playerData.controlled;
+    
+    // Apply mutual exclusivity: if player controls a fighter, disable AI
+    if (isPlayerControlled) {
+      isAI = false;
+    }
+    
+    const fighter = new Fighter(isAI, `Player ${i + 1}`, playerData.character, isPlayerControlled);
+    fighters.push(fighter);
+  }
+  
+  // Assign player and enemy for combat system
+  player = fighters.find(f => f.isPlayerControlled);
+  enemy = fighters.find(f => !f.isPlayerControlled) || fighters.find(f => f !== player);
 
   battleState = 'ready';
   winner = null;
   summaryText = '';
   battleTimer = 0;
-  player.reset();
-  enemy.reset();
+  
+  // Reset all fighters
+  fighters.forEach(f => f.reset());
   damageNumbers = [];
 }
 
@@ -152,87 +168,28 @@ function updateBattle() {
 }
 
 function getPlayerControlledFighter() {
-  if (playerControlled === 'player' && player) {
+  if (player && player.isPlayerControlled) {
     return player;
-  }
-  if (playerControlled === 'enemy' && enemy) {
-    return enemy;
   }
   return null; // No player-controlled fighter found
 }
 
 function keyPressed() {
   if (battleState === 'characterSelect') {
-    if (keyCode === TAB) {
-      characterSelectOption = (characterSelectOption + 1) % 5;
-      return;
-    }
-    
-    if (keyCode === LEFT_ARROW) {
-      switch (characterSelectOption) {
-        case 0:
-          selectedPlayerCharacter = selectedPlayerCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
-          break;
-        case 1:
-          selectedEnemyCharacter = selectedEnemyCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
-          break;
-        case 2:
-          playerControlled = playerControlled === 'player' ? 'enemy' : 'player';
-          break;
-        case 3:
-          playerAI = !playerAI;
-          break;
-        case 4:
-          enemyAI = !enemyAI;
-          break;
-      }
-      return;
-    }
-    
-    if (keyCode === RIGHT_ARROW) {
-      switch (characterSelectOption) {
-        case 0:
-          selectedPlayerCharacter = selectedPlayerCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
-          break;
-        case 1:
-          selectedEnemyCharacter = selectedEnemyCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
-          break;
-        case 2:
-          playerControlled = playerControlled === 'player' ? 'enemy' : 'player';
-          break;
-        case 3:
-          playerAI = !playerAI;
-          break;
-        case 4:
-          enemyAI = !enemyAI;
-          break;
-      }
-      return;
-    }
+    // Remove keyboard controls - everything is mouse-controlled now
     
     if (keyCode === ENTER) {
-      // Initialize fighters with selected settings
-      // AI and player control are mutually exclusive for each fighter
+      // Check if all active players are ready
+      const activePlayers = players.filter(p => p.active);
+      const allReady = activePlayers.every(p => p.ready);
       
-      // Player fighter setup
-      let playerIsAI = playerAI;
-      let playerIsPlayerControlled = playerControlled === 'player';
-      
-      // Enemy fighter setup  
-      let enemyIsAI = enemyAI;
-      let enemyIsPlayerControlled = playerControlled === 'enemy';
-      
-      // Apply mutual exclusivity: if player controls a fighter, disable AI for that fighter
-      if (playerIsPlayerControlled) {
-        playerIsAI = false;
-      }
-      if (enemyIsPlayerControlled) {
-        enemyIsAI = false;
+      if (!allReady) {
+        console.log('Not all players are ready!');
+        return;
       }
       
-      player = new Fighter(playerIsAI, 'Player', selectedPlayerCharacter, playerIsPlayerControlled);
-      enemy = new Fighter(enemyIsAI, 'Enemy', selectedEnemyCharacter, enemyIsPlayerControlled);
-      battleState = 'ready';
+      // Start battle with ready players
+      initBattle();
       return;
     }
   }
@@ -267,43 +224,72 @@ function keyReleased() {
 
 function mousePressed() {
   if (battleState === 'characterSelect') {
-    // Check clicks on character select options
     const mx = mouseX;
     const my = mouseY;
     
-    // Player character selection area
-    if (mx > width/2 - 200 && mx < width/2 + 50 && my > 140 && my < 200) {
-      selectedPlayerCharacter = selectedPlayerCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
-      characterSelectOption = 0;
-      return;
-    }
+    // Calculate column layout
+    const columnWidth = 200;
+    const startX = (width - (players.length * columnWidth)) / 2;
     
-    // Enemy character selection area  
-    if (mx > width/2 + 50 && mx < width/2 + 300 && my > 140 && my < 200) {
-      selectedEnemyCharacter = selectedEnemyCharacter === 'JOHN' ? 'VALENCINA' : 'JOHN';
-      characterSelectOption = 1;
-      return;
-    }
-    
-    // Player control selection area
-    if (mx > width/2 - 200 && mx < width/2 + 50 && my > 240 && my < 300) {
-      playerControlled = playerControlled === 'player' ? 'enemy' : 'player';
-      characterSelectOption = 2;
-      return;
-    }
-    
-    // Player AI selection area
-    if (mx > width/2 - 200 && mx < width/2 + 50 && my > 340 && my < 400) {
-      playerAI = !playerAI;
-      characterSelectOption = 3;
-      return;
-    }
-    
-    // Enemy AI selection area
-    if (mx > width/2 + 50 && mx < width/2 + 300 && my > 340 && my < 400) {
-      enemyAI = !enemyAI;
-      characterSelectOption = 4;
-      return;
+    // Check clicks on player columns
+    for (let i = 0; i < players.length; i++) {
+      const player = players[i];
+      const x = startX + i * columnWidth;
+      
+      // Check if click is within this player's column
+      if (mx > x && mx < x + columnWidth) {
+        // Join game (for inactive players)
+        if (!player.active && my > 120 && my < 140) {
+          player.active = true;
+          player.character = getAvailableFighters()[0];
+          player.ready = player.ai; // AI players are auto-ready
+          console.log(`Player ${i + 1} joined the game`);
+          return;
+        }
+        
+        // Only process clicks for active players
+        if (!player.active) continue;
+        
+        // Character selection
+        if (my > 170 && my < 190) {
+          const availableFighters = getAvailableFighters();
+          const currentIndex = availableFighters.indexOf(player.character);
+          const nextIndex = currentIndex < availableFighters.length - 1 ? currentIndex + 1 : 0;
+          player.character = availableFighters[nextIndex];
+          selectedPlayerSlot = i;
+          characterSelectOption = 0;
+          return;
+        }
+        
+        // AI toggle
+        if (my > 230 && my < 250) {
+          player.ai = !player.ai;
+          // Auto-ready AI players
+          if (player.ai) {
+            player.ready = true;
+          }
+          selectedPlayerSlot = i;
+          characterSelectOption = 1;
+          return;
+        }
+        
+        // Ready toggle (for non-AI players)
+        if (!player.ai && my > 290 && my < 310) {
+          player.ready = !player.ready;
+          selectedPlayerSlot = i;
+          characterSelectOption = 2;
+          return;
+        }
+        
+        // Remove player
+        if (my > 330 && my < 350 && players.filter(p => p.active).length > 1) {
+          player.active = false;
+          player.ready = false;
+          player.controlled = false;
+          console.log(`Removed player ${i + 1}`);
+          return;
+        }
+      }
     }
     
     return;
@@ -392,113 +378,137 @@ function drawCharacterSelect() {
   fill(255);
   stroke(0);
   strokeWeight(3);
-  text('CHARACTER SELECT', width / 2, 80);
+  text('CHARACTER SELECT', width / 2, 50);
   pop();
   
-  // Player Character Selection
-  push();
-  textAlign(LEFT, CENTER);
-  textSize(20);
-  fill(255);
-  text('Player Character:', width / 2 - 200, 150);
+  // Draw player columns - Super Smash Bros style
+  const columnWidth = 200;
+  const startX = (width - (players.length * columnWidth)) / 2;
   
-  // Highlight selected option
-  if (characterSelectOption === 0) {
-    fill(100, 150, 255);
-  } else {
-    fill(255);
+  for (let i = 0; i < players.length; i++) {
+    const player = players[i];
+    const x = startX + i * columnWidth;
+    
+    // Highlight selected player slot
+    if (i === selectedPlayerSlot) {
+      push();
+      fill(100, 150, 255, 30);
+      rect(x - 10, 80, columnWidth - 20, 400);
+      pop();
+    }
+    
+    // Player header
+    push();
+    textAlign(CENTER, CENTER);
+    textSize(20);
+    
+    if (!player.active) {
+      fill(100);
+    } else if (i === selectedPlayerSlot && characterSelectOption === 0) {
+      fill(100, 150, 255);
+    } else {
+      fill(255);
+    }
+    
+    text(`P${i + 1}`, x + columnWidth/2, 100);
+    
+    if (!player.active) {
+      textSize(14);
+      fill(150);
+      text('Press A to join', x + columnWidth/2, 125);
+      pop();
+      continue;
+    }
+    
+    // Character selection
+    textSize(16);
+    fill(200);
+    text('Character:', x + columnWidth/2, 160);
+    
+    if (i === selectedPlayerSlot && characterSelectOption === 0) {
+      fill(100, 150, 255);
+    } else {
+      fill(255);
+    }
+    
+    const charData = CHARACTERS[player.character];
+    text(charData ? charData.name : player.character, x + columnWidth/2, 180);
+    
+    // AI toggle
+    textSize(16);
+    fill(200);
+    text('AI:', x + columnWidth/2, 220);
+    
+    if (i === selectedPlayerSlot && characterSelectOption === 1) {
+      fill(100, 150, 255);
+    } else {
+      fill(255);
+    }
+    
+    text(player.ai ? 'ON' : 'OFF', x + columnWidth/2, 240);
+    
+    // Ready status (only for non-AI players)
+    if (!player.ai) {
+      textSize(16);
+      fill(200);
+      text('Ready:', x + columnWidth/2, 280);
+      
+      if (player.ready) {
+        fill(100, 255, 100);
+        text('✓ READY', x + columnWidth/2, 300);
+      } else {
+        fill(255, 255, 100);
+        text('Click to ready', x + columnWidth/2, 300);
+      }
+    } else {
+      // Show auto-ready status for AI players
+      textSize(16);
+      fill(100, 255, 100);
+      text('✓ Auto-ready', x + columnWidth/2, 290);
+    }
+    
+    // Remove player option
+    textSize(14);
+    fill(200);
+    text('Remove:', x + columnWidth/2, 330);
+    
+    if (i === selectedPlayerSlot && characterSelectOption === 3) {
+      fill(255, 100, 100);
+    } else {
+      fill(255);
+    }
+    
+    text('Click here', x + columnWidth/2, 350);
+    
+    // Control indicator
+    if (player.controlled) {
+      textSize(16);
+      fill(100, 255, 100);
+      text('YOU CONTROL', x + columnWidth/2, 390);
+    }
+    
+    pop();
   }
-  text(`> ${selectedPlayerCharacter}`, width / 2 - 200, 180);
-  
-  // Available characters
-  textSize(16);
-  fill(200);
-  text('Available: JOHN, VALENCINA', width / 2 - 200, 210);
-  pop();
-  
-  // Enemy Character Selection
-  push();
-  textAlign(LEFT, CENTER);
-  textSize(20);
-  fill(255);
-  text('Enemy Character:', width / 2 + 50, 150);
-  
-  if (characterSelectOption === 1) {
-    fill(100, 150, 255);
-  } else {
-    fill(255);
-  }
-  text(`> ${selectedEnemyCharacter}`, width / 2 + 50, 180);
-  
-  textSize(16);
-  fill(200);
-  text('Available: JOHN, VALENCINA', width / 2 + 50, 210);
-  pop();
-  
-  // Player Control Selection
-  push();
-  textAlign(LEFT, CENTER);
-  textSize(20);
-  fill(255);
-  text('Player Controls:', width / 2 - 200, 250);
-  
-  if (characterSelectOption === 2) {
-    fill(100, 150, 255);
-  } else {
-    fill(255);
-  }
-  text(`> ${playerControlled.toUpperCase()}`, width / 2 - 200, 280);
-  
-  textSize(16);
-  fill(200);
-  text('Options: player, enemy', width / 2 - 200, 310);
-  pop();
-  
-  // Player AI Selection
-  push();
-  textAlign(LEFT, CENTER);
-  textSize(20);
-  fill(255);
-  text('Player AI:', width / 2 - 200, 350);
-  
-  if (characterSelectOption === 3) {
-    fill(100, 150, 255);
-  } else {
-    fill(255);
-  }
-  text(`> ${playerAI ? 'ON' : 'OFF'}`, width / 2 - 200, 380);
-  
-  textSize(16);
-  fill(200);
-  text('Options: ON, OFF', width / 2 - 200, 410);
-  pop();
-  
-  // Enemy AI Selection
-  push();
-  textAlign(LEFT, CENTER);
-  textSize(20);
-  fill(255);
-  text('Enemy AI:', width / 2 + 50, 350);
-  
-  if (characterSelectOption === 4) {
-    fill(100, 150, 255);
-  } else {
-    fill(255);
-  }
-  text(`> ${enemyAI ? 'ON' : 'OFF'}`, width / 2 + 50, 380);
-  
-  textSize(16);
-  fill(200);
-  text('Options: ON, OFF', width / 2 + 50, 410);
-  pop();
   
   // Instructions
   push();
   textAlign(CENTER, CENTER);
   textSize(16);
   fill(150);
-  text('Use TAB to cycle options, ENTER to confirm', width / 2, 380);
-  text('Arrow keys to change selections', width / 2, 400);
+  text('Click on options to change them | Click "Click to ready" when prepared', width / 2, 500);
+  
+  // Show ready status
+  const activePlayers = players.filter(p => p.active);
+  const allReady = activePlayers.every(p => p.ready);
+  
+  if (allReady && activePlayers.length > 0) {
+    fill(100, 255, 100);
+    text('All players ready! Press ENTER to start battle', width / 2, 520);
+  } else {
+    fill(255, 255, 100);
+    const notReadyCount = activePlayers.filter(p => !p.ready).length;
+    text(`Waiting for ${notReadyCount} player(s) to ready up...`, width / 2, 520);
+  }
   pop();
 }
 

@@ -24,7 +24,11 @@ function drawSummary() {
 
 function drawHud() {
   drawPlayerHud();
-  drawEnemyHud();
+  
+  // Draw multi-player HUDs for all non-player-controlled fighters
+  if (window.allFighters && window.allFighters.length >= 2) {
+    drawMultiPlayerHuds();
+  }
 }
 
 function drawPlayerHud() {
@@ -86,105 +90,169 @@ function getOpponentFighter() {
   return controlledFighter === player ? enemy : player;
 }
 
-function drawEnemyHud() {
-  const opponentFighter = getOpponentFighter();
-  if (!opponentFighter) return;
+function drawMultiPlayerHuds() {
+  if (!window.allFighters) return;
   
-  const panelX = width - 256;
-  const panelY = 16;
+  const controlledFighter = getPlayerControlledFighter();
+  const otherFighters = window.allFighters.filter(f => !f.isPlayerControlled);
+  
+  // Draw HUD panels for other fighters in top right
+  const startX = width - 256;
+  const startY = 16;
+  const panelSpacing = 140;
+  
+  otherFighters.forEach((fighter, index) => {
+    const panelX = startX;
+    const panelY = startY + (index * panelSpacing);
+    drawFighterHudPanel(fighter, panelX, panelY, `P${fighter.playerId || index + 1}`);
+  });
+}
+
+function drawFighterHudPanel(fighter, panelX, panelY, playerLabel) {
   const panelWidth = 240;
-  const panelHeight = 132;
-  const comboSize = 16 + min(18, opponentFighter.combo * 1.5);
-  const comboRatio = constrain(opponentFighter.comboTimer / opponentFighter.comboTimeout, 0, 1);
+  const panelHeight = 120;
+  const comboSize = 14 + min(16, fighter.combo * 1.2);
+  const comboRatio = constrain(fighter.comboTimer / fighter.comboTimeout, 0, 1);
 
   push();
   fill(20, 180);
   stroke(255, 20);
   rect(panelX, panelY, panelWidth, panelHeight, 10);
   noStroke();
+  
+  // Player label and name
   fill(255);
   textAlign(LEFT, TOP);
-  textSize(comboSize);
-  text(`Combo: ${opponentFighter.combo}`, panelX + 12, panelY + 12);
   textSize(12);
-  fill('#222');
-  rect(panelX + 12, panelY + 12 + comboSize + 8, panelWidth - 24, 10, 5);
-  fill('#ffcc33');
-  rect(panelX + 12, panelY + 12 + comboSize + 8, (panelWidth - 24) * comboRatio, 10, 5);
+  text(playerLabel, panelX + 12, panelY + 8);
+  
+  // Show DEFEATED status or name
+  if (fighter.isDefeated) {
+    fill(255, 100, 100);
+    textSize(14);
+    text('DEFEATED', panelX + 50, panelY + 8);
+  } else {
+    fill(255);
+    textSize(14);
+    text(fighter.name, panelX + 50, panelY + 8);
+  }
+  
+  // Combo (only for non-defeated players)
+  if (!fighter.isDefeated) {
+    textSize(comboSize);
+    text(`Combo: ${fighter.combo}`, panelX + 12, panelY + 28);
+    textSize(10);
+    fill('#222');
+    rect(panelX + 12, panelY + 28 + comboSize + 4, panelWidth - 24, 8, 4);
+    fill('#ffcc33');
+    rect(panelX + 12, panelY + 28 + comboSize + 4, (panelWidth - 24) * comboRatio, 8, 4);
+  }
 
+  // Stats
   fill(255);
-  textSize(14);
-  text(`Name: ${opponentFighter.name}`, panelX + 12, panelY + 52);
-  text(`HP: ${opponentFighter.hp.toFixed(0)} / ${opponentFighter.maxHp}`, panelX + 12, panelY + 72);
-  text(`State: ${opponentFighter.state}`, panelX + 12, panelY + 92);
+  textSize(12);
+  if (fighter.isDefeated) {
+    text('HP: 0 / ' + fighter.maxHp, panelX + 12, panelY + 52);
+    text('State: DEFEATED', panelX + 12, panelY + 68);
+  } else {
+    text(`HP: ${fighter.hp.toFixed(0)} / ${fighter.maxHp}`, panelX + 12, panelY + 52);
+    text(`State: ${fighter.state}`, panelX + 12, panelY + 68);
+  }
   
-  
+  // Health bar
   const hpBarX = panelX + 12;
-  const hpBarY = panelY + 110;
+  const hpBarY = panelY + 86;
   const hpWidth = panelWidth - 24;
   fill('#222');
-  rect(hpBarX, hpBarY, hpWidth, 8, 4);
-  fill('#42d492');
-  rect(hpBarX, hpBarY, hpWidth * (opponentFighter.hp / opponentFighter.maxHp), 8, 4);
+  rect(hpBarX, hpBarY, hpWidth, 6, 3);
   
-  // Stagger Bar
-  fill('#222');
-  rect(hpBarX, hpBarY + 14, hpWidth, 6, 3);
-  const staggerPercent = constrain(opponentFighter.stagger / opponentFighter.staggerThreshold, 0, 1);
-  if (staggerPercent > 0) {
-    fill(255, 100 + staggerPercent * 50, 50);
-    rect(hpBarX, hpBarY + 14, hpWidth * staggerPercent, 6, 3);
+  if (fighter.isDefeated) {
+    fill(100, 50, 50); // Dark red for defeated
+  } else {
+    fill('#42d492');
+  }
+  rect(hpBarX, hpBarY, hpWidth * (fighter.isDefeated ? 0 : fighter.hp / fighter.maxHp), 6, 3);
+  
+  // Stagger bar (only for non-defeated players)
+  if (!fighter.isDefeated) {
+    fill('#222');
+    rect(hpBarX, hpBarY + 10, hpWidth, 4, 2);
+    const staggerPercent = constrain(fighter.stagger / fighter.staggerThreshold, 0, 1);
+    if (staggerPercent > 0) {
+      fill(255, 100 + staggerPercent * 50, 50);
+      rect(hpBarX, hpBarY + 10, hpWidth * staggerPercent, 4, 2);
+    }
   }
   
-  drawDashCharges(opponentFighter, panelX + 12, panelY + 24, hpWidth);
   pop();
 }
 
-function drawOverheadHealthbar() {
-  const nonPlayerFighter = getOpponentFighter();
-  if (!nonPlayerFighter) return;
-  
-  // Only show overhead healthbar for the non-player-controlled fighter
-  if (nonPlayerFighter.isPlayerControlled) return;
-  
-  push();
-  
-  // Calculate position above fighter's head
-  const barWidth = 60; // Smaller width for better scaling
-  const barHeight = 4;
-  const nameOffset = 15;
-  const barOffset = 3;
-  
-  // Get fighter's position and apply camera transforms
-  const fighterX = nonPlayerFighter.pos.x;
-  const fighterY = nonPlayerFighter.pos.y - 60; // Above head (adjusted for character height)
-  
-  // Draw name with smaller text for better scaling
-  fill(255);
-  textAlign(CENTER, CENTER);
-  textSize(10);
-  stroke(0, 0, 0, 150);
-  strokeWeight(2);
-  text(nonPlayerFighter.name, fighterX, fighterY - nameOffset);
-  
-  // Draw healthbar background
-  noStroke();
-  fill(0, 0, 0, 150);
-  rect(fighterX - barWidth/2, fighterY - barOffset, barWidth, barHeight, 2);
-  
-  // Draw healthbar fill
-  const healthPercent = nonPlayerFighter.hp / nonPlayerFighter.maxHp;
-  if (healthPercent > 0.6) {
-    fill(66, 212, 146); // Green
-  } else if (healthPercent > 0.3) {
-    fill(255, 204, 51); // Yellow
-  } else {
-    fill(217, 77, 77); // Red
+function drawOverheadHealthbars() {
+  if (!window.allFighters) {
+    // Fallback to original function for 2-player battles
+    drawOverheadHealthbar();
+    return;
   }
-  rect(fighterX - barWidth/2, fighterY - barOffset, barWidth * healthPercent, barHeight, 2);
   
-  pop();
+  // Draw overhead healthbars for all non-player-controlled fighters
+  window.allFighters.forEach(fighter => {
+    if (fighter.isPlayerControlled) return;
+    
+    push();
+    
+    // Calculate position above fighter's head
+    const barWidth = 60;
+    const barHeight = 4;
+    const nameOffset = 15;
+    const barOffset = 3;
+    
+    // Get fighter's position and apply camera transforms
+    const fighterX = fighter.pos.x;
+    const fighterY = fighter.pos.y - 60;
+    
+    // Draw name with player identifier and defeated status
+    if (fighter.isDefeated) {
+      fill(255, 100, 100);
+    } else {
+      fill(255);
+    }
+    textAlign(CENTER, CENTER);
+    textSize(10);
+    stroke(0, 0, 0, 150);
+    strokeWeight(2);
+    
+    let displayName;
+    if (fighter.isDefeated) {
+      displayName = fighter.playerId ? `P${fighter.playerId}: DEFEATED` : 'DEFEATED';
+    } else {
+      displayName = fighter.playerId ? `P${fighter.playerId}: ${fighter.name}` : fighter.name;
+    }
+    text(displayName, fighterX, fighterY - nameOffset);
+    
+    // Draw healthbar background
+    noStroke();
+    fill(0, 0, 0, 150);
+    rect(fighterX - barWidth/2, fighterY - barOffset, barWidth, barHeight, 2);
+    
+    // Draw healthbar fill
+    if (fighter.isDefeated) {
+      fill(100, 50, 50); // Dark red for defeated
+    } else {
+      const healthPercent = fighter.hp / fighter.maxHp;
+      if (healthPercent > 0.6) {
+        fill(66, 212, 146);
+      } else if (healthPercent > 0.3) {
+        fill(255, 204, 51);
+      } else {
+        fill(217, 77, 77);
+      }
+      rect(fighterX - barWidth/2, fighterY - barOffset, barWidth * healthPercent, barHeight, 2);
+    }
+    
+    pop();
+  });
 }
+
 
 function drawDashCharges(fighter, x, y, width) {
   const count = fighter.dashCharges;

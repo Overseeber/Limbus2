@@ -14,8 +14,11 @@ let battleTimer = 0;
 let players = [
   { active: true, character: 'player1', ai: false, controlled: true, ready: false },
   { active: true, character: 'player2', ai: true, controlled: false, ready: true },
-  { active: false, character: 'JOHN', ai: true, controlled: false, ready: true }
+  { active: false, character: 'JOHN', ai: true, controlled: false, ready: true },
+  { active: false, character: 'player3', ai: true, controlled: false, ready: true },
+  { active: false, character: 'player4', ai: true, controlled: false, ready: true }
 ];
+const MAX_PLAYERS = 4;
 let selectedPlayerSlot = 0; // Which player slot is currently selected
 let characterSelectOption = 0; // 0: character, 1: AI, 2: ready, 3: remove player
 
@@ -59,11 +62,30 @@ function initBattle() {
       isAI = false;
     }
     
-    const fighter = new Fighter(isAI, `Player ${i + 1}`, playerData.character, isPlayerControlled);
+    const fighter = new Fighter(isAI, `P${i + 1}`, playerData.character, isPlayerControlled);
+    fighter.playerId = i + 1; // Store player ID for UI
+    
+    // Ensure AI settings are properly applied
+    fighter.isAI = isAI;
+    fighter.isPlayerControlled = isPlayerControlled;
+    
+    // Set proper positioning for multi-player battles
+    const spacing = 300; // Horizontal spacing between players
+    const centerX = width / 2;
+    const totalWidth = (activePlayers.length - 1) * spacing;
+    const startX = centerX - totalWidth / 2;
+    
+    fighter.pos.x = startX + (i * spacing);
+    fighter.pos.y = height - 100;
+    fighter.facing = isPlayerControlled ? 1 : -1; // Player-controlled face right, AI face left
+    
     fighters.push(fighter);
   }
   
-  // Assign player and enemy for combat system
+  // Store all fighters for multi-player battles
+  window.allFighters = fighters;
+  
+  // Assign player and enemy for backward compatibility with combat system
   player = fighters.find(f => f.isPlayerControlled);
   enemy = fighters.find(f => !f.isPlayerControlled) || fighters.find(f => f !== player);
 
@@ -83,9 +105,9 @@ function draw() {
   } else if (battleState === 'ready') {
     drawReadyScreen();
   } else if (battleState === 'battle') {
-    // Check for ultimate background dimming
-    const ultimateActive = (player && player.ultimateActive) || (enemy && enemy.ultimateActive);
-    const ultimateFighter = (player && player.ultimateActive) ? player : (enemy && enemy.ultimateActive) ? enemy : null;
+    // Check for ultimate background dimming across all fighters
+    const ultimateFighters = window.allFighters ? window.allFighters.filter(f => f.ultimateActive) : [];
+    const ultimateActive = ultimateFighters.length > 0;
     
     background(28);
     
@@ -94,29 +116,39 @@ function draw() {
     drawArena();
     
     // Draw ultimate name behind characters
-    if (ultimateActive && ultimateFighter && ultimateFighter.ultimateName) {
-      drawUltimateName(ultimateFighter);
+    if (ultimateActive && ultimateFighters[0] && ultimateFighters[0].ultimateName) {
+      drawUltimateName(ultimateFighters[0]);
     }
     
-    player.draw();
-    enemy.draw();
+    // Draw all fighters
+    if (window.allFighters) {
+      window.allFighters.forEach(fighter => fighter.draw());
+    }
+    
     drawDamageNumbers();
     drawParticles();
     
-    // Draw overhead healthbar for non-player fighter
-    drawOverheadHealthbar();
+    // Draw overhead healthbars for non-player fighters
+    drawOverheadHealthbars();
     
     // Draw ultimate damage counter
-    if (ultimateActive && ultimateFighter) {
-      drawUltimateDamageCounter(ultimateFighter);
+    if (ultimateActive && ultimateFighters[0]) {
+      drawUltimateDamageCounter(ultimateFighters[0]);
     }
     
     endCamera();
   } else if (battleState === 'summary') {
     beginCamera();
     drawArena();
-    player.draw();
-    enemy.draw();
+    
+    // Draw all fighters in summary
+    if (window.allFighters) {
+      window.allFighters.forEach(fighter => fighter.draw());
+    } else if (player && enemy) {
+      player.draw();
+      enemy.draw();
+    }
+    
     drawDamageNumbers();
     endCamera();
     drawSummary();
@@ -146,25 +178,56 @@ function updateBattle() {
   const dt = deltaTime / 1000;
   battleTimer += dt;
   
-  // Disable player movement during ultimate
-  if (!player.ultimateActive) {
-    player.handleInput();
+  // Update all fighters
+  if (window.allFighters) {
+    for (let i = 0; i < window.allFighters.length; i++) {
+      const fighter = window.allFighters[i];
+      
+      // Disable player movement during ultimate for player-controlled fighters
+      if (!fighter.ultimateActive && fighter.isPlayerControlled) {
+        fighter.handleInput();
+      }
+      
+      // Update AI for non-player-controlled fighters with AI enabled
+      if (!fighter.isPlayerControlled && fighter.isAI && window.allFighters.length > 1) {
+        // Find targets (other fighters)
+        const targets = window.allFighters.filter(f => f !== fighter);
+        if (targets.length > 0) {
+          fighter.updateAI(targets[0]); // Simple AI - target first available
+        }
+      }
+      
+      // Update fighter physics and state
+      const targets = window.allFighters.filter(f => f !== fighter);
+      fighter.update(dt, targets); // Pass all available targets for multi-player combat
+    }
+    
+    // Handle collisions between all non-defeated fighters
+    for (let i = 0; i < window.allFighters.length; i++) {
+      for (let j = i + 1; j < window.allFighters.length; j++) {
+        const fighter1 = window.allFighters[i];
+        const fighter2 = window.allFighters[j];
+        
+        // Skip collision if either fighter is defeated
+        if (fighter1.isDefeated || fighter2.isDefeated) {
+          continue;
+        }
+        
+        fighter1.cleanupPosition(fighter2);
+      }
+    }
+    
+    // Check for battle end (only one fighter not defeated)
+    const activeFighters = window.allFighters.filter(f => !f.isDefeated);
+    if (activeFighters.length <= 1) {
+      battleState = 'summary';
+      winner = activeFighters[0] || null;
+      summaryText = winner ? `${winner.name} wins!` : 'Draw!';
+    }
   }
-//  enemy.updateAI(player);
-
-  player.update(dt, enemy);
-  enemy.update(dt, player);
-
-  // Collision is handled in Fighter.cleanupPosition() method
 
   updateDamageNumbers(dt);
   updateParticles(dt);
-
-  if (player.isDead() || enemy.isDead()) {
-    battleState = 'summary';
-    winner = player.isDead() ? enemy : player;
-    summaryText = `${winner.name} wins!`;
-  }
 }
 
 function getPlayerControlledFighter() {
@@ -244,6 +307,24 @@ function mousePressed() {
           player.character = getAvailableFighters()[0];
           player.ready = player.ai; // AI players are auto-ready
           console.log(`Player ${i + 1} joined the game`);
+          return;
+        }
+        
+        // Add new player option (only show if below max and all slots are active)
+        if (players.filter(p => p.active).length >= 3 && 
+            players.filter(p => p.active).length < MAX_PLAYERS && 
+            i === players.filter(p => p.active).length && 
+            my > 120 && my < 140) {
+          // Find first inactive slot
+          for (let j = 0; j < players.length; j++) {
+            if (!players[j].active) {
+              players[j].active = true;
+              players[j].character = getAvailableFighters()[0];
+              players[j].ready = players[j].ai;
+              console.log(`Added player ${j + 1}`);
+              break;
+            }
+          }
           return;
         }
         
@@ -413,9 +494,22 @@ function drawCharacterSelect() {
     text(`P${i + 1}`, x + columnWidth/2, 100);
     
     if (!player.active) {
-      textSize(14);
-      fill(150);
-      text('Press A to join', x + columnWidth/2, 125);
+      const activeCount = players.filter(p => p.active).length;
+      
+      if (activeCount >= 3 && activeCount < MAX_PLAYERS && i === activeCount) {
+        // Show "Add Player" option for the next available slot
+        textSize(14);
+        fill(100, 255, 100);
+        text('Click to add', x + columnWidth/2, 125);
+        textSize(12);
+        fill(150);
+        text('new player', x + columnWidth/2, 145);
+      } else {
+        // Show normal join option
+        textSize(14);
+        fill(150);
+        text('Press A to join', x + columnWidth/2, 125);
+      }
       pop();
       continue;
     }

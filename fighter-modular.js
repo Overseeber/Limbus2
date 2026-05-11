@@ -47,6 +47,7 @@ class Fighter {
     this.spriteShakeY = 0;
     this.spriteShakeIntensity = 0;
     this.isUltimateSpriteShake = false;
+    this.isDefeated = false;
 
     this.controls = {};
     this.reset();
@@ -599,6 +600,11 @@ class Fighter {
   }
 
   handleInput() {
+    // Completely disable input if defeated
+    if (this.isDefeated) {
+      return;
+    }
+    
     if (this.isAI || !this.controls || !this.isPlayerControlled) {
       return;
     }
@@ -695,9 +701,10 @@ class Fighter {
     this.guardRequest = true;
     this.isGuarding = true;
     
-    // Auto-face towards opponent if they're attacking and within range
-    if (opponent && opponent.strikeActive && abs(this.pos.x - opponent.pos.x) < opponent.attackRange + 100) {
-      this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
+    // Auto-face towards closest opponent when guarding
+    const closestOpponent = this.getClosestOpponent();
+    if (closestOpponent) {
+      this.faceTowards(closestOpponent);
     }
   }
 
@@ -712,11 +719,14 @@ class Fighter {
   }
 
   startEvade(opponent) {
-    if (this.evadeTimer > 0 || this.isEvading) {
+    if (this.isEvading || this.evadeCooldown > 0) {
       return;
     }
     this.setEvadeState(0.22);
-    this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
+    // Face towards specific opponent when evading
+    if (opponent) {
+      this.faceTowards(opponent);
+    }
     this.vel.x = -this.facing * 18;
     this.vel.y = -3;
   }
@@ -736,7 +746,18 @@ class Fighter {
     // This method is kept for compatibility but should not be called directly
   }
 
-  update(dt, opponent) {
+  update(dt, opponents = null) {
+    // Handle both single opponent (backward compatibility) and array of opponents
+    const opponent = Array.isArray(opponents) ? (opponents.length > 0 ? opponents[0] : null) : opponents;
+    
+    // If defeated, keep in hurt state and skip all other updates
+    if (this.isDefeated) {
+      this.setState('hurt'); // Force hurt state
+      this.vel.x = 0; // Prevent movement
+      this.vel.y = 0;
+      return; // Skip all other updates
+    }
+    
     // STEP 7: Unified update pipeline
     
     // 1. State synchronization
@@ -753,8 +774,8 @@ class Fighter {
     this.movementSystem.applyGravity(dt, opponent);
     this.movementSystem.cleanupPosition(opponent);
     
-    // 5. Attack system
-    this.updateAttackSystem(dt, opponent);
+    // 5. Attack system - handle multiple opponents
+    this.updateAttackSystem(dt, opponents);
     
     // 6. Ultimate system
     this.updateUltimateSystem(dt, opponent);
@@ -894,7 +915,10 @@ class Fighter {
     }
   }
 
-  updateAttackSystem(dt, opponent) {
+  updateAttackSystem(dt, opponents) {
+    // Handle both single opponent (backward compatibility) and array of opponents
+    const opponent = Array.isArray(opponents) ? (opponents.length > 0 ? opponents[0] : null) : opponents;
+    
     if (this.state === 'attack') {
       // Handle attack sequence frame timing
       if (this.attackSequence > 0) {
@@ -925,7 +949,7 @@ class Fighter {
       // Handle attack timer expiration for non-sequence attacks
       if (this.state === 'attack' && this.attackTimer <= 0) {
         if (!this.attackHitResolved) {
-          this.attackSystem.resolveAttack(opponent);
+          this.resolveAttackForMultipleOpponents(opponents);
         }
         // Add 1 second delay before allowing idle state transition
         this.attackTimer = 1.0; // Prevent immediate transition to idle
@@ -936,9 +960,47 @@ class Fighter {
 
     // Deal damage during attack sequences when strike is active
     if (this.strikeActive && this.attackSequence > 0 && !this.attackHitResolved && this.attackTimer > 0) {
-      this.attackSystem.resolveAttack(opponent);
+      this.resolveAttackForMultipleOpponents(opponents);
       this.attackHitResolved = true; // Set immediately to prevent timer expiration from resolving
     }
+  }
+  
+  resolveAttackForMultipleOpponents(opponents) {
+    if (!opponents) return;
+    
+    // Handle both single opponent and array of opponents
+    const targets = Array.isArray(opponents) ? opponents : [opponents];
+    
+    // Check each opponent for hit detection
+    targets.forEach(target => {
+      if (target) {
+        // Use enhanced dash hit detection if this is a dash attack
+        const canHit = (this.state === 'attack' && this.isDashing) ? 
+          this.canDashHitTarget(target) : this.canHitTarget(target);
+          
+        if (canHit) {
+          this.attackSystem.resolveAttack(target);
+        }
+      }
+    });
+  }
+  
+  canHitTarget(target) {
+    if (!target || target === this) return false;
+    
+    // Check if target is in range
+    const distance = dist(this.pos.x, this.pos.y, target.pos.x, target.pos.y);
+    return distance <= this.attackRange;
+  }
+  
+  // Enhanced dash attack hit detection with larger range and immediate damage
+  canDashHitTarget(target) {
+    if (!target || target === this || target.isDefeated) return false;
+    
+    // Dash attacks have extended range and more forgiving hit detection
+    const distance = dist(this.pos.x, this.pos.y, target.pos.x, target.pos.y);
+    const dashRange = this.attackRange * 1.5; // 50% increased range for dash attacks
+    return distance <= dashRange;
   }
 
   updateStateTransitions() {
@@ -1139,11 +1201,18 @@ class Fighter {
         this.haltFrameTimer = 0;
       }
       // Dash attack: move in and strike, then dash through enemy.
-      if (!this.dashAttacked && abs(this.pos.x - opponent.pos.x) < 80) {
-        this.executeDashAttack(opponent);
-        this.dashAttacked = true;
-        this.vel.x = this.facing * 60;
-        this.dashDuration += 0.16;
+      if (!this.dashAttacked) {
+        // Check if any opponent is within dash range
+        const allFighters = window.allFighters || [];
+        const targets = allFighters.filter(f => f !== this && !f.isDefeated);
+        const hasTargetInRange = targets.some(f => abs(this.pos.x - f.pos.x) < 80);
+        
+        if (hasTargetInRange) {
+          this.executeDashAttack(targets);
+          this.dashAttacked = true;
+          this.vel.x = this.facing * 60;
+          this.dashDuration += 0.16;
+        }
       }
     }
 
@@ -1215,6 +1284,11 @@ class Fighter {
   }
 
   processActions(opponent, dt) {
+    // Completely disable all actions if defeated
+    if (this.isDefeated) {
+      return;
+    }
+    
     // Only block actions during actual stagger phase, not recovery phase
     if (this.state === 'staggered' && this.staggerTimer > 0) {
       return;
@@ -1335,8 +1409,11 @@ class Fighter {
       }
     }
 
-    // Auto-face towards opponent when attacking
-    this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
+    // Auto-face towards closest opponent when attacking
+    const closestOpponent = this.getClosestOpponent();
+    if (closestOpponent) {
+      this.faceTowards(closestOpponent);
+    }
     
     // Emit attackStarted event
     this.events.emit('attackStarted', {
@@ -1363,7 +1440,7 @@ class Fighter {
     }
   }
 
-  executeDashAttack(opponent) {
+  executeDashAttack(targets) {
     // Prevent attacks during ultimate
     if (this.ultimateActive || this.state === 'ultimate') {
       return;
@@ -1378,8 +1455,11 @@ class Fighter {
     this.slashEffectsSpawned = false;
     this.lastAttackHit = false;
 
-    // Auto-face towards opponent when dash attacking
-    this.facing = opponent.pos.x > this.pos.x ? 1 : -1;
+    // Auto-face towards closest opponent when dash attacking
+    const closestOpponent = this.getClosestOpponent();
+    if (closestOpponent) {
+      this.faceTowards(closestOpponent);
+    }
     
     // Dash attacks do 1.5x damage and have increased range
     this.attackDamage = this.baseDamage * 1.5;
@@ -1393,7 +1473,8 @@ class Fighter {
     this.spawnSlashEffect('js1', { x: 0, y: -10 });
 
     // Immediately resolve the attack since dash attacks are instant
-    this.attackSystem.resolveAttack(opponent);
+    // Use multi-target system for dash attacks
+    this.resolveAttackForMultipleOpponents(targets);
   }
 
   executeSlamAttack(opponent) {
@@ -1424,26 +1505,36 @@ class Fighter {
     // Spawn debris particles at slam landing point
     spawnSlamDebris(this.slamLandingHitbox.x, this.slamLandingHitbox.y, 12);
     
-    // Calculate final damage with 50% bonus stagger damage
-    const finalDamage = this.calculateDamage(this.slamLandingHitbox.damage, opponent);
-    const staggerDamage = finalDamage * 0.5; // 50% of damage as stagger
+    // Get all fighters for multi-target AOE damage
+    const allFighters = window.allFighters || [];
+    const targets = allFighters.filter(f => f !== this && !f.isDefeated);
     
-    // Apply AOE damage to opponent if in range
-    const distance = dist(opponent.pos.x, opponent.pos.y, this.slamLandingHitbox.x, this.slamLandingHitbox.y);
-    if (distance <= this.slamLandingHitbox.radius) {
-      opponent.receiveHit(finalDamage, this, 20);
-      // Only add stagger damage if opponent is not already staggered
-      if (opponent.state !== 'staggered') {
-        opponent.stagger += staggerDamage;
+    let hitAnyTarget = false;
+    
+    // Apply AOE damage to all opponents within range
+    targets.forEach(target => {
+      const distance = dist(target.pos.x, target.pos.y, this.slamLandingHitbox.x, this.slamLandingHitbox.y);
+      if (distance <= this.slamLandingHitbox.radius) {
+        // Calculate final damage with 50% bonus stagger damage
+        const finalDamage = this.calculateDamage(this.slamLandingHitbox.damage, target);
+        const staggerDamage = finalDamage * 0.5; // 50% of damage as stagger
+        
+        target.receiveHit(finalDamage, this, 20);
+        // Only add stagger damage if opponent is not already staggered
+        if (target.state !== 'staggered') {
+          target.stagger += staggerDamage;
+        }
+        spawnDamageNumber(finalDamage, target.pos.copy(), this.facing, false, 'normal', false, 'slam');
+        
+        hitAnyTarget = true;
       }
-      spawnDamageNumber(finalDamage, opponent.pos.copy(), this.facing, false, 'normal', false, 'slam');
-      
-      // Ground slams build attack sequence counter (1-3 rotation)
+    });
+    
+    // Ground slams build attack sequence counter (1-3 rotation) if any target was hit
+    if (hitAnyTarget) {
       this.attackCounter = min(3, this.attackCounter + 1);
       this.attackCounterDisplay = this.attackCounter;
       this.attackCounterTimer = 1.0; // Show for 1 second
-      
-      // Combo is handled by addCombo when opponent receives hit
     }
     
     // Hold slam position until input detected
@@ -1461,8 +1552,11 @@ class Fighter {
       return;
     }
 
+    // Use enhanced range for dash attacks
+    const attackRange = (this.state === 'attack' && this.isDashing) ? 
+      this.attackRange * 1.5 : this.attackRange;
 
-    if (this.hitOpponent(opponent, this.calcAttackBox(this.attackRange))) {
+    if (this.hitOpponent(opponent, this.calcAttackBox(attackRange))) {
       const finalDamage = this.calculateDamage(this.attackDamage, opponent);
       
       // Emit attackHit event
@@ -1527,6 +1621,11 @@ class Fighter {
   }
 
   receiveHit(amount, attacker, knockback) {
+    // Don't take damage if already defeated
+    if (this.isDefeated) {
+      return;
+    }
+    
     if (this.isGuarding) {
       amount *= 0.45;
       // Spawn guard sparks at impact point
@@ -1564,6 +1663,13 @@ class Fighter {
     const wasGuarding = this.isGuarding;
     spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding, 'normal', false, 'normal');
     
+    // Check for defeat condition
+    if (this.hp <= 0 && !this.isDefeated) {
+      this.hp = 0;
+      this.defeat();
+      return;
+    }
+    
     // Add screen shake based on damage
     if (typeof addScreenShake === 'function') {
       console.log('[NORMAL ATTACK DEBUG] Adding screen shake for damage:', amount);
@@ -1585,8 +1691,8 @@ class Fighter {
     if (this.state !== 'staggered') {
       this.setState('hit');
       this.staggerTimer = 0.18;
-      // Face towards attacker when hurt
-      this.facing = attacker.pos.x > this.pos.x ? 1 : -1;
+      // Face towards specific attacker when hurt
+      this.faceTowards(attacker);
     }
     
     // Only add stagger if not already staggered (applies to both players and enemies)
@@ -1615,6 +1721,76 @@ class Fighter {
     }
 
     this.addCombo(attacker);
+  }
+  
+  defeat() {
+    this.isDefeated = true;
+    this.vel.x = 0;
+    this.vel.y = 0;
+    
+    // Force switch to hurt sprite if available
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.sprites && character.sprites.hurt) {
+      this.currentSprite = 'hurt';
+    } else {
+      this.setState('hurt'); // Fallback to hurt state
+    }
+    
+    // Clear all action states
+    this.isGuarding = false;
+    this.isCountering = false;
+    this.isEvading = false;
+    this.attackRequest = false;
+    this.attackRelease = false;
+    this.guardRequest = false;
+    this.evadeRequested = false;
+    this.slamAttackRequested = false;
+    this.isSlamAttacking = false;
+    this.strikeActive = false;
+    this.ultimateActive = false;
+    
+    // Disable collision for defeated players
+    this.hasCollision = false;
+    
+    // Disable AI aggression
+    this.isAI = false;
+    
+    // Emit defeat event
+    this.events.emit('defeated', {
+      character: this.characterKey,
+      name: this.name
+    });
+  }
+  
+  isDead() {
+    return this.isDefeated;
+  }
+  
+  // Helper function to find closest opponent
+  getClosestOpponent() {
+    const allFighters = window.allFighters || [];
+    const opponents = allFighters.filter(f => f !== this && !f.isDefeated);
+    
+    if (opponents.length === 0) return null;
+    
+    let closest = opponents[0];
+    let minDistance = dist(this.pos.x, this.pos.y, closest.pos.x, closest.pos.y);
+    
+    for (let i = 1; i < opponents.length; i++) {
+      const distance = dist(this.pos.x, this.pos.y, opponents[i].pos.x, opponents[i].pos.y);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closest = opponents[i];
+      }
+    }
+    
+    return closest;
+  }
+  
+  // Helper function to face towards a specific target
+  faceTowards(target) {
+    if (!target) return;
+    this.facing = target.pos.x > this.pos.x ? 1 : -1;
   }
 
     onParry(attacker) {
@@ -2003,43 +2179,43 @@ addCombo(attacker) {
   }
 
   drawWorldHpBar() {
-    if (!this.isAI) return;
-    const barWidth = 120;
-    const x = this.pos.x;
-    const y = this.pos.y - 90;
-    push();
-    rectMode(CENTER);
+    // if (!this.isAI) return;
+    // const barWidth = 120;
+    // const x = this.pos.x;
+    // const y = this.pos.y - 90;
+    // push();
+    // rectMode(CENTER);
     
-    // HP Bar background
-    fill(0, 180);
-    rect(x, y, barWidth, 18, 8);
+    // // HP Bar background
+    // fill(0, 180);
+    // rect(x, y, barWidth, 18, 8);
     
-    // HP Bar fill
-    fill('#42d492');
-    rect(x - barWidth / 2 + (barWidth * (this.hp / this.maxHp)) / 2, y, barWidth * (this.hp / this.maxHp), 10, 5);
+    // // HP Bar fill
+    // fill('#42d492');
+    // rect(x - barWidth / 2 + (barWidth * (this.hp / this.maxHp)) / 2, y, barWidth * (this.hp / this.maxHp), 10, 5);
     
-    // Stagger Bar background (below HP bar)
-    fill(0, 180);
-    rect(x, y + 16, barWidth, 10, 6);
+    // // Stagger Bar background (below HP bar)
+    // fill(0, 180);
+    // rect(x, y + 16, barWidth, 10, 6);
     
-    // Stagger Bar fill (red/orange gradient)
-    const staggerPercent = constrain(this.stagger / this.staggerThreshold, 0, 1);
-    if (staggerPercent > 0) {
-      fill(255, 100 + staggerPercent * 50, 50);
-      rect(x - barWidth / 2 + (barWidth * staggerPercent) / 2, y + 16, barWidth * staggerPercent, 6, 4);
-    }
+    // // Stagger Bar fill (red/orange gradient)
+    // const staggerPercent = constrain(this.stagger / this.staggerThreshold, 0, 1);
+    // if (staggerPercent > 0) {
+    //   fill(255, 100 + staggerPercent * 50, 50);
+    //   rect(x - barWidth / 2 + (barWidth * staggerPercent) / 2, y + 16, barWidth * staggerPercent, 6, 4);
+    // }
     
-    fill(255);
-    textSize(14);
-    textAlign(CENTER, BOTTOM);
-    text(this.name, x, y - 10);
+    // fill(255);
+    // textSize(14);
+    // textAlign(CENTER, BOTTOM);
+    // text(this.name, x, y - 10);
     
-    // Draw parry charges
-    for (let i = 0; i < 3; i++) {
-      fill(i < this.parryCount ? '#ffff00' : '#333');
-      ellipse(x - 15 + i * 12, y + 15, 6, 6);
-    }
-    pop();
+    // // Draw parry charges
+    // for (let i = 0; i < 3; i++) {
+    //   fill(i < this.parryCount ? '#ffff00' : '#333');
+    //   ellipse(x - 15 + i * 12, y + 15, 6, 6);
+    // }
+    // pop();
   }
 
   draw() {

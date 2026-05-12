@@ -387,6 +387,9 @@ class Fighter {
     this.title = character.title;
     this.baseDamage = character.baseDamage;
     
+    // Set knockback multiplier from character (if available)
+    this.knockbackMultiplier = character.knockbackMultiplier || 1.0;
+    
     // Set controls for player-controlled fighter
     if (this.isPlayerControlled) {
       this.controls = {
@@ -879,24 +882,30 @@ class Fighter {
     // 7. Status system
     this.statusSystem.applyStatuses(dt);
     
-    // 8. Sprite shake update
+    // 8. Character-specific onUpdate
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.onUpdate) {
+      character.onUpdate(dt, opponent, this);
+    }
+    
+    // 9. Sprite shake update
     this.updateSpriteShake(dt);
     
-    // 9. Dash recharge
+    // 10. Dash recharge
     this.applyDashRecharge(dt);
     
-    // 8. State transitions
+    // 11. State transitions
     this.updateStateTransitions();
     
-    // 9. Visual updates
+    // 12. Visual updates
     this.updateVisuals(dt);
     
-    // 10. AI controls
+    // 13. AI controls
     if (this.isAI) {
       this.updateAIControls(opponent);
     }
     
-    // 11. Process actions
+    // 14. Process actions
     this.processActions(opponent, dt);
   }
 
@@ -1033,6 +1042,18 @@ class Fighter {
     // Attack sequence system - reset after 3 hits to create 1-3 rotation
     if (this.attackCounter >= 3) {
       this.attackCounter = 0; // Reset after completing 3-hit sequence
+    }
+    
+    // 🎨 Callisto slam buff duration management
+    if (this.characterKey === 'CALLISTO' && this.slamBuffActive) {
+      this.slamBuffTimer -= dt;
+      if (this.slamBuffTimer <= 0) {
+        // Restore original values
+        this.attackRange = this.originalAttackRange || this.attackRange;
+        this.attackInterval = this.originalAttackInterval || this.attackInterval;
+        this.slamBuffActive = false;
+        console.log('🎨 Callisto slam buffs expired!');
+      }
     }
   }
 
@@ -1891,7 +1912,9 @@ class Fighter {
     
     const strength = max(1, amount * 0.05);
     const awayFromAttacker = this.pos.x < attacker.pos.x ? -1 : 1;
-    this.vel.x = awayFromAttacker * knockback * strength;
+    // Apply knockback with attacker's knockback multiplier (if available)
+    const knockbackMultiplier = attacker.knockbackMultiplier || 1.0;
+    this.vel.x = awayFromAttacker * knockback * strength * knockbackMultiplier;
     this.vel.y = -5;
     this.hitCooldown = 0.25;
 
@@ -2053,6 +2076,13 @@ calculateDamage(base, opponent) {
   if (opponent && opponent.state === 'staggered') {
     damage *= 2;
   }
+  
+  // 🎨 Callisto's Artwork: Tibia bonus (+10% damage per stack)
+  if (this.characterKey === 'CALLISTO' && this.artworkTibiaStacks > 0) {
+    const artworkBonus = 1 + (this.artworkTibiaStacks * 0.1);
+    damage *= artworkBonus;
+  }
+  
   return damage;
 }
 
@@ -2076,6 +2106,11 @@ onSuccessfulHit(damage, opponent) {
     const character = CHARACTERS[this.characterKey];
     if (character && character.onSuccessfulHit) {
       character.onSuccessfulHit(damage, opponent, this);
+    }
+    
+    // 🎨 Apply Callisto's Artwork: Tibia bleed bonus after onSuccessfulHit
+    if (this.characterKey === 'CALLISTO' && character && character.applyArtworkBleedBonus) {
+      character.applyArtworkBleedBonus(opponent, this);
     }
   }
 }

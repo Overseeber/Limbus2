@@ -269,6 +269,151 @@ const CHARACTERS = {
       fighter.weapon = this.weapon;
     }
   },
+CALLISTO: {
+    name: 'Callisto',
+    title: 'Maestro of Corporism',
+    hp: 2819,
+    speed: 9,
+    attackInterval: 0.75,
+    baseDamage: 27,
+    staggerThreshold: 1409,
+    staggerLength: 6,
+    color: '#8b4513',
+    weapon: 'Magnum Opus: Tibia',
+    knockbackMultiplier: 2.0, // 200% knockback
+    
+    // 🎨 CALLISTO'S UNIQUE ABILITIES
+    corpusIngredient: 0,           // Current corpus ingredient stacks (0-20)
+    maxCorpusIngredient: 20,       // Maximum corpus ingredient stacks
+    artworkTibiaStacks: 0,         // Artwork: Tibia stacks (gain 1 per 10 corpus spent)
+    slamCooldown: 0,               // Cooldown for slam attack
+    slamActive: false,             // Is slam attack active
+    corpusSpentTotal: 0,           // Track total corpus spent to calculate artwork stacks
+    
+    // Character-specific methods
+    onSuccessfulHit: function(damage, opponent, fighter) {
+      if (!opponent) return;
+      
+      // ON HIT: Inflict 4 bleed and bleed count
+      opponent.addStatus('Bleed', 4, 4);
+      
+      // ON HIT: Gain 5 [Corpus Ingredient]
+      fighter.corpusIngredient = Math.min(
+        fighter.corpusIngredient + 5,
+        fighter.maxCorpusIngredient
+      );
+      
+      console.log(`🎨 Callisto gained 5 Corpus Ingredient! Total: ${fighter.corpusIngredient}/${fighter.maxCorpusIngredient}`);
+    },
+    
+    onReceiveHit: function(amount, attacker, fighter) {
+      // Callisto has no special receive hit mechanics yet
+    },
+    
+    onUpdate: function(dt, opponent, fighter) {
+      // Update slam cooldown
+      if (fighter.slamCooldown > 0) {
+        fighter.slamCooldown -= dt;
+      }
+      
+      // Update slam active state based on fighter state
+      if (fighter.state === 'slam') {
+        fighter.slamActive = true;
+      } else if (fighter.slamActive && fighter.onGround()) {
+        fighter.slamActive = false;
+      }
+    },
+    
+    processKeyPressed: function(key, fighter) {
+      // Slam attack on Space key (when not on ground)
+      if (key === ' ' && !fighter.onGround() && fighter.slamCooldown <= 0) {
+        this.useSlamAttack(fighter);
+      }
+    },
+    
+    // 💥 Slam Attack Ability
+    useSlamAttack: function(fighter, opponent) {
+      if (fighter.onGround() || fighter.slamCooldown > 0) return;
+      
+      const corpusToSpend = Math.min(fighter.corpusIngredient, 20);
+      
+      if (corpusToSpend === 0) {
+        console.log('🎨 No Corpus Ingredient to spend for slam!');
+        return;
+      }
+      
+      // Consume up to 20 Corpus Ingredient
+      fighter.corpusIngredient -= corpusToSpend;
+      fighter.corpusSpentTotal += corpusToSpend;
+      
+      // Gain 1 Artwork: Tibia for every 10 spent Corpus Ingredient
+      const newArtworkStacks = Math.floor(fighter.corpusSpentTotal / 10);
+      if (newArtworkStacks > fighter.artworkTibiaStacks) {
+        fighter.artworkTibiaStacks = newArtworkStacks;
+        console.log(`🎨 Callisto gained Artwork: Tibia! Total stacks: ${fighter.artworkTibiaStacks}`);
+      }
+      
+      // Slam attack mechanics
+      fighter.executeSlamAttack(opponent);
+      
+      // Apply temporary buffs during slam
+      this.applySlamBuffs(fighter, corpusToSpend);
+      
+      // Slam cooldown (adjust as needed for balance)
+      fighter.slamCooldown = 2;
+      
+      console.log(`💥 Callisto used Slam Attack! Spent ${corpusToSpend} Corpus Ingredient`);
+    },
+    
+    // Apply temporary buffs from slam attack
+    applySlamBuffs: function(fighter, corpusSpent) {
+      // Save original values before modifying (only on first slam buff application)
+      if (!fighter.slamBuffActive) {
+        fighter.originalAttackRange = fighter.attackRange;
+        fighter.originalAttackInterval = fighter.attackInterval;
+        fighter.slamBuffActive = true;
+      }
+      
+      // Gain 100% range (2x multiplier)
+      fighter.attackRange = fighter.originalAttackRange * 2;
+      
+      // -50% attack interval (divide by 2, which is 50% reduction)
+      fighter.attackInterval = fighter.originalAttackInterval * 0.5;
+      
+      // 3 second duration for buffs
+      fighter.slamBuffTimer = 3;
+    },
+    
+    // Calculate damage with Artwork: Tibia bonus
+    calculateArtworkDamageBonus: function(fighter) {
+      // Per stack of Artwork: Tibia: Deal +10% damage
+      return fighter.artworkTibiaStacks * 0.1;
+    },
+    
+    // Apply Artwork: Tibia bleed bonus when hitting with bleed
+    applyArtworkBleedBonus: function(opponent, fighter) {
+      if (fighter.artworkTibiaStacks <= 0) return;
+      
+      // Per stack: When inflicting bleed, inflict 1 more bleed potency and count
+      const bleedBonus = fighter.artworkTibiaStacks;
+      opponent.addStatus('Bleed', bleedBonus, bleedBonus);
+      
+      console.log(`🎨 Artwork: Tibia bonus applied! +${bleedBonus} Bleed potency and count`);
+    },
+    
+    // Initialize character
+    initializeCharacter: function(fighter) {
+      fighter.weapon = this.weapon;
+      fighter.corpusIngredient = 0;
+      fighter.artworkTibiaStacks = 0;
+      fighter.corpusSpentTotal = 0;
+      fighter.slamCooldown = 0;
+      fighter.slamActive = false;
+      fighter.slamBuffActive = false;
+      fighter.slamBuffTimer = 0;
+    }
+  },
+
   VALENCINA: {
     name: 'Valencina',
     title: 'The Accelerating Future',

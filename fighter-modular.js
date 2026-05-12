@@ -2520,15 +2520,15 @@ addCombo(attacker) {
       // Haste: Gain movement speed based on potency (max +5 bonus)
       else if (status.type === 'Haste') {
         // Calculate speed: baseSpeed + haste (capped at +5)
-        const hasteBonus = Math.min(status.potency, 5);
-        this.speed = (this.baseSpeed || this.speed) + hasteBonus;
+        const hasteBonus = Math.min(status.potency * 0.01, 0.5);
+        //this.speed = (this.baseSpeed || this.speed) + hasteBonus;
       }
       
       // Bind: Lose movement speed based on potency (max -5 penalty)
       else if (status.type === 'Bind') {
         // Calculate speed: baseSpeed - bind (capped at -5)
-        const bindPenalty = Math.min(status.potency, 5);
-        this.speed = max(1, (this.baseSpeed || this.speed) - bindPenalty);
+        const bindPenalty = Math.min(status.potency * 0.01, 0.5);
+       // this.speed = max(1, (this.baseSpeed || this.speed) - bindPenalty);
       }
       
       // Fragile: Take 10% more damage

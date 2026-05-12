@@ -442,6 +442,10 @@ CALLISTO: {
     onSuccessfulHit: function(damage, opponent, fighter) {
       if (!opponent) return;
       
+      // Increment combo count for Callisto
+      fighter.combo++;
+      fighter.comboTimer = 1.4; // Reset combo timer
+      
       // ON HIT: Inflict 4 bleed and bleed count
       opponent.addStatus('Bleed', 4, 4);
       
@@ -570,6 +574,10 @@ CALLISTO: {
       fighter.attackCounter = Math.min(3, fighter.attackCounter + 1);
       fighter.attackCounterDisplay = fighter.attackCounter;
       fighter.attackCounterTimer = 1.0;
+      
+      // Increment combo count for Callisto
+      fighter.combo++;
+      fighter.comboTimer = 1.4; // Reset combo timer
 
       // Use cevade sprite for execution
       fighter.currentSprite = 'cevade';
@@ -624,7 +632,7 @@ CALLISTO: {
     name: 'Valencina',
     title: 'The Accelerating Future',
     hp: 3204,
-    speed: 3,
+    speed: 9,//val speed is 9
     attackInterval: 1,
     baseDamage: 21,
     staggerThreshold: 1300,

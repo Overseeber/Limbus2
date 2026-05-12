@@ -715,7 +715,9 @@ CALLISTO: {
     
     processKeyPressed: function(key, fighter) {
       // ⚡ Time to Hunt ability (Q key)
+      console.log(`[DEBUG] Time to Hunt - Key: ${key}, Cooldown: ${fighter.timeToHuntCooldown}`);
       if (key === 'q' && fighter.timeToHuntCooldown <= 0) {
+        console.log('[DEBUG] Time to Hunt - Activating!');
         this.useTimeToHunt(fighter);
       }
       

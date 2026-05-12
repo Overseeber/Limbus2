@@ -473,12 +473,22 @@ class Fighter {
 
       // Handle special states for Callisto
       if (this.isSlamAttacking) {
-        this.currentSprite = 'cs1f2'; // Slam sprite
+        this.currentSprite = 'cs1f2'; // Slam sprite with cs1s1
+        // Spawn slam slash effect
+        if (!this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
       } else if (this.isDashing) {
         if (this.state === 'attack') {
-          this.currentSprite = 'cjoust'; // Dash attack sprite
+          this.currentSprite = 'cjoust'; // Dash attack sprite with cjs1
+          // Spawn dash attack slash effect
+          if (!this.slashEffectsSpawned) {
+            this.spawnSlashEffect('cjs1', { x: 0, y: -10 });
+            this.slashEffectsSpawned = true;
+          }
         } else if (this.usePostDashSprite) {
-          this.currentSprite = 'cmove'; // Post-dash movement sprite
+          this.currentSprite = 'chalt'; // Dash end sprite
         } else {
           this.currentSprite = 'cmove'; // Regular dash movement sprite
         }
@@ -515,7 +525,12 @@ class Fighter {
 
     // Handle special states
     if (this.isSlamAttacking) {
-      this.currentSprite = 's4f4'; // Keep s4f4 for character sprite
+      // Character-specific slam sprites
+      if (this.characterKey === 'CALLISTO') {
+        this.currentSprite = 'cs1f2'; // Callisto slam sprite
+      } else {
+        this.currentSprite = 's4f4'; // Valencina slam sprite
+      }
     } else if (this.isDashing) {
       if (this.state === 'attack') {
         this.currentSprite = 'joust'; // Dash attack sprite
@@ -624,53 +639,10 @@ class Fighter {
   }
 
   updateCallistoAttackSequence() {
-    // Attack 1 sequence: cs1f2 > cs1f3 (with cs1s1 slash effect)
+    // Attack 1: cs1f1 (windup when receiving attack and before hitting), (when hitting) switch to cs1f2 with cs1s1 (deal an instance of damage) (inflict 1 bind, gain 1 haste) > cs1f3
     if (this.attackSequence === 1) {
-      const sequence = ['cs1f2', 'cs1f3'];
-      const damageFrames = [false, true]; // cs1f3 deals damage
-      
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
-        
-        // Spawn slash effects on specific frames (only once per frame)
-        if (this.attackFrame === 0 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
-          this.slashEffectsSpawned = true;
-        }
-        
-        // Deal damage on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
-          this.dealAttackDamage();
-          this.attackDamageDealt = true;
-        }
-      }
-    }
-    // Attack 2 sequence: cs2f1 > chalt > cs3f1
-    else if (this.attackSequence === 2) {
-      const sequence = ['cs2f1', 'chalt', 'cs3f1'];
-      const damageFrames = [true, false, false]; // cs2f1 deals damage
-      
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
-        
-        // Spawn slash effects on specific frames (only once per frame)
-        if (this.attackFrame === 0 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('cs2s1', { x: 0, y: -10 });
-          this.slashEffectsSpawned = true;
-        }
-        
-        // Deal damage on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
-          this.dealAttackDamage();
-          this.attackDamageDealt = true;
-        }
-      }
-    }
-    // Attack 3 sequence: cs3f1 > cs3f2 > cs3f3 (0.5s hold)
-    else if (this.attackSequence === 3) {
-      const sequence = ['cs3f1', 'cs3f2', 'cs3f3'];
-      const damageFrames = [false, true, false]; // cs3f2 deals damage
-      const holdTimes = [0.2, 0.2, 0.5]; // cs3f3 holds for 0.5s
+      const sequence = ['cs1f1', 'cs1f2', 'cs1f3'];
+      const damageFrames = [false, true, false]; // cs1f2 deals damage
       
       if (this.attackFrame < sequence.length) {
         this.currentSprite = sequence[this.attackFrame];
@@ -681,6 +653,68 @@ class Fighter {
           this.slashEffectsSpawned = true;
         }
         
+        // Deal damage and apply effects on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+          
+          // Apply Attack 1 effects: inflict 1 bind on enemy, gain 1 haste
+          if (this.target) {
+            this.target.addStatus('Bind', 1, 1);
+            console.log('🔗 Callisto inflicted Bind on enemy!');
+          }
+          this.addStatus('Haste', 1, 1);
+          console.log('⚡ Callisto gained Haste!');
+        }
+      }
+    }
+    // Attack 2: cs1f3 (windup) > s2f1 with s2s1 (deal an instance of damage) (inflict 1 fragile (max stack 5), gain 1 protection (max stack 5))
+    else if (this.attackSequence === 2) {
+      const sequence = ['cs1f3', 'cs2f1'];
+      const damageFrames = [false, true]; // s2f1 deals damage
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs2s1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
+        
+        // Deal damage and apply effects on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+          
+          // Apply Attack 2 effects: inflict 1 fragile (max stack 5), gain 1 protection (max stack 5)
+          if (this.target) {
+            const fragileStatus = this.target.statuses.find(s => s.type === 'Fragile');
+            const currentFragileStacks = fragileStatus ? fragileStatus.potency : 0;
+            if (currentFragileStacks < 5) {
+              this.target.addStatus('Fragile', 1, 1);
+              console.log('💔 Callisto inflicted Fragile on enemy!');
+            }
+          }
+          
+          const protectionStatus = this.statuses.find(s => s.type === 'Protection');
+          const currentProtectionStacks = protectionStatus ? protectionStatus.potency : 0;
+          if (currentProtectionStacks < 5) {
+            this.addStatus('Protection', 1, 1);
+            console.log('🛡️ Callisto gained Protection!');
+          }
+        }
+      }
+    }
+    // Attack 3: cs3f1 > cs3f2 with cs3s1 (deal an instance of damage) hold for 0.5 seconds, switch to cs3f3 with cs3s2 (deal +5% more damage for every negative effect on enemy (max 25%)) switch to cs3s4
+    else if (this.attackSequence === 3) {
+      const sequence = ['cs3f1', 'cs3f2', 'cs3f3', 'cs3f4'];
+      const damageFrames = [false, true, false, false]; // cs3f2 deals damage
+      const holdTimes = [0.2, 0.2, 0.2, 0.5]; 
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
         // Use custom frame duration for cs3f3
         if (this.attackFrame === 2) {
           this.attackFrameDuration = 0.5;
@@ -688,9 +722,32 @@ class Fighter {
           this.attackFrameDuration = 0.2;
         }
         
-        // Deal damage on damage frames
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs3s1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        } else if (this.attackFrame === 2 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs3s2', { x: 0, y: -10 });
+        }
+        
+        // Deal damage and apply effects on damage frames
         if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
-          this.dealAttackDamage();
+          // Calculate damage with negative effect bonus for cs3f3
+          let damageMultiplier = 1.0;
+          if (this.attackFrame === 2 && this.target) {
+            // Count negative effects on enemy
+            const negativeEffects = ['Bind', 'Fragile', 'Burn', 'Bleed', 'Tremor', 'Sinking'];
+            const negativeCount = negativeEffects.filter(effect => this.target.hasStatus(effect)).length;
+            const bonusDamage = Math.min(negativeCount * 0.05, 0.25); // Max 25% bonus
+            damageMultiplier = 1.0 + bonusDamage;
+            
+            if (bonusDamage > 0) {
+              console.log(`⚡ Callisto gained ${Math.round(bonusDamage * 100)}% damage bonus from ${negativeCount} negative effects!`);
+            }
+          }
+          
+          // Deal damage with multiplier
+          this.dealAttackDamage(damageMultiplier);
           this.attackDamageDealt = true;
         }
       }
@@ -773,15 +830,40 @@ class Fighter {
         // Try to draw sprite with proper scaling and alpha fade
         const spriteInfo = SPRITES?.[effect.type];
         if (spriteInfo) {
-          push();
-          // Apply alpha fade only and facing transformation
-          tint(255, 255, 255, alpha);
-          translate(baseX + offsetX * facing, baseY + offsetY + 50);
-          if (facing === -1) {
-            scale(-1, 1); // Flip horizontally when facing right
+          // Check for special Installation Art slash entities (cbsk1, cbsk2, cbsk3)
+          if (['cbsk1', 'cbsk2', 'cbsk3'].includes(effect.type)) {
+            // Draw ground-based slash entities with rotation
+            push();
+            
+            // Apply alpha fade
+            tint(255, 255, 255, alpha);
+            
+            // Position at ground level (spawnY) with rotation
+            translate(baseX + offsetX * facing, owner.spawnY + offsetY);
+            
+            // Rotate at +45 degrees
+            rotate(PI / 4); // +45 degrees
+            
+            // Apply same scaling as character sprites
+            const scaleFactor = 144 / 512;
+            scale(scaleFactor * facing, 1);
+            
+            // Draw the sprite
+            drawSpriteScaled(effect.type, 0, 0, scaleFactor);
+            
+            pop();
+          } else {
+            // Regular slash effects
+            push();
+            // Apply alpha fade only and facing transformation
+            tint(255, 255, 255, alpha);
+            translate(baseX + offsetX * facing, baseY + offsetY + 50);
+            if (facing === -1) {
+              scale(-1, 1); // Flip horizontally when facing right
+            }
+            drawSpriteScaled(effect.type, 0, 0, scaleFactor); 
+            pop();
           }
-          drawSpriteScaled(effect.type, 0, 0, scaleFactor); 
-          pop();
         } else {
           // Fallback: draw scaled slash effect
           push();
@@ -1008,10 +1090,18 @@ class Fighter {
     // 7. Status system
     this.statusSystem.applyStatuses(dt);
     
-    // 8. Character-specific onUpdate
+    // 7. Character-specific onUpdate
     const character = CHARACTERS[this.characterKey];
     if (character && character.onUpdate) {
       character.onUpdate(dt, opponent, this);
+    }
+    
+    // Update Installation Art for Callisto
+    if (this.characterKey === 'CALLISTO' && this.installationArtActive) {
+      const callistoCharacter = CHARACTERS['CALLISTO'];
+      if (callistoCharacter && callistoCharacter.updateInstallationArt) {
+        callistoCharacter.updateInstallationArt(this, dt);
+      }
     }
     
     // 9. Sprite shake update
@@ -1787,7 +1877,11 @@ class Fighter {
 
     // Spawn visual joust slash effect for dash attack
     // Positioned slightly above the fighter for visual impact
-    this.spawnSlashEffect('js1', { x: 0, y: -10 });
+    if (this.characterKey === 'CALLISTO') {
+      this.spawnSlashEffect('cjs1', { x: 0, y: -10 });
+    } else {
+      this.spawnSlashEffect('js1', { x: 0, y: -10 });
+    }
 
     // Immediately resolve the attack since dash attacks are instant damage
     // Use multi-target system to hit all opponents within enhanced range
@@ -1859,8 +1953,12 @@ class Fighter {
     this.state = 'slam';
     this.slamLandingHitbox = null;
     
-    // Spawn s2s2 slash effect for slam attack
-    this.spawnSlashEffect('s2s2', { x: 0, y: -10 });
+    // Spawn character-specific slash effect for slam attack
+    if (this.characterKey === 'CALLISTO') {
+      this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
+    } else {
+      this.spawnSlashEffect('s2s2', { x: 0, y: -10 });
+    }
   }
 
   /**
@@ -2209,6 +2307,24 @@ calculateDamage(base, opponent) {
     damage *= artworkBonus;
   }
   
+  // Fragile: Take 10% more damage per stack
+  if (opponent && opponent.hasStatus('Fragile')) {
+    const fragileStatus = opponent.statuses.find(s => s.type === 'Fragile');
+    if (fragileStatus) {
+      const fragileMultiplier = 1 + (0.1 * fragileStatus.potency);
+      damage *= fragileMultiplier;
+    }
+  }
+  
+  // Protection: Take 10% less damage per stack
+  if (opponent && opponent.hasStatus('Protection')) {
+    const protectionStatus = opponent.statuses.find(s => s.type === 'Protection');
+    if (protectionStatus) {
+      const protectionMultiplier = 1 - (0.1 * protectionStatus.potency);
+      damage *= protectionMultiplier;
+    }
+  }
+  
   return damage;
 }
 
@@ -2399,6 +2515,32 @@ addCombo(attacker) {
         if (status.timer >= 10) {
           status.count = 0;
         }
+      }
+      
+      // Haste: Gain movement speed based on potency (max +5 bonus)
+      else if (status.type === 'Haste') {
+        // Calculate speed: baseSpeed + haste (capped at +5)
+        const hasteBonus = Math.min(status.potency, 5);
+        this.speed = (this.baseSpeed || this.speed) + hasteBonus;
+      }
+      
+      // Bind: Lose movement speed based on potency (max -5 penalty)
+      else if (status.type === 'Bind') {
+        // Calculate speed: baseSpeed - bind (capped at -5)
+        const bindPenalty = Math.min(status.potency, 5);
+        this.speed = max(1, (this.baseSpeed || this.speed) - bindPenalty);
+      }
+      
+      // Fragile: Take 10% more damage
+      else if (status.type === 'Fragile') {
+        // Damage multiplier applied in calculateDamage method
+        // No automatic count decrease - status persists until consumed
+      }
+      
+      // Protection: Take 10% less damage
+      else if (status.type === 'Protection') {
+        // Damage reduction applied in calculateDamage method
+        // No automatic count decrease - status persists until consumed
       }
       
       // Precognition: Unique mechanics handled in character profile

@@ -89,7 +89,7 @@ const SPRITES = {
   cpose: { atlas:"cal2", x:0, y:6, w:4, h:2 },
 
   // ===== Cal3 =====
-  cs3f1b:{ atlas:"cal3", x:5, y:0, w:3, h:3 },
+  cs3f2:{ atlas:"cal3", x:5, y:0, w:3, h:3 },
 
   cs1f2: {
     atlas:"cal3",
@@ -142,7 +142,7 @@ const SPRITES = {
   },
 
   // ===== Cslash1 =====
-  cs2s1:{ atlas:"cslash1", x:0, y:0, w:5, h:5 },
+  cs2s1:{ atlas:"cslash1", x:0, y:0, w:5, h:4 },
   cjs1: { atlas:"cslash1", x:0, y:4, w:5, h:2 },
   cs3s1:{ atlas:"cslash1", x:5, y:3, w:3, h:3 },
   cs3s2:{ atlas:"cslash1", x:4, y:6, w:4, h:2 },
@@ -464,6 +464,9 @@ CALLISTO: {
         fighter.slamCooldown -= dt;
       }
       
+      // Update Installation Art timer
+      this.updateInstallationArt(fighter, dt);
+      
       // Update slam active state based on fighter state
       if (fighter.state === 'slam') {
         fighter.slamActive = true;
@@ -476,6 +479,11 @@ CALLISTO: {
       // Slam attack on Space key (when not on ground)
       if (key === ' ' && !fighter.onGround() && fighter.slamCooldown <= 0) {
         this.useSlamAttack(fighter);
+      }
+      
+      // Installation Art ability on Q key
+      if (key === 'q' && !fighter.installationArtActive) {
+        this.useInstallationArt(fighter);
       }
     },
     
@@ -537,17 +545,45 @@ CALLISTO: {
       // Per stack of Artwork: Tibia: Deal +10% damage
       return fighter.artworkTibiaStacks * 0.1;
     },
-    
-    // Apply Artwork: Tibia bleed bonus when hitting with bleed
-    applyArtworkBleedBonus: function(opponent, fighter) {
-      if (fighter.artworkTibiaStacks <= 0) return;
-      
-      // Per stack: When inflicting bleed, inflict 1 more bleed potency and count
-      const bleedBonus = fighter.artworkTibiaStacks;
-      opponent.addStatus('Bleed', bleedBonus, bleedBonus);
-      
-      console.log(`🎨 Artwork: Tibia bonus applied! +${bleedBonus} Bleed potency and count`);
+
+    // Execute Improvised Ribcage attack
+    executeImprovisedRibcage: function(opponent) {
+      if (!opponent) return;
+
+      // Count as normal attack (damage + combo)
+      fighter.attackCounter = Math.min(3, fighter.attackCounter + 1);
+      fighter.attackCounterDisplay = fighter.attackCounter;
+      fighter.attackCounterTimer = 1.0;
+
+      // Use cevade sprite for execution
+      fighter.currentSprite = 'cevade';
+
+      // Deal damage and apply effects
+      const damage = fighter.baseDamage;
+      const finalDamage = fighter.calculateDamage(damage, opponent);
+      opponent.receiveHit(finalDamage, fighter, 0);
+
+      // Inflict 8 bleed
+      opponent.addStatus('Bleed', 8, 8);
+      console.log('🩸 Installation Art inflicted 8 Bleed on enemy!');
+
+      // Inflict sinking potency by damage dealt
+      opponent.addStatus('Sinking', 1, finalDamage);
+      console.log(`� Installation Art inflicted Sinking with potency ${finalDamage}!`);
+
+      // Deal 500% of damage dealt to stagger damage
+      const staggerDamage = finalDamage * 5;
+      opponent.stagger += staggerDamage;
+      console.log(`💥 Installation Art dealt ${staggerDamage} stagger damage!`);
+
+      // Spawn cbsk1 slash effect
+      fighter.spawnSlashEffect('cbsk1', { x: 0, y: 0 });
+      console.log('🎨 Installation Art spawned cbsk1 slash effect!');
+
+      // Set ability on cooldown
+      fighter.installationArtCooldown = 10; // 10 second cooldown
     },
+
     
     // Initialize character
     initializeCharacter: function(fighter) {
@@ -559,6 +595,12 @@ CALLISTO: {
       fighter.slamActive = false;
       fighter.slamBuffActive = false;
       fighter.slamBuffTimer = 0;
+      
+      // Installation Art properties
+      fighter.installationArtActive = false;
+      fighter.installationArtTimer = 0;
+      fighter.installationArtExecuted = false;
+      fighter.installationArtCooldown = 0;
     }
   },
 

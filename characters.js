@@ -367,39 +367,30 @@ const CHARACTERS = {
       }
     },
     
-    initializeCharacter: function(fighter) {
-      // 🎯 Initialize Valencina's unique properties
-      fighter.weapon = this.weapon;
-      fighter.precognition = 30;
-      fighter.accelerationRounds = 0;
-      fighter.combo = 0;
-      fighter.overheat = 0;
-      fighter.shinActive = false;
-      fighter.protection = 0;
-      fighter.poiseCount = 0;
-      fighter.poisePotency = 0;
-      fighter.burnPotency = 0;
-      fighter.burnCount = 0;
-      fighter.tremorPotency = 0;
-      fighter.tremorCount = 0;
-      fighter.gameTimeTarget = false;
-      fighter.accelerationActive = false;
-      fighter.timeToHuntCooldown = 0;
-      fighter.disposialActive = false;
-      fighter.disposialPhase = 0;
-      fighter.lastEvadeTime = Date.now();
-      fighter.lastHitTime = Date.now();
+    endUltimate: function(fighter) {
+      // Reset ultimate states
+      fighter.currentSprite = 'idle';
+      fighter.ultimateCameraZoom = 1;
+      fighter.ultimateBackgroundDim = 0;
       
-      // Apply starting Precognition status visually
-      if (fighter.addStatus) {
-        fighter.addStatus('Precognition', 30, 1);
-        console.log('👁️ Precognition status added to Valencina');
+      // Remove protection from all enemies
+      if (fighter.allEnemies && Array.isArray(fighter.allEnemies)) {
+        fighter.allEnemies.forEach(enemy => {
+          if (enemy) {
+            enemy.ultimateProtected = false;
+            enemy.setState('idle');
+            // Unlock enemy stagger bar
+            if (enemy.ultimateStaggerLocked) {
+              enemy.ultimateStaggerLocked = false;
+              enemy.staggerDecayRate = enemy.originalStaggerDecay || 1;
+            }
+          }
+       });
       }
-    },
     
-    // 🎯 UNIQUE ABILITY METHODS
+    // UNIQUE ABILITY METHODS
     
-    // ⚡ Time to Hunt - Q key ability
+    // Time to Hunt - Q key ability
     useTimeToHunt: function(fighter) {
       if (!fighter.lastHitOpponent) return;
       
@@ -413,6 +404,19 @@ const CHARACTERS = {
       fighter.timeToHuntCooldown = 15; // 15 second cooldown
       console.log('⚡ Time to Hunt activated!');
     },
+      if (!fighter.lastHitOpponent) return;
+      
+      // Apply Game Target status to opponent (duration: 5 hits or 10 sec, whichever comes first)
+      fighter.lastHitOpponent.gameTimeTarget = true;
+      fighter.lastHitOpponent.speed = 1; // Set speed to 1
+      fighter.lastHitOpponent.gameTargetDuration = 10; // 10 seconds
+      fighter.lastHitOpponent.gameTargetHits = 5; // 5 hits
+      fighter.lastHitOpponent.gameTargetHitsTaken = 0; // Track hits received
+      
+      fighter.timeToHuntCooldown = 15; // 15 second cooldown
+      console.log('⚡ Time to Hunt activated!');
+    },
+   
     
     // 🚀 Acceleration Round ability
     useAccelerationRound: function(fighter) {
@@ -438,6 +442,11 @@ const CHARACTERS = {
       fighter.precognition--;
       
       console.log(`🚀 Acceleration Round activated! Stack: ${fighter.accelerationRounds}`);
+    }
+    }
+    }
+    
+   
     },
     
     // 💥 Trigger Tremor Burst
@@ -447,7 +456,7 @@ const CHARACTERS = {
         fighter.lastHitOpponent.takeDamage(damage);
         console.log(`💥 Tremor Burst dealt ${damage} damage!`);
       }
-    },
+    },   
     
     // 👁️ Eye of Precognition system
     updatePrecognition: function(fighter, dt) {
@@ -465,6 +474,7 @@ const CHARACTERS = {
             console.log(`🔄 Acceleration Round reloaded on evade! Stack: ${fighter.accelerationRounds}`);
           }
         }
+      }
       }
       
       // Gain 1 precognition after 5 seconds without evade/hit
@@ -557,7 +567,10 @@ const CHARACTERS = {
     },
     
     // Ultimate system methods
-    activateUltimate: function(fighter, opponent) {
+    activateUltimate: function(fighter, enemies) {
+      // Handle both single opponent (backward compatibility) and multiple enemies
+      const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+      
       fighter.ultimateActive = true;
       fighter.ultimatePhase = 0;
       fighter.ultimateTimer = 1; // 1 second initial pose
@@ -570,41 +583,47 @@ const CHARACTERS = {
       fighter.ultimateName = "DISPOSAL";
       fighter.ultimateDialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all! Yeah, I hate you all! The damn Famiglia, you, and Ticket, too!";
       
-      // Set opponent as protected during ultimate
-      if (fighter.opponent) {
-        fighter.opponent.ultimateProtected = true;
-        fighter.opponent.setState('idle');
-        // Lock enemy stagger bar during ultimate
-        fighter.opponent.ultimateStaggerLocked = true;
-        fighter.opponent.originalStaggerDecay = fighter.opponent.staggerDecayRate || 1;
-        fighter.opponent.staggerDecayRate = 0; // Prevent stagger decay
-      }
+      // Set all enemies as protected during ultimate
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.ultimateProtected = true;
+          enemy.setState('idle');
+          // Lock enemy stagger bar during ultimate
+          enemy.ultimateStaggerLocked = true;
+          enemy.originalStaggerDecay = enemy.staggerDecayRate || 1;
+          enemy.staggerDecayRate = 0; // Prevent stagger decay
+        }
+      });
       
       // Store Valencina's original combo delay and stop it during ultimate
       fighter.originalComboDelay = fighter.comboDelay || 0;
       fighter.comboDelay = 0; // Stop combo delay
       
-      // Turn off collision between both players during ultimate
+      // Turn off collision between all players during ultimate
       fighter.originalCollisionEnabled = fighter.collisionEnabled !== false;
       fighter.collisionEnabled = false; // Disable collision
       
-      if (fighter.opponent) {
-        fighter.opponent.originalCollisionEnabled = fighter.opponent.collisionEnabled !== false;
-        fighter.opponent.collisionEnabled = false; // Disable opponent collision
-      }
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.originalCollisionEnabled = enemy.collisionEnabled !== false;
+          enemy.collisionEnabled = false; // Disable enemy collision
+        }
+      });
       
       // Teleport to center of arena with boundary clamping
       const centerPos = this.clampToArena(width / 2, height - 100);
       fighter.pos.x = centerPos.x;
       fighter.pos.y = centerPos.y; // Ground level, not midair
       
-      // Halt all momentum/velocity on teleport
+      // Halt all momentum/velocity on teleport for all fighters
       fighter.vel.x = 0;
       fighter.vel.y = 0;
-      if (fighter.opponent) {
-        fighter.opponent.vel.x = 0;
-        fighter.opponent.vel.y = 0;
-      }
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.vel.x = 0;
+          enemy.vel.y = 0;
+        }
+      });
       
       // Set initial pose
       fighter.currentSprite = 'dist1';
@@ -632,16 +651,25 @@ const CHARACTERS = {
       fighter.currentDialogue = fighter.ultimateDialogue;
       fighter.dialogueTimer = 10; // Show for 10 seconds
       
-      // Prevent enemy from dying until final attack
-      opponent.ultimateProtected = true;
+      // Prevent all enemies from dying until final attack
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.ultimateProtected = true;
+        }
+      });
     },
     
-    updateUltimate: function(fighter, opponent, dt) {
+    updateUltimate: function(fighter, enemies, dt) {
+      // Handle both single opponent (backward compatibility) and multiple enemies
+      const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+      
       // ENFORCE BOUNDARIES CONTINUOUSLY - PREVENT ALL CLIPPING
       this.enforceBoundaries(fighter);
-      if (opponent) {
-        this.enforceBoundaries(opponent);
-      }
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          this.enforceBoundaries(enemy);
+        }
+      });
       
       // Only decrement ultimate timer when not in attack sequences
       // Don't decrement during any attack phases (2, 4, 6, 8, 10) or approach phases
@@ -650,7 +678,7 @@ const CHARACTERS = {
         fighter.ultimateTimer -= dt;
       }
       
-      console.log('[ULTIMATE DEBUG] Update called - phase:', fighter.ultimatePhase, 'timer:', fighter.ultimateTimer.toFixed(3));
+      console.log('[ULTIMATE DEBUG] Update called - phase:', fighter.ultimatePhase, 'timer:', fighter.ultimateTimer.toFixed(3), 'targets:', targetEnemies.length);
       
       switch (fighter.ultimatePhase) {
         case 0: // Initial pose (1 second)
@@ -661,28 +689,39 @@ const CHARACTERS = {
           }
           break;
           
-        case 1: // Attack 1: Random enemy positioning, Valencina faces correct side
+        case 1: // Attack 1: Random enemy positioning, attack all enemies
           if (fighter.ultimateTimer <= 0) {
             // Keep Valencina in center of battleground
             const valencinaPos = this.clampToArena(width / 2, height - 100);
             fighter.pos.x = valencinaPos.x;
             fighter.pos.y = valencinaPos.y;
             
-            // Randomly position enemy on left or right side within attack range
-            const randomSide = Math.random() < 0.5 ? -1 : 1; // -1 for left, 1 for right
-            const enemyTargetX = fighter.pos.x + (randomSide * 80); // 80px away from center
-            const enemyPos = this.clampToArena(enemyTargetX, fighter.pos.y);
-            opponent.pos.x = enemyPos.x;
-            opponent.pos.y = enemyPos.y;
+            // Position all enemies randomly around the center for multi-target attack
+            targetEnemies.forEach((enemy, index) => {
+              if (enemy) {
+                // Randomly position enemy on left or right side within attack range
+                const randomSide = Math.random() < 0.5 ? -1 : 1; // -1 for left, 1 for right
+                const enemyTargetX = fighter.pos.x + (randomSide * (80 + index * 20)); // Spread enemies out
+                const enemyPos = this.clampToArena(enemyTargetX, fighter.pos.y);
+                enemy.pos.x = enemyPos.x;
+                enemy.pos.y = enemyPos.y;
+              }
+            });
             
-            // Make Valencina face the enemy
-            fighter.facing = randomSide * -1; // Face towards enemy
+            // Make Valencina face the first enemy (or center if no enemies)
+            if (targetEnemies.length > 0 && targetEnemies[0]) {
+              fighter.facing = targetEnemies[0].pos.x > fighter.pos.x ? 1 : -1;
+            }
             
-            // Halt all momentum/velocity on teleport
+            // Halt all momentum/velocity on teleport for all fighters
             fighter.vel.x = 0;
             fighter.vel.y = 0;
-            opponent.vel.x = 0;
-            opponent.vel.y = 0;
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                enemy.vel.x = 0;
+                enemy.vel.y = 0;
+              }
+            });
             
             // Start attack sequence immediately (no need to approach)
             fighter.ultimatePhase = 2;
@@ -693,22 +732,26 @@ const CHARACTERS = {
           }
           break;
           
-        case 2: // Attack 1 sequence: s1f1 > s1f2 > s1f3
+        case 2: // Attack 1 sequence: s1f1 > s1f2 > s1f3 - attack all enemies
           fighter.ultimateAttackTimer -= dt;
           
           // Valencina stays in center - no position adjustment needed
           
           if (fighter.ultimateAttackTimer <= 0) {
             fighter.ultimateAttackFrame++;
-            console.log('[ULTIMATE DEBUG] Attack 1 frame:', fighter.ultimateAttackFrame, 'sprite:', fighter.currentSprite);
+            console.log('[ULTIMATE DEBUG] Attack 1 frame:', fighter.ultimateAttackFrame, 'sprite:', fighter.currentSprite, 'targets:', targetEnemies.length);
             
             switch (fighter.ultimateAttackFrame) {
               case 1:
                 fighter.currentSprite = 's1f2';
                 fighter.ultimateAttackTimer = 0.1;
-                // Deal damage with s1s2 and apply knockback
-                console.log('[ULTIMATE DEBUG] About to deal damage for s1f2');
-                this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 1);
+                // Deal damage to ALL enemies with s1s2 and apply knockback
+                console.log('[ULTIMATE DEBUG] About to deal damage for s1f2 to all enemies');
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 1);
+                  }
+                });
                 fighter.spawnSlashEffect('s1s2', { x: 15, y: -5 });
                 // Valencina stays in center - no repositioning needed
                 break;
@@ -727,28 +770,39 @@ const CHARACTERS = {
           }
           break;
           
-        case 3: // Attack 2 setup - Random enemy positioning, Valencina faces correct side
+        case 3: // Attack 2 setup - Random enemy positioning, attack all enemies
           if (fighter.ultimateTimer <= 0) {
             // Keep Valencina in center of battleground
             const valencinaPos = this.clampToArena(width / 2, height - 100);
             fighter.pos.x = valencinaPos.x;
             fighter.pos.y = valencinaPos.y;
             
-            // Randomly position enemy on left or right side within attack range
-            const randomSide = Math.random() < 0.5 ? -1 : 1; // -1 for left, 1 for right
-            const enemyTargetX = fighter.pos.x + (randomSide * 80); // 80px away from center
-            const enemyPos = this.clampToArena(enemyTargetX, fighter.pos.y);
-            opponent.pos.x = enemyPos.x;
-            opponent.pos.y = enemyPos.y;
+            // Position all enemies randomly around the center for multi-target attack
+            targetEnemies.forEach((enemy, index) => {
+              if (enemy) {
+                // Randomly position enemy on left or right side within attack range
+                const randomSide = Math.random() < 0.5 ? -1 : 1; // -1 for left, 1 for right
+                const enemyTargetX = fighter.pos.x + (randomSide * (80 + index * 20)); // Spread enemies out
+                const enemyPos = this.clampToArena(enemyTargetX, fighter.pos.y);
+                enemy.pos.x = enemyPos.x;
+                enemy.pos.y = enemyPos.y;
+              }
+            });
             
-            // Make Valencina face opposite way from enemy
-            fighter.facing = randomSide; // Face opposite way from enemy
+            // Make Valencina face the first enemy (or center if no enemies)
+            if (targetEnemies.length > 0 && targetEnemies[0]) {
+              fighter.facing = targetEnemies[0].pos.x > fighter.pos.x ? 1 : -1;
+            }
             
-            // Halt all momentum/velocity on teleport
+            // Halt all momentum/velocity on teleport for all fighters
             fighter.vel.x = 0;
             fighter.vel.y = 0;
-            opponent.vel.x = 0;
-            opponent.vel.y = 0;
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                enemy.vel.x = 0;
+                enemy.vel.y = 0;
+              }
+            });
             
             fighter.ultimatePhase = 4;
             fighter.ultimateAttackFrame = 0;
@@ -757,7 +811,7 @@ const CHARACTERS = {
           }
           break;
           
-        case 4: // Attack 2 sequence: s4f2 > s4f1
+        case 4: // Attack 2 sequence: s4f2 > s4f1 - attack all enemies
           fighter.ultimateAttackTimer -= dt;
           
           // Valencina stays in center - no position adjustment needed
@@ -765,105 +819,28 @@ const CHARACTERS = {
           if (fighter.ultimateAttackTimer <= 0) {
             fighter.ultimateAttackFrame++;
             
-            switch (fighter.ultimateAttackFrame) {
-              case 1:
-                fighter.currentSprite = 's4f1';
-                fighter.ultimateAttackTimer = 0.1;
-                // Deal damage with s1s4 and apply knockback
-                this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 2);
-                fighter.spawnSlashEffect('s1s4', { x: 15, y: -5 });
-                // Valencina stays in center - no repositioning needed
-                break;
-              case 2:
-                // End attack sequence - hold s4f1 sprite
-                fighter.ultimatePhase = 5;
-                fighter.ultimateTimer = 0.1; // Timing before next attack
-                fighter.currentSprite = 's4f1'; // Hold last attack sprite
-                break;
-            }
-          }
-          break;
-          
-        case 5: // Attack 3 setup - Random enemy positioning, Valencina faces correct side
-          if (fighter.ultimateTimer <= 0) {
-            // Keep Valencina in center of battleground
-            const valencinaPos = this.clampToArena(width / 2, height - 100);
-            fighter.pos.x = valencinaPos.x;
-            fighter.pos.y = valencinaPos.y;
-            
-            // Randomly position enemy on left or right side within attack range
-            const randomSide = Math.random() < 0.5 ? -1 : 1; // -1 for left, 1 for right
-            const enemyTargetX = fighter.pos.x + (randomSide * 80); // 80px away from center
-            const enemyPos = this.clampToArena(enemyTargetX, fighter.pos.y);
-            opponent.pos.x = enemyPos.x;
-            opponent.pos.y = enemyPos.y;
-            
-            // Make Valencina face opposite way from enemy
-            fighter.facing = randomSide; // Face opposite way from enemy
-            
-            // Halt all momentum/velocity on teleport
-            fighter.vel.x = 0;
-            fighter.vel.y = 0;
-            opponent.vel.x = 0;
-            opponent.vel.y = 0;
-            
-            fighter.ultimatePhase = 6;
-            fighter.ultimateAttackFrame = 0;
-            fighter.ultimateAttackTimer = 0.1;
-            fighter.currentSprite = 's3f1';
-            fighter.ultimateMovingThroughEnemy = false;
-            fighter.ultimateMovementTimer = 0;
-          }
-          break;
-          
-        case 6: // Attack 3 sequence: s3f1 > s3f2 > s3f3 with teleport to other side
-          fighter.ultimateAttackTimer -= dt;
-          
-          // Valencina stays in center - no position adjustment needed
-          
-          if (fighter.ultimateAttackTimer <= 0) {
-            fighter.ultimateAttackFrame++;
-            console.log('[ULTIMATE DEBUG] Attack 3 frame:', fighter.ultimateAttackFrame, 'sprite:', fighter.currentSprite);
-            
-            switch (fighter.ultimateAttackFrame) {
-              case 1:
-                fighter.currentSprite = 's3f2';
-                fighter.ultimateAttackTimer = 0.1;
-                // Deal damage with s1s4 and apply knockback
-                console.log('[ULTIMATE DEBUG] About to deal damage for s3f2');
-                this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 3);
-                fighter.spawnSlashEffect('s1s4', { x: 15, y: -5 });
-                // Valencina stays in center - no repositioning needed
-                break;
-              case 2:
-                fighter.currentSprite = 's3f3';
-                fighter.ultimateAttackTimer = 0.1;
-                break;
-              case 3:
-                // After 1 second, teleport to 300 pixels on the right of enemy
-                fighter.ultimateAttackTimer = 0.1; // Wait 1 second
-                break;
-              case 4:
-                // Teleport to 300 pixels right of enemy with 300px barrier
-                let targetX = opponent.pos.x + 300;
-                const battlegroundWidth = 1200;
-                const barrier = 300;
-                
-                // Ensure Valencina stays within barrier boundaries
                 if (targetX > battlegroundWidth - barrier) {
                   targetX = battlegroundWidth - barrier;
-                  // Adjust enemy position to maintain 300px distance
-                  opponent.pos.x = targetX - 300;
+                  // Adjust all enemies position to maintain 300px distance
+                  targetEnemies.forEach(enemy => {
+                    if (enemy) {
+                      enemy.pos.x = targetX - 300;
+                    }
+                  });
                 }
                 
                 fighter.pos.x = targetX;
-                fighter.pos.y = opponent.pos.y;
+                fighter.pos.y = targetEnemies.length > 0 && targetEnemies[0] ? targetEnemies[0].pos.y : height - 100;
                 
-                // Halt all momentum/velocity on teleport
+                // Halt all momentum/velocity on teleport for all fighters
                 fighter.vel.x = 0;
                 fighter.vel.y = 0;
-                opponent.vel.x = 0;
-                opponent.vel.y = 0;
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    enemy.vel.x = 0;
+                    enemy.vel.y = 0;
+                  }
+                });
                 
                 // Change sprite to d1 and face left
                 fighter.currentSprite = 'd1';
@@ -877,37 +854,51 @@ const CHARACTERS = {
           }
           break;
           
-        case 7: // Attack 4 setup - teleport opponent to center
+        case 7: // Attack 4 setup - teleport all enemies to center
           if (fighter.ultimateTimer <= 0) {
-            // Reset movement restriction for attacks 4-5
-            if (opponent) {
-              opponent.ultimateRestrictOrigin = null;
-            }
+            // Reset movement restriction for attacks 4-5 for all enemies
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                enemy.ultimateRestrictOrigin = null;
+              }
+            });
             
-            // Teleport opponent to center of battleground with boundary clamping
-            const opponentPos = this.clampToArena(width / 2, height - 100);
-            opponent.pos.x = opponentPos.x;
-            opponent.pos.y = opponentPos.y;
+            // Teleport all enemies to center of battleground with boundary clamping
+            const centerPos = this.clampToArena(width / 2, height - 100);
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                enemy.pos.x = centerPos.x;
+                enemy.pos.y = centerPos.y;
+              }
+            });
             
             // Position Valencina for attack range with boundary clamping
-            const valencinaTargetX = opponent.pos.x - (fighter.facing * 80);
-            const valencinaPos = this.clampToArena(valencinaTargetX, opponent.pos.y);
+            const valencinaTargetX = centerPos.x - (fighter.facing * 80);
+            const valencinaPos = this.clampToArena(valencinaTargetX, centerPos.y);
             fighter.pos.x = valencinaPos.x;
             fighter.pos.y = valencinaPos.y;
             
-            // Re-position opponent to maintain 80px distance if Valencina was clamped
+            // Re-position all enemies to maintain 80px distance if Valencina was clamped
             if (valencinaPos.x !== valencinaTargetX) {
-              opponent.pos.x = valencinaPos.x + (fighter.facing * 80);
-              const finalOpponentPos = this.clampToArena(opponent.pos.x, opponent.pos.y);
-              opponent.pos.x = finalOpponentPos.x;
-              opponent.pos.y = finalOpponentPos.y;
+              targetEnemies.forEach(enemy => {
+                if (enemy) {
+                  enemy.pos.x = valencinaPos.x + (fighter.facing * 80);
+                  const finalEnemyPos = this.clampToArena(enemy.pos.x, enemy.pos.y);
+                  enemy.pos.x = finalEnemyPos.x;
+                  enemy.pos.y = finalEnemyPos.y;
+                }
+              });
             }
             
-            // Halt all momentum/velocity on teleport
+            // Halt all momentum/velocity on teleport for all fighters
             fighter.vel.x = 0;
             fighter.vel.y = 0;
-            opponent.vel.x = 0;
-            opponent.vel.y = 0;
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                enemy.vel.x = 0;
+                enemy.vel.y = 0;
+              }
+            });
             
             fighter.ultimatePhase = 8;
             fighter.ultimateAttackFrame = 0;
@@ -916,15 +907,19 @@ const CHARACTERS = {
           }
           break;
           
-        case 8: // Attack 4 sequence: d2 with diss1 (no damage), teleport, de1 with s1s3 (simultaneous)
+        case 8: // Attack 4 sequence: d2 with diss1 (no damage), teleport, de1 with s1s3 (simultaneous) - attack all enemies
           fighter.ultimateAttackTimer -= dt;
           
-          // Lock enemy position in front of Valencina during de1 and de2 attacks
+          // Lock all enemies position in front of Valencina during de1 and de2 attacks
           if (fighter.currentSprite === 'de1' || fighter.currentSprite === 'de2') {
-            opponent.pos.x = fighter.pos.x + (fighter.facing * 80);
-            opponent.pos.y = fighter.pos.y;
-            opponent.vel.x = 0; // Stop any movement
-            opponent.vel.y = 0;
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                enemy.pos.x = fighter.pos.x + (fighter.facing * 80);
+                enemy.pos.y = fighter.pos.y;
+                enemy.vel.x = 0; // Stop any movement
+                enemy.vel.y = 0;
+              }
+            });
           }
           
           if (fighter.ultimateAttackTimer <= 0) {
@@ -938,26 +933,35 @@ const CHARACTERS = {
                 fighter.ultimateAttackTimer = 0.2;
                 break;
               case 2:
-                // Teleport 50 pixels to the right of enemy with 300px barrier
-                let targetX = opponent.pos.x + 50;
+                // Teleport 50 pixels to the right of first enemy with 300px barrier
+                let targetX = targetEnemies.length > 0 && targetEnemies[0] ? 
+                  targetEnemies[0].pos.x + 50 : fighter.pos.x + 50;
                 const battlegroundWidth = 1200;
                 const barrier = 300;
                 
                 // Ensure Valencina stays within barrier boundaries
                 if (targetX > battlegroundWidth - barrier) {
                   targetX = battlegroundWidth - barrier;
-                  // Adjust enemy position to maintain 50px distance
-                  opponent.pos.x = targetX - 50;
+                  // Adjust all enemies position to maintain 50px distance
+                  targetEnemies.forEach(enemy => {
+                    if (enemy) {
+                      enemy.pos.x = targetX - 50;
+                    }
+                  });
                 }
                 
                 fighter.pos.x = targetX;
-                fighter.pos.y = opponent.pos.y;
+                fighter.pos.y = targetEnemies.length > 0 && targetEnemies[0] ? targetEnemies[0].pos.y : height - 100;
                 fighter.currentSprite = 'de1';
                 fighter.ultimateAttackTimer = 0.2;
                 break;
               case 3:
-                // de1 with s1s3 (simultaneous) - deal damage at same time as showing de1
-                this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 4);
+                // de1 with s1s3 (simultaneous) - deal damage to ALL enemies at same time as showing de1
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 4);
+                  }
+                });
                 fighter.spawnSlashEffect('s1s3', { x: 15, y: -5 });
                 
                 // Increase zoom when switching to de1
@@ -966,12 +970,14 @@ const CHARACTERS = {
                 console.log('[ULTIMATE DEBUG] Increased zoom for de1-de3 sequence');
                 // Reposition after knockback
                 setTimeout(() => {
-                  const valencinaTargetX = opponent.pos.x - (fighter.facing * 80);
-                  const valencinaPos = this.clampToArena(valencinaTargetX, opponent.pos.y);
-                  fighter.pos.x = valencinaPos.x;
-                  fighter.pos.y = valencinaPos.y;
-                  fighter.vel.x = 0;
-                  fighter.vel.y = 0;
+                  if (targetEnemies.length > 0 && targetEnemies[0]) {
+                    const valencinaTargetX = targetEnemies[0].pos.x - (fighter.facing * 80);
+                    const valencinaPos = this.clampToArena(valencinaTargetX, targetEnemies[0].pos.y);
+                    fighter.pos.x = valencinaPos.x;
+                    fighter.pos.y = valencinaPos.y;
+                    fighter.vel.x = 0;
+                    fighter.vel.y = 0;
+                  }
                 }, 100);
                 fighter.ultimateAttackTimer = 0.2;
                 break;
@@ -998,11 +1004,15 @@ const CHARACTERS = {
         case 10: // Attack 5 sequence: de2 with s1s3 and js1 alternating 5 times, 5 damage instances at 0.1 second intervals
           fighter.ultimateAttackTimer -= dt;
           
-          // Lock enemy position in front of Valencina during de2 attacks
+          // Lock all enemies position in front of Valencina during de2 attacks
           if (fighter.currentSprite === 'de2') {
-            opponent.pos.x = fighter.pos.x + (fighter.facing * 80);
-            opponent.pos.y = fighter.pos.y;
-            opponent.vel.x = 0; // Stop any movement
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                enemy.pos.x = fighter.pos.x + (fighter.facing * 80);
+                enemy.pos.y = fighter.pos.y;
+                enemy.vel.x = 0; // Stop any movement
+              }
+            });
           }
           
           if (fighter.ultimateAttackFrame < 5) {
@@ -1015,16 +1025,28 @@ const CHARACTERS = {
               fighter.spawnSlashEffect('js1', { x: 0, y: -10 });
             }
             // Deal damage for each attack
-            this.dealUltimateDamage(fighter, opponent, fighter.baseDamage, false, 5);
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 5);
+              }
+            });
             fighter.ultimateAttackFrame++;
             fighter.ultimateAttackTimer = 0.2; // 0.2 second intervals
           } else if (fighter.ultimateAttackFrame === 5) {
             // Final attack - de3 with 2x damage and zoom out
             fighter.currentSprite = 'de3';
-            this.dealUltimateDamage(fighter, opponent, fighter.baseDamage * 2, true, 5); // Mark as final attack
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                this.dealUltimateDamage(fighter, enemy, fighter.baseDamage * 2, true, 5); // Mark as final attack
+              }
+            });
             
-            // Knockback opponent (only happens at de3)
-            opponent.vel.x = fighter.facing * 20;
+            // Knockback all enemies (only happens at de3)
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                enemy.vel.x = fighter.facing * 20;
+              }
+            });
             
             // Zoom out camera during knockback
             fighter.ultimateCameraZoom = 1.0; // Reset zoom
@@ -1099,77 +1121,14 @@ const CHARACTERS = {
     },
     
     endUltimate: function(fighter) {
-      // Reset ultimate states
-      fighter.currentSprite = 'idle';
-      fighter.ultimateCameraZoom = 1;
-      fighter.ultimateBackgroundDim = 0;
-      
-      // Remove protection from opponent
-      if (fighter.opponent) {
-        fighter.opponent.ultimateProtected = false;
-        fighter.opponent.setState('idle');
-        // Unlock enemy stagger bar
-        if (fighter.opponent.ultimateStaggerLocked) {
-          fighter.opponent.ultimateStaggerLocked = false;
-          fighter.opponent.staggerDecayRate = fighter.opponent.originalStaggerDecay || 1;
-        }
-      }
-      
-      // Restore Valencina's combo delay
-      fighter.comboDelay = fighter.originalComboDelay || 0;
-      
-      // Restore collision for both players
-      fighter.collisionEnabled = fighter.originalCollisionEnabled !== false;
-      
-      if (fighter.opponent) {
-        fighter.opponent.collisionEnabled = fighter.opponent.originalCollisionEnabled !== false;
-        // Reset movement restriction origin
-        fighter.opponent.ultimateRestrictOrigin = null;
-      }
-    },
-    
-    dealUltimateDamage: function(fighter, opponent, baseDamage, isFinalAttack = false, attackPhase = 0) {
-      console.log('[ULTIMATE DEBUG] Dealing damage - base:', baseDamage, 'protected:', opponent?.ultimateProtected, 'final:', isFinalAttack, 'phase:', attackPhase);
-      if (!opponent) return;
-      
-      // Calculate damage using the proper damage calculation function (includes combo bonus)
-      const damage = fighter.calculateDamage(baseDamage);
-      console.log('[ULTIMATE DEBUG] Calculated damage with combo bonus:', damage, '(base:', baseDamage, ', combo:', fighter.combo, ')');
-      
-      // Bypass hit cooldown and ultimate protection during ultimate to ensure all attacks land
-      const previousState = opponent.state;
-      const previousCooldown = opponent.hitCooldown;
-      const previousProtected = opponent.ultimateProtected;
-      opponent.hitCooldown = 0;
-      opponent.ultimateProtected = false; // Disable ultimate protection
-      opponent.setState('idle'); // Reset state to allow hit
-      
-      // Store original stagger values
-      const originalStagger = opponent.stagger;
-      const originalStaggerDecay = opponent.staggerDecayRate;
-      
-      // Prevent stagger accumulation during ultimate
-      opponent.staggerDecayRate = 0;
-      
-      // Determine knockback based on attack phase
-      let knockbackAmount = 0;
-      if (attackPhase === 1 || attackPhase === 2 || attackPhase === 3) {
-        // Attacks 1-3: massively lower knockback
-        knockbackAmount = 0.5; // Very minimal knockback
-      } else if (attackPhase === 4) {
-        // Attack 4: moderate knockback
-        knockbackAmount = 2;
-      } else if (attackPhase === 5) {
-        // Attack 5: strong knockback (final attack)
-        knockbackAmount = isFinalAttack ? 8 : 3;
       }
       
       // Apply damage with custom knockback
-      opponent.receiveHit(damage, fighter, knockbackAmount);
+      enemy.receiveHit(damage, fighter, knockbackAmount);
       
       // Restore ultimate protection and cooldown after damage is applied
-      opponent.ultimateProtected = previousProtected;
-      opponent.hitCooldown = previousCooldown;
+      enemy.ultimateProtected = previousProtected;
+      enemy.hitCooldown = previousCooldown;
       
       // Add doubled ultimate screenshake
       if (typeof addScreenShake === 'function') {
@@ -1177,22 +1136,22 @@ const CHARACTERS = {
       }
       
       // ENFORCE BOUNDARIES AFTER KNOCKBACK - PREVENT CLIPPING
-      this.enforceBoundaries(opponent);
+      this.enforceBoundaries(enemy);
       this.enforceBoundaries(fighter);
       
       // Reset stagger to original value (prevent any stagger gain)
-      opponent.stagger = originalStagger;
+      enemy.stagger = originalStagger;
       
-      // Add friction to knockback unless it's the final attack
-      if (!isFinalAttack && opponent.vel.x !== 0) {
-        opponent.vel.x *= 0.8; // Apply friction (20% reduction)
+      // Add friction to knockback unless it's final attack
+      if (!isFinalAttack && enemy.vel.x !== 0) {
+        enemy.vel.x *= 0.8; // Apply friction (20% reduction)
       }
       
       // For attacks 1-3, restrict enemy movement to max 100px from current position
       if (attackPhase === 1 || attackPhase === 2 || attackPhase === 3) {
         // Store original position if not already stored
-        if (!opponent.ultimateRestrictOrigin) {
-          opponent.ultimateRestrictOrigin = { x: opponent.pos.x, y: opponent.pos.y };
+        if (!enemy.ultimateRestrictOrigin) {
+          enemy.ultimateRestrictOrigin = { x: enemy.pos.x, y: enemy.pos.y };
         }
         
         // Define valid movement boundaries (100px max from origin, 100px from arena boundaries)
@@ -1202,15 +1161,15 @@ const CHARACTERS = {
         const arenaRight = width - boundaryMargin;
         
         // Calculate allowed movement range
-        const minX = Math.max(opponent.ultimateRestrictOrigin.x - maxDistance, arenaLeft);
-        const maxX = Math.min(opponent.ultimateRestrictOrigin.x + maxDistance, arenaRight);
+        const minX = Math.max(enemy.ultimateRestrictOrigin.x - maxDistance, arenaLeft);
+        const maxX = Math.min(enemy.ultimateRestrictOrigin.x + maxDistance, arenaRight);
         
-        // Clamp opponent position to allowed range
-        opponent.pos.x = constrain(opponent.pos.x, minX, maxX);
+        // Clamp enemy position to allowed range
+        enemy.pos.x = constrain(enemy.pos.x, minX, maxX);
         
         // Stop velocity if outside allowed range
-        if (opponent.pos.x <= minX || opponent.pos.x >= maxX) {
-          opponent.vel.x = 0;
+        if (enemy.pos.x <= minX || enemy.pos.x >= maxX) {
+          enemy.vel.x = 0;
         }
       }
       
@@ -1226,12 +1185,13 @@ const CHARACTERS = {
       // Apply character-specific onSuccessfulHit effects (status effects, etc.)
       const character = CHARACTERS[fighter.characterKey];
       if (character && character.onSuccessfulHit) {
-        character.onSuccessfulHit(damage, opponent, fighter);
+        character.onSuccessfulHit(damage, enemy, fighter);
       }
       
       fighter.ultimateTotalDamage += damage;
       fighter.ultimateDamageDealt += damage;
       console.log('[ULTIMATE DEBUG] Damage applied - total:', fighter.ultimateTotalDamage);
+    }
     }
   }
 };

@@ -900,7 +900,12 @@ class Fighter {
     this.processActions(opponent, dt);
   }
 
-  // Ultimate system methods
+  /**
+   * ULTIMATE SYSTEM UPDATE: Handle ultimate activation and execution
+   * Modified to target all enemies instead of just one opponent
+   * @param {number} dt - Delta time for frame-independent updates
+   * @param {Fighter} opponent - Primary opponent (for backward compatibility)
+   */
   updateUltimateSystem(dt, opponent) {
     // Handle ultimate activation request
     if (this.ultimateActivationRequested && !this.ultimateActive) {
@@ -910,10 +915,15 @@ class Fighter {
     
     // Update active ultimate
     if (this.ultimateActive) {
-      // Execute character-specific ultimate logic
+      // Get all enemies for multi-target ultimate attacks
+      const allFighters = window.allFighters || [];
+      const allEnemies = allFighters.filter(f => f !== this && !f.isDefeated);
+      
+      // Execute character-specific ultimate logic with all enemies
       const character = CHARACTERS[this.characterKey];
       if (character && character.updateUltimate) {
-        character.updateUltimate(this, opponent, dt);
+        // Pass all enemies instead of single opponent for multi-target support
+        character.updateUltimate(this, allEnemies, dt);
       }
       
       // End ultimate when timer reaches 0 and we're not in attack sequences
@@ -925,8 +935,17 @@ class Fighter {
     }
   }
 
+  /**
+   * ACTIVATE ULTIMATE: Start ultimate attack targeting all enemies
+   * Modified to affect all enemies in battle instead of just one opponent
+   * @param {Fighter} opponent - Primary opponent (for backward compatibility)
+   */
   activateUltimate(opponent) {
-    if (!opponent || this.ultimateActive) return;
+    if (this.ultimateActive) return;
+    
+    // Get all enemies for multi-target ultimate effects
+    const allFighters = window.allFighters || [];
+    const allEnemies = allFighters.filter(f => f !== this && !f.isDefeated);
     
     // Initialize ultimate state
     this.ultimateActive = true;
@@ -937,26 +956,32 @@ class Fighter {
     this.ultimateCameraZoom = 1;
     this.ultimateBackgroundDim = 0;
     
-    // Store opponent reference for character-specific logic
-    this.opponent = opponent;
+    // Store all enemies reference for character-specific logic
+    this.allEnemies = allEnemies;
+    this.opponent = opponent; // Keep for backward compatibility
     
     // Set ultimate to cutscene state
     this.setState('ultimate');
-    opponent.setState('stagger'); // Enemy can't act during ultimate
-    opponent.ultimateActive = false; // Ensure opponent isn't also in ultimate
     
-    console.log('[ULTIMATE DEBUG] Ultimate activated, phase:', this.ultimatePhase, 'timer:', this.ultimateTimer);
+    // Stagger all enemies during ultimate activation
+    allEnemies.forEach(enemy => {
+      enemy.setState('stagger'); // Enemy can't act during ultimate
+      enemy.ultimateActive = false; // Ensure enemy isn't also in ultimate
+    });
     
-    // Execute character-specific ultimate activation
+    console.log('[ULTIMATE DEBUG] Ultimate activated against', allEnemies.length, 'enemies, phase:', this.ultimatePhase, 'timer:', this.ultimateTimer);
+    
+    // Execute character-specific ultimate activation with all enemies
     const character = CHARACTERS[this.characterKey];
     if (character && character.activateUltimate) {
-      character.activateUltimate(this, opponent);
+      character.activateUltimate(this, allEnemies);
     }
     
     // Emit ultimate activation event
     this.events.emit('ultimateActivated', {
       character: this.characterKey,
-      target: opponent.characterKey
+      targets: allEnemies.map(e => e.characterKey),
+      targetCount: allEnemies.length
     });
   }
 

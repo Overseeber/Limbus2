@@ -387,23 +387,12 @@ const CHARACTERS = {
           }
        });
       }
+    },
     
     // UNIQUE ABILITY METHODS
     
     // Time to Hunt - Q key ability
     useTimeToHunt: function(fighter) {
-      if (!fighter.lastHitOpponent) return;
-      
-      // Apply Game Target status to opponent (duration: 5 hits or 10 sec, whichever comes first)
-      fighter.lastHitOpponent.gameTimeTarget = true;
-      fighter.lastHitOpponent.speed = 1; // Set speed to 1
-      fighter.lastHitOpponent.gameTargetDuration = 10; // 10 seconds
-      fighter.lastHitOpponent.gameTargetHits = 5; // 5 hits
-      fighter.lastHitOpponent.gameTargetHitsTaken = 0; // Track hits received
-      
-      fighter.timeToHuntCooldown = 15; // 15 second cooldown
-      console.log('⚡ Time to Hunt activated!');
-    },
       if (!fighter.lastHitOpponent) return;
       
       // Apply Game Target status to opponent (duration: 5 hits or 10 sec, whichever comes first)
@@ -442,11 +431,6 @@ const CHARACTERS = {
       fighter.precognition--;
       
       console.log(`🚀 Acceleration Round activated! Stack: ${fighter.accelerationRounds}`);
-    }
-    }
-    }
-    
-   
     },
     
     // 💥 Trigger Tremor Burst
@@ -474,7 +458,6 @@ const CHARACTERS = {
             console.log(`🔄 Acceleration Round reloaded on evade! Stack: ${fighter.accelerationRounds}`);
           }
         }
-      }
       }
       
       // Gain 1 precognition after 5 seconds without evade/hit
@@ -819,36 +802,22 @@ const CHARACTERS = {
           if (fighter.ultimateAttackTimer <= 0) {
             fighter.ultimateAttackFrame++;
             
-                if (targetX > battlegroundWidth - barrier) {
-                  targetX = battlegroundWidth - barrier;
-                  // Adjust all enemies position to maintain 300px distance
-                  targetEnemies.forEach(enemy => {
-                    if (enemy) {
-                      enemy.pos.x = targetX - 300;
-                    }
-                  });
-                }
-                
-                fighter.pos.x = targetX;
-                fighter.pos.y = targetEnemies.length > 0 && targetEnemies[0] ? targetEnemies[0].pos.y : height - 100;
-                
-                // Halt all momentum/velocity on teleport for all fighters
-                fighter.vel.x = 0;
-                fighter.vel.y = 0;
+            switch (fighter.ultimateAttackFrame) {
+              case 1:
+                fighter.currentSprite = 's4f1';
+                fighter.ultimateAttackTimer = 0.1;
+                // Deal damage to ALL enemies
                 targetEnemies.forEach(enemy => {
                   if (enemy) {
-                    enemy.vel.x = 0;
-                    enemy.vel.y = 0;
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 1);
                   }
                 });
-                
-                // Change sprite to d1 and face left
-                fighter.currentSprite = 'd1';
-                fighter.facing = -1; // Face left for rest of ultimate
-                
+                break;
+              case 2:
                 // End attack sequence
-                fighter.ultimatePhase = 7;
-                fighter.ultimateTimer = 0.1; // Timing before next attack
+                fighter.ultimatePhase = 5;
+                fighter.ultimateTimer = 0.1;
+                fighter.currentSprite = 's4f1'; // Hold last attack sprite
                 break;
             }
           }
@@ -1120,8 +1089,14 @@ const CHARACTERS = {
       return damage;
     },
     
-    endUltimate: function(fighter) {
-      }
+    dealUltimateDamage: function(fighter, enemy, damage, isFinalAttack = false, attackPhase = 1) {
+      // Store original values before modification
+      const previousProtected = enemy.ultimateProtected;
+      const previousCooldown = enemy.hitCooldown;
+      const originalStagger = enemy.stagger;
+      
+      // Calculate knockback amount (increased for ultimate)
+      const knockbackAmount = isFinalAttack ? 150 : 100;
       
       // Apply damage with custom knockback
       enemy.receiveHit(damage, fighter, knockbackAmount);
@@ -1191,7 +1166,6 @@ const CHARACTERS = {
       fighter.ultimateTotalDamage += damage;
       fighter.ultimateDamageDealt += damage;
       console.log('[ULTIMATE DEBUG] Damage applied - total:', fighter.ultimateTotalDamage);
-    }
     }
   }
 };

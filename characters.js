@@ -470,7 +470,7 @@ CALLISTO: {
       
       // Update Installation Art timer
       if (typeof this.updateInstallationArt === 'function') {
-        this.updateInstallationArt(fighter, dt);
+        this.updateInstallationArt(fighter, dt, opponent);
       }
       
       // Update slam active state based on fighter state
@@ -481,18 +481,83 @@ CALLISTO: {
       }
     },
 
-    updateInstallationArt: function(fighter, dt) {
+    updateInstallationArt: function(fighter, dt, opponent) {
       if (fighter.installationArtCooldown > 0) {
         fighter.installationArtCooldown = Math.max(0, fighter.installationArtCooldown - dt);
       }
       if (fighter.installationArtActive) {
         fighter.installationArtTimer -= dt;
-        if (fighter.installationArtTimer <= 0) {
+        
+        // Execute attack after 0.5 second delay
+        if (fighter.installationArtTimer <= 0 && !fighter.installationArtExecuted) {
+          fighter.installationArtExecuted = true;
+          
+          // Use cevade sprite for execution
+          fighter.currentSprite = 'cevade';
+          
+          // Try to find target using multiple methods
+          let target = opponent;
+          
+          // Fallback 1: Check if fighter has a lastHitOpponent
+          if (!target && fighter.lastHitOpponent && fighter.lastHitOpponent.hp > 0) {
+            target = fighter.lastHitOpponent;
+            console.log('[DEBUG] Installation Art - Using lastHitOpponent as target');
+          }
+          
+          // Fallback 2: Try to find any enemy in the game
+          if (!target && window.fighters && window.fighters.length > 0) {
+            for (let otherFighter of window.fighters) {
+              if (otherFighter !== fighter && otherFighter.hp > 0) {
+                target = otherFighter;
+                console.log(`[DEBUG] Installation Art - Found enemy in global fighters: ${target.name}`);
+                break;
+              }
+            }
+          }
+          
+          console.log(`[DEBUG] Installation Art - Target found: ${target ? target.name : 'None'}`);
+          if (target && target.hp > 0) {
+            console.log(`[DEBUG] Installation Art - Executing on ${target.name}`);
+            this.executeImprovisedRibcage(fighter, target);
+          } else {
+            console.log('[DEBUG] Installation Art - No valid target found!');
+          }
+        }
+        
+        // End ability after execution
+        if (fighter.installationArtTimer <= -0.5) {
           fighter.installationArtActive = false;
           fighter.installationArtExecuted = false;
           fighter.installationArtTimer = 0;
         }
       }
+    },
+    
+    // Find closest target for abilities
+    findClosestTarget: function(fighter) {
+      console.log(`[DEBUG] findClosestTarget - allEnemies: ${fighter.allEnemies ? fighter.allEnemies.length : 'null'}`);
+      if (fighter.allEnemies && Array.isArray(fighter.allEnemies)) {
+        let closestEnemy = null;
+        let closestDistance = Infinity;
+        
+        fighter.allEnemies.forEach((enemy, index) => {
+          console.log(`[DEBUG] Enemy ${index}: ${enemy ? enemy.name : 'null'}, HP: ${enemy ? enemy.hp : 'null'}`);
+          if (enemy && enemy.hp > 0) {
+            const distance = dist(fighter.pos.x, fighter.pos.y, enemy.pos.x, enemy.pos.y);
+            console.log(`[DEBUG] Distance to ${enemy.name}: ${distance}`);
+            if (distance < closestDistance) {
+              closestDistance = distance;
+              closestEnemy = enemy;
+              console.log(`[DEBUG] New closest: ${enemy.name} at distance ${distance}`);
+            }
+          }
+        });
+        
+        console.log(`[DEBUG] Final closest target: ${closestEnemy ? closestEnemy.name : 'None'}`);
+        return closestEnemy;
+      }
+      console.log('[DEBUG] No allEnemies array found');
+      return null;
     },
     
     processKeyPressed: function(key, fighter) {
@@ -577,7 +642,7 @@ CALLISTO: {
     },
 
     // Execute Improvised Ribcage attack
-    executeImprovisedRibcage: function(opponent) {
+    executeImprovisedRibcage: function(fighter, opponent) {
       if (!opponent) return;
 
       // Count as normal attack (damage + combo)

@@ -2837,6 +2837,10 @@ addCombo(attacker) {
       rect(box.x - box.w / 2, box.y, box.w, box.h);
     }
 
+    // Draw status overlays
+    this.drawOverlays();
+  }
+
   // Draw Installation Art range and hitbox
   drawInstallationArtRange() {
     const attackRange = 150; // Same range as hitbox check
@@ -2867,7 +2871,9 @@ addCombo(attacker) {
     pop();
   }
 
-  // Draw slam attack landing hitbox
+  // Draw visual overlays and status indicators
+  drawOverlays() {
+    // Draw slam attack landing hitbox
     if (this.isSlamAttacking && this.slamLandingHitbox) {
       push();
       stroke(255, 100, 255, 150);

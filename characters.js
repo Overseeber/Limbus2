@@ -428,6 +428,7 @@ CALLISTO: {
     color: '#8b4513',
     weapon: 'Magnum Opus: Tibia',
     knockbackMultiplier: 2.0, // 200% knockback
+    spriteType: 'atlas', // Use same atlas system as Valencina
     
     // 🎨 CALLISTO'S UNIQUE ABILITIES
     corpusIngredient: 0,           // Current corpus ingredient stacks (0-20)

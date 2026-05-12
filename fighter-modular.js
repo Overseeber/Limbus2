@@ -455,7 +455,50 @@ class Fighter {
       return;
     }
     
-    // State to sprite mapping
+    // State to sprite mapping for Callisto
+    if (this.characterKey === 'CALLISTO') {
+      const callistoStateMap = {
+        idle: 'cidle',
+        run: 'cmove',
+        jump: 'cs1f1',
+        attack: 'cs1f2',
+        guard: 'cguard',
+        dash: 'cmove',
+        evade: 'cevade',
+        hit: 'churt',
+        staggered: 'churt',
+        duck: 'cidle',
+        ultimate: 'cuend' // Use cuend sprite for ultimate state
+      };
+
+      // Handle special states for Callisto
+      if (this.isSlamAttacking) {
+        this.currentSprite = 'cs1f2'; // Slam sprite
+      } else if (this.isDashing) {
+        if (this.state === 'attack') {
+          this.currentSprite = 'cjoust'; // Dash attack sprite
+        } else if (this.usePostDashSprite) {
+          this.currentSprite = 'cmove'; // Post-dash movement sprite
+        } else {
+          this.currentSprite = 'cmove'; // Regular dash movement sprite
+        }
+      } else if (this.state === 'attack' && this.attackSequence > 0) {
+        // Handle attack sequences for Callisto
+        this.updateCallistoAttackSequence();
+      } else if (this.haltSequence) {
+        // Handle halt sequence for Callisto
+        this.updateCallistoHaltSequence();
+      } else if (this.usePostDashSprite && !this.isDashing) {
+        // Reset post-dash sprite when dash ends
+        this.usePostDashSprite = false;
+        this.currentSprite = callistoStateMap[this.state] || 'cidle';
+      } else {
+        this.currentSprite = callistoStateMap[this.state] || 'cidle';
+      }
+      return;
+    }
+    
+    // State to sprite mapping for Valencina (original)
     const stateMap = {
       idle: 'idle',
       run: 'moving',
@@ -574,6 +617,89 @@ class Fighter {
   updateHaltSequence() {
     // Halt sequence: halt1 > halt2 > idle
     const sequence = ['halt1', 'halt2', 'idle'];
+    
+    if (this.haltFrame < sequence.length) {
+      this.currentSprite = sequence[this.haltFrame];
+    }
+  }
+
+  updateCallistoAttackSequence() {
+    // Attack 1 sequence: cs1f2 > cs1f3 (with cs1s1 slash effect)
+    if (this.attackSequence === 1) {
+      const sequence = ['cs1f2', 'cs1f3'];
+      const damageFrames = [false, true]; // cs1f3 deals damage
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 0 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
+        
+        // Deal damage on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+        }
+      }
+    }
+    // Attack 2 sequence: cs2f1 > chalt > cs3f1
+    else if (this.attackSequence === 2) {
+      const sequence = ['cs2f1', 'chalt', 'cs3f1'];
+      const damageFrames = [true, false, false]; // cs2f1 deals damage
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 0 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs2s1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
+        
+        // Deal damage on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+        }
+      }
+    }
+    // Attack 3 sequence: cs3f1 > cs3f2 > cs3f3 (0.5s hold)
+    else if (this.attackSequence === 3) {
+      const sequence = ['cs3f1', 'cs3f2', 'cs3f3'];
+      const damageFrames = [false, true, false]; // cs3f2 deals damage
+      const holdTimes = [0.2, 0.2, 0.5]; // cs3f3 holds for 0.5s
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
+        
+        // Use custom frame duration for cs3f3
+        if (this.attackFrame === 2) {
+          this.attackFrameDuration = 0.5;
+        } else {
+          this.attackFrameDuration = 0.2;
+        }
+        
+        // Deal damage on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+        }
+      }
+    }
+  }
+
+  updateCallistoHaltSequence() {
+    // Halt sequence: chalt > cmove > cidle
+    const sequence = ['chalt', 'cmove', 'cidle'];
     
     if (this.haltFrame < sequence.length) {
       this.currentSprite = sequence[this.haltFrame];

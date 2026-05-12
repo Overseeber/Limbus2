@@ -565,6 +565,16 @@ CALLISTO: {
       // Per stack of Artwork: Tibia: Deal +10% damage
       return fighter.artworkTibiaStacks * 0.1;
     },
+    
+    // Installation Art ability
+    useInstallationArt: function(fighter) {
+      if (fighter.installationArtActive) return;
+      
+      fighter.installationArtActive = true;
+      fighter.installationArtTimer = 0.5;
+      fighter.installationArtExecuted = false;
+      console.log('🎨 Callisto activated Installation Art!');
+    },
 
     // Execute Improvised Ribcage attack
     executeImprovisedRibcage: function(opponent) {

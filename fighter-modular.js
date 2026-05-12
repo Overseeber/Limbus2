@@ -2824,6 +2824,11 @@ addCombo(attacker) {
     noFill();
     rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
 
+    // Draw Installation Art range and hitbox for Callisto
+    if (this.characterKey === 'CALLISTO' && this.installationArtActive) {
+      this.drawInstallationArtRange();
+    }
+
     if (this.strikeActive) {
       const range = this.chargeAttack ? 294 : 231; // Updated to match new attack ranges
       const box = this.calcAttackBox(range);
@@ -2832,7 +2837,37 @@ addCombo(attacker) {
       rect(box.x - box.w / 2, box.y, box.w, box.h);
     }
 
-    // Draw slam attack landing hitbox
+  // Draw Installation Art range and hitbox
+  drawInstallationArtRange() {
+    const attackRange = 150; // Same range as hitbox check
+    
+    push();
+    
+    // Draw range circle (ground-based)
+    stroke(255, 200, 100, 100); // Orange with transparency
+    strokeWeight(2);
+    noFill();
+    ellipse(this.pos.x, this.spawnY, attackRange * 2);
+    
+    // Draw hitbox during execution phase
+    if (this.installationArtTimer <= 0 && this.installationArtExecuted) {
+      // Draw attack hitbox
+      stroke(255, 100, 100, 150); // Red with transparency
+      strokeWeight(3);
+      fill(255, 100, 100, 50); // Light red fill
+      ellipse(this.pos.x, this.spawnY, attackRange * 2);
+      
+      // Draw attack direction indicator
+      stroke(255, 200, 100, 200);
+      strokeWeight(4);
+      const facing = this.facing || 1;
+      line(this.pos.x, this.spawnY, this.pos.x + facing * attackRange, this.spawnY);
+    }
+    
+    pop();
+  }
+
+  // Draw slam attack landing hitbox
     if (this.isSlamAttacking && this.slamLandingHitbox) {
       push();
       stroke(255, 100, 255, 150);

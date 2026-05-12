@@ -518,7 +518,18 @@ CALLISTO: {
           console.log(`[DEBUG] Installation Art - Target found: ${target ? target.name : 'None'}`);
           if (target && target.hp > 0) {
             console.log(`[DEBUG] Installation Art - Executing on ${target.name}`);
-            this.executeImprovisedRibcage(fighter, target);
+            
+            // Check if target is within hitbox range (ground-based attack)
+            const attackRange = 150; // Installation Art attack range
+            const distance = dist(fighter.pos.x, fighter.spawnY, target.pos.x, target.spawnY);
+            console.log(`[DEBUG] Installation Art - Distance to target: ${distance}, Range: ${attackRange}`);
+            
+            if (distance <= attackRange) {
+              console.log(`[DEBUG] Installation Art - Target in range, executing attack!`);
+              this.executeImprovisedRibcage(fighter, target);
+            } else {
+              console.log(`[DEBUG] Installation Art - Target out of range!`);
+            }
           } else {
             console.log('[DEBUG] Installation Art - No valid target found!');
           }

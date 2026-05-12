@@ -823,6 +823,77 @@ const CHARACTERS = {
           }
           break;
           
+        case 5: // Attack 3 setup - Random enemy positioning, attack all enemies
+          if (fighter.ultimateTimer <= 0) {
+            // Keep Valencina in center of battleground
+            const valencinaPos = this.clampToArena(width / 2, height - 100);
+            fighter.pos.x = valencinaPos.x;
+            fighter.pos.y = valencinaPos.y;
+            
+            // Position all enemies randomly around the center for multi-target attack
+            targetEnemies.forEach((enemy, index) => {
+              if (enemy) {
+                // Randomly position enemy on left or right side within attack range
+                const randomSide = Math.random() < 0.5 ? -1 : 1; // -1 for left, 1 for right
+                const enemyTargetX = fighter.pos.x + (randomSide * (80 + index * 20)); // Spread enemies out
+                const enemyPos = this.clampToArena(enemyTargetX, fighter.pos.y);
+                enemy.pos.x = enemyPos.x;
+                enemy.pos.y = enemyPos.y;
+              }
+            });
+            
+            // Make Valencina face the first enemy (or center if no enemies)
+            if (targetEnemies.length > 0 && targetEnemies[0]) {
+              fighter.facing = targetEnemies[0].pos.x > fighter.pos.x ? 1 : -1;
+            }
+            
+            // Halt all momentum/velocity on teleport for all fighters
+            fighter.vel.x = 0;
+            fighter.vel.y = 0;
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                enemy.vel.x = 0;
+                enemy.vel.y = 0;
+              }
+            });
+            
+            fighter.ultimatePhase = 6;
+            fighter.ultimateAttackFrame = 0;
+            fighter.ultimateAttackTimer = 0.1;
+            fighter.currentSprite = 's3f2';
+          }
+          break;
+          
+        case 6: // Attack 3 sequence: s3f2 - attack all enemies
+          fighter.ultimateAttackTimer -= dt;
+          
+          // Valencina stays in center - no position adjustment needed
+          
+          if (fighter.ultimateAttackTimer <= 0) {
+            fighter.ultimateAttackFrame++;
+            
+            switch (fighter.ultimateAttackFrame) {
+              case 1:
+                fighter.currentSprite = 's3f2';
+                fighter.ultimateAttackTimer = 0.1;
+                // Deal damage to ALL enemies
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 3);
+                  }
+                });
+                fighter.spawnSlashEffect('s1s4', { x: 0, y: -10 });
+                break;
+              case 2:
+                // End attack sequence
+                fighter.ultimatePhase = 7;
+                fighter.ultimateTimer = 0.1;
+                fighter.currentSprite = 's3f2'; // Hold last attack sprite
+                break;
+            }
+          }
+          break;
+          
         case 7: // Attack 4 setup - teleport all enemies to center
           if (fighter.ultimateTimer <= 0) {
             // Reset movement restriction for attacks 4-5 for all enemies

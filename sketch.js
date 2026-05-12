@@ -12,11 +12,11 @@ let battleTimer = 0;
 
 // Character selection variables - Super Smash Bros style
 let players = [
-  { active: true, character: 'player1', ai: false, controlled: true, ready: false },
-  { active: true, character: 'player2', ai: true, controlled: false, ready: true },
+  { active: true, character: 'VALENCINA', ai: false, controlled: true, ready: false },
+  { active: true, character: 'CALLISTO', ai: true, controlled: false, ready: true },
   { active: false, character: 'JOHN', ai: true, controlled: false, ready: true },
-  { active: false, character: 'player3', ai: true, controlled: false, ready: true },
-  { active: false, character: 'player4', ai: true, controlled: false, ready: true }
+  { active: false, character: 'VALENCINA', ai: true, controlled: false, ready: true },
+  { active: false, character: 'VALENCINA', ai: true, controlled: false, ready: true }
 ];
 const MAX_PLAYERS = 4;
 let selectedPlayerSlot = 0; // Which player slot is currently selected
@@ -62,7 +62,9 @@ function initBattle() {
       isAI = false;
     }
     
-    const fighter = new Fighter(isAI, `P${i + 1}`, playerData.character, isPlayerControlled);
+    // Validate selected character keys against the roster
+    const characterKey = CHARACTERS[playerData.character] ? playerData.character : 'VALENCINA';
+    const fighter = new Fighter(isAI, `P${i + 1}`, characterKey, isPlayerControlled);
     fighter.playerId = i + 1; // Store player ID for UI
     
     // Ensure AI settings are properly applied

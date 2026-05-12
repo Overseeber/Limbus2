@@ -465,13 +465,29 @@ CALLISTO: {
       }
       
       // Update Installation Art timer
-      this.updateInstallationArt(fighter, dt);
+      if (typeof this.updateInstallationArt === 'function') {
+        this.updateInstallationArt(fighter, dt);
+      }
       
       // Update slam active state based on fighter state
       if (fighter.state === 'slam') {
         fighter.slamActive = true;
       } else if (fighter.slamActive && fighter.onGround()) {
         fighter.slamActive = false;
+      }
+    },
+
+    updateInstallationArt: function(fighter, dt) {
+      if (fighter.installationArtCooldown > 0) {
+        fighter.installationArtCooldown = Math.max(0, fighter.installationArtCooldown - dt);
+      }
+      if (fighter.installationArtActive) {
+        fighter.installationArtTimer -= dt;
+        if (fighter.installationArtTimer <= 0) {
+          fighter.installationArtActive = false;
+          fighter.installationArtExecuted = false;
+          fighter.installationArtTimer = 0;
+        }
       }
     },
     

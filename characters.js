@@ -497,7 +497,6 @@ CALLISTO: {
       this.updatePrecognition(fighter, dt);
       this.updateOverheat(fighter, dt);
       this.updateTimeToHuntCooldown(fighter, dt);
-      this.updateDisposialUltimate(fighter, opponent, dt);
     },
     
     processKeyPressed: function(key, fighter) {

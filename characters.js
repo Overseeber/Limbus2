@@ -8,6 +8,11 @@ const CELL = 256;
 // 🔥 SPRITE DATABASE
 // ==========================
 const SPRITES = {
+
+  // =====================================================
+  // 🔴 VALENCINA
+  // =====================================================
+
   // ===== val1 =====
   idle:   { atlas: "val1", x:0,y:0,w:2,h:2 },
   guard:  { atlas: "val1", x:2,y:0,w:2,h:3 },
@@ -20,7 +25,7 @@ const SPRITES = {
   s1f2:   { atlas: "val1", x:4,y:5,w:4,h:3 },
 
   // ===== val2 =====
-  s1f3: { atlas:"val2", x:0,y:0,w:3,h:3, offsetX: +30 },
+  s1f3: { atlas:"val2", x:0,y:0,w:3,h:3, offsetX:+30 },
   halt2:{ atlas:"val2", x:0,y:3,w:3,h:2 },
   s2f1: { atlas:"val2", x:3,y:0,w:5,h:2 },
   joust:{ atlas:"val2", x:3,y:2,w:5,h:2 },
@@ -30,66 +35,208 @@ const SPRITES = {
   dist1:{ atlas:"val2", x:6,y:4,w:2,h:2 },
 
   // ===== val3 =====
-  s4f1:   { atlas:"val3", x:0,y:0,w:4,h:2 },
-  s4f2:   { atlas:"val3", x:0,y:2,w:3,h:3 },
-  s4f3:   { atlas:"val3", x:0,y:5,w:3,h:2 },
-  s4f4:   { atlas:"val3", x:4,y:0,w:4,h:3, offsetY:+256 }, // custom anchor
-  d1:     { atlas:"val3", x:3,y:3,w:3,h:2 },
-  d2:     { atlas:"val3", x:3,y:5,w:3,h:2 },
+  s4f1: { atlas:"val3", x:0,y:0,w:4,h:2 },
+  s4f2: { atlas:"val3", x:0,y:2,w:3,h:3 },
+  s4f3: { atlas:"val3", x:0,y:5,w:3,h:2 },
+  s4f4: { atlas:"val3", x:4,y:0,w:4,h:3, offsetY:+256 },
+  d1:   { atlas:"val3", x:3,y:3,w:3,h:2 },
+  d2:   { atlas:"val3", x:3,y:5,w:3,h:2 },
 
   // ===== valdisposal =====
   de1:{ atlas:"valdisposal", x:2,y:0,w:4,h:2 },
   de2:{ atlas:"valdisposal", x:1,y:2,w:5,h:2 },
   de3:{ atlas:"valdisposal", x:0,y:4,w:8,h:2 },
 
-  // ===== slash1 =====
+  // ===== vslash1 =====
   s1s1:{ atlas:"vslash1", x:0,y:0,w:4,h:3 },
   s1s2:{ atlas:"vslash1", x:4,y:0,w:4,h:3 },
   s1s3:{ atlas:"vslash1", x:3,y:3,w:5,h:2 },
   js1: { atlas:"vslash1", x:3,y:5,w:5,h:2 },
 
-  // ===== slash2 =====
-  s1s4:{ atlas:"vslash2", x:0,y:2,w:4,h:3,  },//offsetY:+256
+  // ===== vslash2 =====
+  s1s4:{ atlas:"vslash2", x:0,y:2,w:4,h:3 },
   s2s1:{ atlas:"vslash2", x:0,y:0,w:4,h:2 },
   s2s2:{ atlas:"vslash2", x:4,y:0,w:4,h:3, offsetY:+256 },
-  diss1:{atlas:"vslash2", x:4,y:3,w:4,h:2 }
+  diss1:{ atlas:"vslash2", x:4,y:3,w:4,h:2 },
+
+
+  // =====================================================
+  // 🔵 CALLISTO
+  // (all prefixed with c)
+  // =====================================================
+
+  // ===== Cal1 =====
+  cidle:   { atlas:"cal1", x:0, y:0, w:3, h:2 },
+  cevade:  { atlas:"cal1", x:3, y:0, w:3, h:2 },
+  cguard:  { atlas:"cal1", x:6, y:0, w:2, h:4 },
+  churt:   { atlas:"cal1", x:0, y:2, w:3, h:2 },
+  cs1f1:   { atlas:"cal1", x:3, y:2, w:3, h:3 },
+  cs3f1:   { atlas:"cal1", x:0, y:4, w:3, h:2 },
+
+  cuend: {
+    atlas:"cal1",
+    x:4, y:5, w:4, h:3,
+    offsetY:+256
+  },
+
+  cmove: { atlas:"cal1", x:0, y:6, w:4, h:2 },
+
+  // ===== Cal2 =====
+  cs2f1: { atlas:"cal2", x:0, y:0, w:4, h:4 },
+  cs3f3: { atlas:"cal2", x:4, y:0, w:4, h:2 },
+  cs3f4: { atlas:"cal2", x:4, y:2, w:4, h:2 },
+  cjoust:{ atlas:"cal2", x:0, y:4, w:5, h:2 },
+  cpose: { atlas:"cal2", x:0, y:6, w:4, h:2 },
+
+  // ===== Cal3 =====
+  cs3f1b:{ atlas:"cal3", x:5, y:0, w:3, h:3 },
+
+  cs1f2: {
+    atlas:"cal3",
+    x:0, y:0, w:4, h:3,
+    offsetY:+256
+  },
+
+  cs1f3: {
+    atlas:"cal3",
+    x:0, y:3, w:4, h:3,
+    offsetY:+256
+  },
+
+  chalt: { atlas:"cal3", x:0, y:6, w:5, h:2 },
+
+  cuf2: {
+    atlas:"cal3",
+    x:5, y:3, w:3, h:5,
+    offsetY:+256
+  },
+
+  // ===== Cal4 =====
+  cuf1: {
+    atlas:"cal4",
+    x:0, y:0, w:4, h:3,
+    offsetX:-256,
+    offsetY:+256
+  },
+
+  cuf3: {
+    atlas:"cal4",
+    x:4, y:0, w:4, h:6,
+    offsetY:+256
+  },
+
+  cuf4: {
+    atlas:"cal4",
+    x:0, y:5, w:5, h:3,
+    offsetX:+256,
+    offsetY:+256
+  },
+
+  // ===== Cal5 =====
+  cuf5:{ atlas:"cal5", x:0, y:0, w:4, h:4 },
+
+  cuf6:{
+    atlas:"cal5",
+    x:1, y:4, w:6, h:3,
+    offsetX:-256
+  },
+
+  // ===== Cslash1 =====
+  cs2s1:{ atlas:"cslash1", x:0, y:0, w:5, h:5 },
+  cjs1: { atlas:"cslash1", x:0, y:4, w:5, h:2 },
+  cs3s1:{ atlas:"cslash1", x:5, y:3, w:3, h:3 },
+  cs3s2:{ atlas:"cslash1", x:4, y:6, w:4, h:2 },
+
+  cbsk1:{ atlas:"cslash1", x:2, y:6, w:2, h:2 },
+  cbsk2:{ atlas:"cslash1", x:0, y:6, w:2, h:2 },
+  cbsk3:{ atlas:"cslash1", x:6, y:0, w:2, h:2 },
+
+  // ===== Cslash2 =====
+  cus1:{
+    atlas:"cslash2",
+    x:0, y:0, w:4, h:4,
+    offsetY:-256
+  },
+
+  cus2:{ atlas:"cslash2", x:4, y:0, w:4, h:5 },
+
+  cus3:{
+    atlas:"cslash2",
+    x:0, y:5, w:5, h:3,
+    offsetY:+512
+  },
+
+  // ===== Cslash3 =====
+  cs1s1:{ atlas:"cslash3", x:0, y:0, w:4, h:3 },
+
+  cus4:{
+    atlas:"cslash3",
+    x:0, y:3, w:8, h:4,
+    offsetX:-256
+  }
 };
 
 // ==========================
 // 🔥 PRE-SCALED SPRITE LOADING
 // ==========================
 function loadSpriteAtlases() {
-  // Load atlases first
+
+  // ===== Valencina =====
   atlases.val1 = loadImage("data/valencina/val1.png");
   atlases.val2 = loadImage("data/valencina/val2.png");
   atlases.val3 = loadImage("data/valencina/val3.png");
   atlases.valdisposal = loadImage("data/valencina/valdisposal.png");
   atlases.vslash1 = loadImage("data/valencina/vslash1.png");
   atlases.vslash2 = loadImage("data/valencina/vslash2.png");
-  
+
+  // ===== Callisto =====
+  atlases.cal1 = loadImage("data/callisto/cal1.png");
+  atlases.cal2 = loadImage("data/callisto/cal2.png");
+  atlases.cal3 = loadImage("data/callisto/cal3.png");
+  atlases.cal4 = loadImage("data/callisto/cal4.png");
+  atlases.cal5 = loadImage("data/callisto/cal5.png");
+
+  atlases.cslash1 = loadImage("data/callisto/cslash1.png");
+  atlases.cslash2 = loadImage("data/callisto/cslash2.png");
+  atlases.cslash3 = loadImage("data/callisto/cslash3.png");
+
   // Pre-scale all atlas images to common sizes
   setTimeout(() => {
     for (const [atlasName, img] of Object.entries(atlases)) {
       if (img && img.width > 0) {
-        // Create pre-scaled versions for common scales
+
         for (const scale of COMMON_SCALES) {
           if (scale !== 1.0) {
+
             const newWidth = img.width * scale;
             const newHeight = img.height * scale;
+
             const pg = createGraphics(newWidth, newHeight);
-            pg.image(img, 0, 0, newWidth, newHeight);
-            
-            // Store pre-scaled version
+
+            pg.image(
+              img,
+              0,
+              0,
+              newWidth,
+              newHeight
+            );
+
             const cacheKey = `${atlasName}_scaled_${scale}`;
-            if (!window.PRE_SCALED_ATLASES) window.PRE_SCALED_ATLASES = {};
+
+            if (!window.PRE_SCALED_ATLASES) {
+              window.PRE_SCALED_ATLASES = {};
+            }
+
             window.PRE_SCALED_ATLASES[cacheKey] = pg;
           }
         }
       }
     }
-    console.log('Pre-scaled atlases loaded');
+
+    console.log("Pre-scaled atlases loaded");
+
   }, 1000);
-  
+
   // Pre-cache sprite data after atlases start loading
   precacheSpriteData();
 }

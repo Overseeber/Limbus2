@@ -1,273 +1,273 @@
-// ==========================
-// 🎭 CHARACTER SWITCHING SYSTEM
-// ==========================
-// 
-// This system provides easy character switching with:
-// - Parent class for common fighter functionality
-// - Subclasses for unique character traits
-// - Quick switching functions for instant character changes
-// - Adjustable properties for easy character addition
+// // ==========================
+// // 🎭 CHARACTER SWITCHING SYSTEM
+// // ==========================
+// // 
+// // This system provides easy character switching with:
+// // - Parent class for common fighter functionality
+// // - Subclasses for unique character traits
+// // - Quick switching functions for instant character changes
+// // - Adjustable properties for easy character addition
 
-class BaseFighter {
-  // 🏗️ CORE FIGHTER CLASS
-  // Handles all common fighter functionality that every character shares
-  constructor(isAI = false, name = 'Enemy', characterKey = null) {
-    this.isAI = isAI;
-    this.name = name;
-    this.characterKey = characterKey || (isAI ? 'JOHN' : 'JOHN');
+// class BaseFighter {
+//   // 🏗️ CORE FIGHTER CLASS
+//   // Handles all common fighter functionality that every character shares
+//   constructor(isAI = false, name = 'Enemy', characterKey = null) {
+//     this.isAI = isAI;
+//     this.name = name;
+//     this.characterKey = characterKey || (isAI ? 'JOHN' : 'JOHN');
     
-    // Get character stats from roster
-    let character = CHARACTERS[this.characterKey];
+//     // Get character stats from roster
+//     let character = CHARACTERS[this.characterKey];
     
-    // Safety check in case character is not found
-    if (!character) {
-      console.error("Invalid characterKey:", this.characterKey);
-      this.characterKey = 'JOHN';
-      character = CHARACTERS[this.characterKey];
-    }
+//     // Safety check in case character is not found
+//     if (!character) {
+//       console.error("Invalid characterKey:", this.characterKey);
+//       this.characterKey = 'JOHN';
+//       character = CHARACTERS[this.characterKey];
+//     }
     
-    // Core properties
-    this.pos = createVector(width / 2 + (isAI ? 200 : -200), height - 100);
-    this.vel = createVector(0, 0);
-    this.facing = isAI ? -1 : 1;
-    this.spawnY = height - 100;
+//     // Core properties
+//     this.pos = createVector(width / 2 + (isAI ? 200 : -200), height - 100);
+//     this.vel = createVector(0, 0);
+//     this.facing = isAI ? -1 : 1;
+//     this.spawnY = height - 100;
     
-    // Combat stats from character roster
-    this.hp = character.hp;
-    this.maxHp = character.hp;
-    this.speed = character.speed;
-    this.baseDamage = character.baseDamage;
-    this.attackInterval = character.attackInterval;
-    this.staggerThreshold = character.staggerThreshold;
-    this.staggerLength = character.staggerLength;
-    this.color = character.color;
-    this.weapon = character.weapon;
-    this.sprite = character.sprite;
+//     // Combat stats from character roster
+//     this.hp = character.hp;
+//     this.maxHp = character.hp;
+//     this.speed = character.speed;
+//     this.baseDamage = character.baseDamage;
+//     this.attackInterval = character.attackInterval;
+//     this.staggerThreshold = character.staggerThreshold;
+//     this.staggerLength = character.staggerLength;
+//     this.color = character.color;
+//     this.weapon = character.weapon;
+//     this.sprite = character.sprite;
     
-    // Combat state
-    this.strikeActive = false;
-    this.attackHitResolved = false;
-    this.hitCooldown = 0;
-    this.staggerTimer = 0;
-    this.isStaggered = false;
-    this.isGuarding = false;
-    this.isCountering = false;
-    this.isEvading = false;
-    this.evadeTimer = 0;
-    this.isDashing = false;
-    this.dashCooldown = 0;
-    this.isSlamAttacking = false;
-    this.slamHoldPosition = false;
-    this.slamAttackRequested = false;
-    this.usePostDashSprite = false;
-    this.attackRequest = false;
-    this.attackRelease = false;
-    this.chargeAttack = false;
-    this.guardRequest = false;
-    this.evadeRequested = false;
-    this.jumpRequest = false;
-    this.duckRequest = false;
-    this.onGround = false;
-    this.attackRange = 80;
-    this.combo = 0;
-    this.ultimateActive = false;
-    this.ultimateTimer = 0;
-    this.ultimateCanActivate = true;
-    this.ultimateActivationRequested = false;
-    this.ultimatePhase = 0;
-    this.ultimateTotalDamage = 0;
-    this.ultimateDamageDealt = 0;
+//     // Combat state
+//     this.strikeActive = false;
+//     this.attackHitResolved = false;
+//     this.hitCooldown = 0;
+//     this.staggerTimer = 0;
+//     this.isStaggered = false;
+//     this.isGuarding = false;
+//     this.isCountering = false;
+//     this.isEvading = false;
+//     this.evadeTimer = 0;
+//     this.isDashing = false;
+//     this.dashCooldown = 0;
+//     this.isSlamAttacking = false;
+//     this.slamHoldPosition = false;
+//     this.slamAttackRequested = false;
+//     this.usePostDashSprite = false;
+//     this.attackRequest = false;
+//     this.attackRelease = false;
+//     this.chargeAttack = false;
+//     this.guardRequest = false;
+//     this.evadeRequested = false;
+//     this.jumpRequest = false;
+//     this.duckRequest = false;
+//     this.onGround = false;
+//     this.attackRange = 80;
+//     this.combo = 0;
+//     this.ultimateActive = false;
+//     this.ultimateTimer = 0;
+//     this.ultimateCanActivate = true;
+//     this.ultimateActivationRequested = false;
+//     this.ultimatePhase = 0;
+//     this.ultimateTotalDamage = 0;
+//     this.ultimateDamageDealt = 0;
     
-    // Animation and sprite state
-    this.currentSprite = 'idle';
-    this.spriteFrame = 0;
-    this.spriteTimer = 0;
-    this.spriteType = character.spriteType || 'atlas';
-    this.slashEffects = [];
-    this.slashEffectsSpawned = false;
+//     // Animation and sprite state
+//     this.currentSprite = 'idle';
+//     this.spriteFrame = 0;
+//     this.spriteTimer = 0;
+//     this.spriteType = character.spriteType || 'atlas';
+//     this.slashEffects = [];
+//     this.slashEffectsSpawned = false;
     
-    // Attack system
-    this.attackSequence = 0;
-    this.attackFrame = 0;
-    this.attackFrameTimer = 0;
-    this.attackFrameDuration = 0.2;
-    this.attackDamageDealt = false;
-    this.haltSequence = false;
-    this.haltFrame = 0;
-    this.haltFrameTimer = 0;
-    this.haltFrameDuration = 0.1;
+//     // Attack system
+//     this.attackSequence = 0;
+//     this.attackFrame = 0;
+//     this.attackFrameTimer = 0;
+//     this.attackFrameDuration = 0.2;
+//     this.attackDamageDealt = false;
+//     this.haltSequence = false;
+//     this.haltFrame = 0;
+//     this.haltFrameTimer = 0;
+//     this.haltFrameDuration = 0.1;
     
-    // Visual effects
-    this.spriteShake = 0;
-    this.state = 'idle';
+//     // Visual effects
+//     this.spriteShake = 0;
+//     this.state = 'idle';
     
-    // Character-specific overrides
-    this.applyCharacterTraits();
-  }
+//     // Character-specific overrides
+//     this.applyCharacterTraits();
+//   }
   
-  // Override this method in subclasses for character-specific traits
-  applyCharacterTraits() {
-    // Subclasses will override this method
-  }
+//   // Override this method in subclasses for character-specific traits
+//   applyCharacterTraits() {
+//     // Subclasses will override this method
+//   }
   
-  // Character switching
-  switchCharacter(characterKey) {
-    this.characterKey = characterKey;
-    const character = CHARACTERS[characterKey];
+//   // Character switching
+//   switchCharacter(characterKey) {
+//     this.characterKey = characterKey;
+//     const character = CHARACTERS[characterKey];
     
-    if (character) {
-      // Update core stats
-      this.hp = character.hp;
-      this.maxHp = character.hp;
-      this.speed = character.speed;
-      this.baseDamage = character.baseDamage;
-      this.attackInterval = character.attackInterval;
-      this.staggerThreshold = character.staggerThreshold;
-      this.staggerLength = character.staggerLength;
-      this.color = character.color;
-      this.weapon = character.weapon;
-      this.sprite = character.sprite;
-      this.spriteType = character.spriteType || 'atlas';
+//     if (character) {
+//       // Update core stats
+//       this.hp = character.hp;
+//       this.maxHp = character.hp;
+//       this.speed = character.speed;
+//       this.baseDamage = character.baseDamage;
+//       this.attackInterval = character.attackInterval;
+//       this.staggerThreshold = character.staggerThreshold;
+//       this.staggerLength = character.staggerLength;
+//       this.color = character.color;
+//       this.weapon = character.weapon;
+//       this.sprite = character.sprite;
+//       this.spriteType = character.spriteType || 'atlas';
       
-      // Apply character-specific traits
-      this.applyCharacterTraits();
+//       // Apply character-specific traits
+//       this.applyCharacterTraits();
       
-      // Reset combat state
-      this.resetCombatState();
+//       // Reset combat state
+//       this.resetCombatState();
       
-      console.log(`Switched to ${character.name}`);
-    }
-  }
+//       console.log(`Switched to ${character.name}`);
+//     }
+//   }
   
-  resetCombatState() {
-    this.strikeActive = false;
-    this.attackHitResolved = false;
-    this.hitCooldown = 0;
-    this.staggerTimer = 0;
-    this.isStaggered = false;
-    this.isGuarding = false;
-    this.isCountering = false;
-    this.isEvading = false;
-    this.evadeTimer = 0;
-    this.isDashing = false;
-    this.dashCooldown = 0;
-    this.isSlamAttacking = false;
-    this.slamHoldPosition = false;
-    this.slamAttackRequested = false;
-    this.usePostDashSprite = false;
-    this.attackRequest = false;
-    this.attackRelease = false;
-    this.chargeAttack = false;
-    this.guardRequest = false;
-    this.evadeRequested = false;
-    this.jumpRequest = false;
-    this.duckRequest = false;
-    this.combo = 0;
-    this.ultimateActive = false;
-    this.ultimateTimer = 0;
-    this.ultimateCanActivate = true;
-    this.ultimateActivationRequested = false;
-    this.ultimatePhase = 0;
-    this.ultimateTotalDamage = 0;
-    this.ultimateDamageDealt = 0;
-    this.attackSequence = 0;
-    this.attackFrame = 0;
-    this.attackFrameTimer = 0;
-    this.attackDamageDealt = false;
-    this.haltSequence = false;
-    this.haltFrame = 0;
-    this.haltFrameTimer = 0;
-    this.slashEffects = [];
-    this.slashEffectsSpawned = false;
-    this.spriteShake = 0;
-    this.state = 'idle';
-  }
-}
+//   resetCombatState() {
+//     this.strikeActive = false;
+//     this.attackHitResolved = false;
+//     this.hitCooldown = 0;
+//     this.staggerTimer = 0;
+//     this.isStaggered = false;
+//     this.isGuarding = false;
+//     this.isCountering = false;
+//     this.isEvading = false;
+//     this.evadeTimer = 0;
+//     this.isDashing = false;
+//     this.dashCooldown = 0;
+//     this.isSlamAttacking = false;
+//     this.slamHoldPosition = false;
+//     this.slamAttackRequested = false;
+//     this.usePostDashSprite = false;
+//     this.attackRequest = false;
+//     this.attackRelease = false;
+//     this.chargeAttack = false;
+//     this.guardRequest = false;
+//     this.evadeRequested = false;
+//     this.jumpRequest = false;
+//     this.duckRequest = false;
+//     this.combo = 0;
+//     this.ultimateActive = false;
+//     this.ultimateTimer = 0;
+//     this.ultimateCanActivate = true;
+//     this.ultimateActivationRequested = false;
+//     this.ultimatePhase = 0;
+//     this.ultimateTotalDamage = 0;
+//     this.ultimateDamageDealt = 0;
+//     this.attackSequence = 0;
+//     this.attackFrame = 0;
+//     this.attackFrameTimer = 0;
+//     this.attackDamageDealt = false;
+//     this.haltSequence = false;
+//     this.haltFrame = 0;
+//     this.haltFrameTimer = 0;
+//     this.slashEffects = [];
+//     this.slashEffectsSpawned = false;
+//     this.spriteShake = 0;
+//     this.state = 'idle';
+//   }
+// }
 
-// 👑 CHARACTER SUBCLASSES
-// Each character extends BaseFighter with unique traits
+// // 👑 CHARACTER SUBCLASSES
+// // Each character extends BaseFighter with unique traits
 
-// 🌸 VALENCINA - Fast, high damage character
-class Valencina extends BaseFighter {
-  applyCharacterTraits() {
-    // 🎯 Valencina's unique abilities
-    this.color = '#4a90e2';        // Blue color scheme
-    this.weapon = 'bus';             // Bus weapon
-    this.baseDamage = 18;            // Higher damage than John
-    this.speed = 8.0;               // Faster movement
-    this.ultimateCanActivate = true;   // Can use ultimate
-  }
-}
+// // 🌸 VALENCINA - Fast, high damage character
+// class Valencina extends BaseFighter {
+//   applyCharacterTraits() {
+//     // 🎯 Valencina's unique abilities
+//     this.color = '#4a90e2';        // Blue color scheme
+//     this.weapon = 'bus';             // Bus weapon
+//     this.baseDamage = 18;            // Higher damage than John
+//     this.speed = 8.0;               // Faster movement
+//     this.ultimateCanActivate = true;   // Can use ultimate
+//   }
+// }
 
-// 👤 JOHN - Balanced, standard character
-class John extends BaseFighter {
-  applyCharacterTraits() {
-    // 🎯 John's unique abilities
-    this.color = '#3498db';        // Blue color scheme
-    this.weapon = 'fist';            // Fist weapon
-    this.baseDamage = 15;            // Standard damage
-    this.speed = 7.5;               // Standard speed
-    this.ultimateCanActivate = true;   // Can use ultimate
-  }
-}
+// // 👤 JOHN - Balanced, standard character
+// class John extends BaseFighter {
+//   applyCharacterTraits() {
+//     // 🎯 John's unique abilities
+//     this.color = '#3498db';        // Blue color scheme
+//     this.weapon = 'fist';            // Fist weapon
+//     this.baseDamage = 15;            // Standard damage
+//     this.speed = 7.5;               // Standard speed
+//     this.ultimateCanActivate = true;   // Can use ultimate
+//   }
+// }
 
-// 🔄 CHARACTER SWITCHING MANAGER
-// Handles quick switching between available characters
-class CharacterManager {
-  constructor() {
-    // 🎯 DEFAULT CHARACTER
-    this.currentCharacter = 'JOHN';
+// // 🔄 CHARACTER SWITCHING MANAGER
+// // Handles quick switching between available characters
+// class CharacterManager {
+//   constructor() {
+//     // 🎯 DEFAULT CHARACTER
+//     this.currentCharacter = 'JOHN';
     
-    // 📋 AVAILABLE CHARACTERS (add new ones here!)
-    this.availableCharacters = ['JOHN', 'VALENCINA'];
-  }
+//     // 📋 AVAILABLE CHARACTERS (add new ones here!)
+//     this.availableCharacters = ['JOHN', 'VALENCINA'];
+//   }
   
-  // 🔄 Switch to specific character
-  switchTo(characterKey) {
-    if (this.availableCharacters.includes(characterKey)) {
-      this.currentCharacter = characterKey;
-      console.log(`✅ Switched to ${characterKey}`);
-      return true;
-    }
-    console.log(`❌ Character ${characterKey} not found`);
-    return false;
-  }
+//   // 🔄 Switch to specific character
+//   switchTo(characterKey) {
+//     if (this.availableCharacters.includes(characterKey)) {
+//       this.currentCharacter = characterKey;
+//       console.log(`✅ Switched to ${characterKey}`);
+//       return true;
+//     }
+//     console.log(`❌ Character ${characterKey} not found`);
+//     return false;
+//   }
   
-  // 📖 Get current character
-  getCurrentCharacter() {
-    return this.currentCharacter;
-  }
+//   // 📖 Get current character
+//   getCurrentCharacter() {
+//     return this.currentCharacter;
+//   }
   
-  // ⏭️ Get next character in list
-  getNextCharacter() {
-    const currentIndex = this.availableCharacters.indexOf(this.currentCharacter);
-    const nextIndex = (currentIndex + 1) % this.availableCharacters.length;
-    return this.availableCharacters[nextIndex];
-  }
+//   // ⏭️ Get next character in list
+//   getNextCharacter() {
+//     const currentIndex = this.availableCharacters.indexOf(this.currentCharacter);
+//     const nextIndex = (currentIndex + 1) % this.availableCharacters.length;
+//     return this.availableCharacters[nextIndex];
+//   }
   
-  // ⏮️ Get previous character in list
-  getPreviousCharacter() {
-    const currentIndex = this.availableCharacters.indexOf(this.currentCharacter);
-    const prevIndex = (currentIndex - 1 + this.availableCharacters.length) % this.availableCharacters.length;
-    return this.availableCharacters[prevIndex];
-  }
-}
+//   // ⏮️ Get previous character in list
+//   getPreviousCharacter() {
+//     const currentIndex = this.availableCharacters.indexOf(this.currentCharacter);
+//     const prevIndex = (currentIndex - 1 + this.availableCharacters.length) % this.availableCharacters.length;
+//     return this.availableCharacters[prevIndex];
+//   }
+// }
 
-// ⚡ QUICK CHARACTER SWITCHING
-// Instant character switching - call this from game controls
-// Usage: switchCharacterQuick('next') or switchCharacterQuick('prev')
-function switchCharacterQuick(direction = 'next') {
-  const manager = new CharacterManager();
+// // ⚡ QUICK CHARACTER SWITCHING
+// // Instant character switching - call this from game controls
+// // Usage: switchCharacterQuick('next') or switchCharacterQuick('prev')
+// function switchCharacterQuick(direction = 'next') {
+//   const manager = new CharacterManager();
   
-  if (direction === 'next') {
-    // ⏭️ Switch to next character
-    const nextChar = manager.getNextCharacter();
-    manager.switchTo(nextChar);
-  } else if (direction === 'prev') {
-    // ⏮️ Switch to previous character
-    const prevChar = manager.getPreviousCharacter();
-    manager.switchTo(prevChar);
-  }
+//   if (direction === 'next') {
+//     // ⏭️ Switch to next character
+//     const nextChar = manager.getNextCharacter();
+//     manager.switchTo(nextChar);
+//   } else if (direction === 'prev') {
+//     // ⏮️ Switch to previous character
+//     const prevChar = manager.getPreviousCharacter();
+//     manager.switchTo(prevChar);
+//   }
   
-  return manager.getCurrentCharacter();
-}
+//   return manager.getCurrentCharacter();
+// }

@@ -250,7 +250,7 @@ const CHARACTERS = {
     staggerLength: 5,
     color: '#3498db',
     weapon: 'fist',
-    sprite: 'dummy/idle.png',
+    sprite: 'data/dummy/idle.png',
     // Character-specific methods
     onSuccessfulHit: function(damage, opponent, fighter) {
       // Default implementation - no special effects
@@ -1065,8 +1065,9 @@ const CHARACTERS = {
     },
     
     spawnSlashEffect: function(type, offset = { x: 0, y: 0 }) {
-      // Create slash effect at specified position
-      console.log(`Spawned slash effect: ${type} at offset: ${offset.x}, ${offset.y}`);
+      // This method should not be called directly on character
+      // The fighter's spawnSlashEffect method handles slash effects properly
+      console.warn('Character method called - use fighter.spawnSlashEffect() instead');
     },
     
     addCombo: function(fighter) {

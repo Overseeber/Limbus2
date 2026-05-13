@@ -769,14 +769,18 @@ class Fighter {
       return; // Don't spawn more than 6 effects
     }
     
-    // Spawn slash effect that shares character position and fades out quickly
+    // Check if this is a cbsk effect (Installation Art slash entities)
+    const isCbskEffect = ['cbsk1', 'cbsk2', 'cbsk3'].includes(slashType);
+    
+    // Spawn slash effect that shares character position and fades out
     const effect = {
       type: slashType,
       pos: { x: this.pos.x, y: this.pos.y }, // Avoid .copy() to reduce GC
       facing: this.facing,
-      timer: 0.4, // Reduced from 0.8 to 0.4 seconds
+      timer: isCbskEffect ? 5.0 : 0.4, // 5 seconds for cbsk effects, 0.4 for normal slashes
       targetOffset: targetOffset,
-      owner: this
+      owner: this,
+      rotation: null // Will be set randomly for cbsk effects
     };
     
     this.slashEffects.push(effect);
@@ -832,17 +836,28 @@ class Fighter {
         if (spriteInfo) {
           // Check for special Installation Art slash entities (cbsk1, cbsk2, cbsk3)
           if (['cbsk1', 'cbsk2', 'cbsk3'].includes(effect.type)) {
-            // Draw ground-based slash entities with rotation
+            // Draw ground-based slash entities with random rotation
+            console.log(`[DEBUG] Drawing cbsk effect: ${effect.type} at pos (${effect.pos.x.toFixed(1)}, ${owner.spawnY.toFixed(1)}) with rotation: ${(effect.rotation * 180/PI).toFixed(1)}°`);
             push();
             
-            // Apply alpha fade
+            // Apply alpha fade (5 second duration - no fade until last second)
+            let alpha = 255;
+            if (effect.timer <= 1.0) {
+              // Only fade in the last second
+              alpha = effect.timer * 255; // 1.0 * 255 = 255
+            }
             tint(255, 255, 255, alpha);
             
-            // Position at ground level (spawnY) with rotation
-            translate(baseX + offsetX * facing, owner.spawnY + offsetY);
+            // Position at ground level (0 pixels from ground) with only horizontal inheritance
+            // Use the effect owner's spawnY for ground level
+            const groundY = effect.owner.spawnY;
+            translate(effect.pos.x + offsetX * facing, groundY);
             
-            // Rotate at +45 degrees
-            rotate(PI / 4); // +45 degrees
+            // Random rotation between -45 to 45 degrees
+            if (!effect.rotation) {
+              effect.rotation = random(-PI/4, PI/4); // Random -45 to 45 degrees
+            }
+            rotate(effect.rotation);
             
             // Apply same scaling as character sprites
             const scaleFactor = 144 / 512;
@@ -854,6 +869,7 @@ class Fighter {
             pop();
           } else {
             // Regular slash effects
+            console.log(`[DEBUG] Drawing regular slash effect: ${effect.type} (should not be cbsk)`);
             push();
             // Apply alpha fade only and facing transformation
             tint(255, 255, 255, alpha);

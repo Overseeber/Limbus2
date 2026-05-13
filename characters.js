@@ -763,8 +763,27 @@ CALLISTO: {
         // Deal 500% of damage dealt to stagger damage
         target.stagger += finalDamage * 5;
         
-        // Spawn cbsk1 slash effect at target location
-        target.spawnSlashEffect('cbsk1', { x: 0, y: 0 });
+        // Spawn random cbsk slash effect at target location
+        const cbskEffects = ['cbsk1', 'cbsk2', 'cbsk3'];
+        const randomCbsk = random(cbskEffects);
+        
+        // Create slash effect directly at target position (horizontal only)
+        const effect = {
+          type: randomCbsk,
+          pos: { x: target.pos.x, y: 0 }, // Inherit only horizontal position, y will be ground level
+          facing: target.facing,
+          timer: 5.0, // 5 seconds for cbsk effects
+          targetOffset: { x: 0, y: 0 },
+          owner: fighter, // Add to caster's effects so they get drawn
+          rotation: random(-PI/4, PI/4) // Random -45 to 45 degrees
+        };
+        
+        // Add to caster's slash effects (not target's) so all effects get drawn
+        if (fighter.slashEffects.length < 6) {
+          fighter.slashEffects.push(effect);
+        }
+        
+        console.log(`[DEBUG] Installation Art - Spawned ${randomCbsk} effect on ${target.name} at ground level`);
         
         targetsHit++;
         console.log(`🎨 Installation Art hit ${target.name}! Damage: ${finalDamage.toFixed(1)}, Stagger: ${(finalDamage * 5).toFixed(1)}`);

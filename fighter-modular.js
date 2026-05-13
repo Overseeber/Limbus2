@@ -503,7 +503,13 @@ class Fighter {
         this.usePostDashSprite = false;
         this.currentSprite = callistoStateMap[this.state] || 'cidle';
       } else {
-        this.currentSprite = callistoStateMap[this.state] || 'cidle';
+        // For Callisto, respect currentSprite during Installation Art
+        if (this.characterKey === 'CALLISTO' && this.installationArtActive) {
+          // Don't override sprite during Installation Art - use currentSprite
+          // this.currentSprite is already set by Installation Art logic
+        } else {
+          this.currentSprite = callistoStateMap[this.state] || 'cidle';
+        }
       }
       return;
     }
@@ -2837,24 +2843,58 @@ addCombo(attacker) {
 
     // Draw player hitbox
     stroke(0, 255, 0);
-    noFill();
-    rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
+noFill();
+rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
 
-    // Draw Installation Art range and hitbox for Callisto
+// Draw Installation Art range and hitbox for Callisto
     if (this.characterKey === 'CALLISTO' && this.installationArtActive) {
       this.drawInstallationArtRange();
     }
-
-    if (this.strikeActive) {
-      const range = this.chargeAttack ? 294 : 231; // Updated to match new attack ranges
-      const box = this.calcAttackBox(range);
-      stroke(255, 0, 0);
-      noFill();
-      rect(box.x - box.w / 2, box.y, box.w, box.h);
+    
+    // Draw Time to Hunt range and hitbox for Valencina
+    if (this.characterKey === 'VALENCINA' && this.gameTimeTarget) {
+      this.drawTimeToHuntRange();
     }
+  }
 
-    // Draw status overlays
-    this.drawOverlays();
+  // Draw Time to Hunt range and hitbox
+  drawTimeToHuntRange() {
+    const targetRange = 200; // Time to Hunt target range
+    
+    push();
+    
+    // Draw target indicator on affected enemy
+    if (this.lastHitOpponent && this.lastHitOpponent.gameTimeTarget) {
+      const target = this.lastHitOpponent;
+      
+      // Draw targeting circle around affected enemy
+      stroke(255, 100, 255, 150); // Purple with transparency
+      strokeWeight(3);
+      noFill();
+      ellipse(target.pos.x, target.pos.y - 30, 80, 80);
+      
+      // Draw targeting lines
+      stroke(255, 100, 255, 100);
+      strokeWeight(2);
+      const time = Date.now() / 1000;
+      for (let i = 0; i < 4; i++) {
+        const angle = (time * 2 + i * PI/2) % (PI * 2);
+        const x1 = target.pos.x + cos(angle) * 40;
+        const y1 = target.pos.y - 30 + sin(angle) * 40;
+        const x2 = target.pos.x + cos(angle) * 50;
+        const y2 = target.pos.y - 30 + sin(angle) * 50;
+        line(x1, y1, x2, y2);
+      }
+      
+      // Draw Game Target status text
+      fill(255, 100, 255);
+      noStroke();
+      textAlign(CENTER, CENTER);
+      textSize(12);
+      text("GAME TARGET", target.pos.x, target.pos.y - 70);
+    }
+    
+    pop();
   }
 
   // Draw Installation Art range and hitbox

@@ -511,18 +511,23 @@ CALLISTO: {
         if (fighter.installationArtTimer <= 0 && !fighter.installationArtExecuted) {
           fighter.installationArtExecuted = true;
           
-          // Use cevade sprite for execution
+          // Use cevade sprite for execution - but keep cguard for additional 0.5s
           fighter.currentSprite = 'cevade';
+          console.log(`[DEBUG] Installation Art - Set sprite to cevade, current: ${fighter.currentSprite}`);
           
           console.log('[DEBUG] Installation Art - Executing AOE attack!');
           this.executeImprovisedRibcage(fighter);
         }
         
-        // End ability after execution
+        // End ability after execution + additional 0.5 seconds (total 1.0s from start)
         if (fighter.installationArtTimer <= -0.5) {
           fighter.installationArtActive = false;
           fighter.installationArtExecuted = false;
           fighter.installationArtTimer = 0;
+          
+          // Reset sprite back to normal
+          fighter.currentSprite = 'cidle';
+          console.log(`[DEBUG] Installation Art - Reset sprite to cidle, current: ${fighter.currentSprite}`);
         }
       }
     },
@@ -639,6 +644,7 @@ CALLISTO: {
       
       // Use cguard sprite for windup
       fighter.currentSprite = 'cguard';
+      console.log(`[DEBUG] Installation Art - Set sprite to cguard, current: ${fighter.currentSprite}`);
       
       console.log('🎨 Callisto activated Installation Art!');
     },
@@ -902,10 +908,20 @@ CALLISTO: {
     
     processKeyPressed: function(key, fighter) {
       // ⚡ Time to Hunt ability (Q key)
-      console.log(`[DEBUG] Time to Hunt - Key: ${key}, Cooldown: ${fighter.timeToHuntCooldown}`);
-      if (key === 'q' && fighter.timeToHuntCooldown <= 0) {
-        console.log('[DEBUG] Time to Hunt - Activating!');
-        this.useTimeToHunt(fighter);
+      console.log(`[DEBUG] Time to Hunt - Key: ${key}, Cooldown: ${fighter.timeToHuntCooldown}, Type: ${typeof fighter.timeToHuntCooldown}`);
+      if (key === 'q') {
+        // Initialize cooldown if undefined
+        if (fighter.timeToHuntCooldown === undefined) {
+          fighter.timeToHuntCooldown = 0;
+          console.log('[DEBUG] Time to Hunt - Initialized cooldown to 0');
+        }
+        
+        if (fighter.timeToHuntCooldown <= 0) {
+          console.log('[DEBUG] Time to Hunt - Activating!');
+          this.useTimeToHunt(fighter);
+        } else {
+          console.log(`[DEBUG] Time to Hunt - On cooldown: ${fighter.timeToHuntCooldown.toFixed(1)}s`);
+        }
       }
       
       // 🚀 Acceleration Round activation (manual evade reload)
@@ -940,17 +956,25 @@ CALLISTO: {
     
     // Time to Hunt - Q key ability
     useTimeToHunt: function(fighter) {
-      if (!fighter.lastHitOpponent) return;
+      if (!fighter.lastHitOpponent) {
+        console.log('[DEBUG] Time to Hunt - No lastHitOpponent found!');
+        return;
+      }
       
-      // Apply Game Target status to opponent (duration: 5 hits or 10 sec, whichever comes first)
-      fighter.lastHitOpponent.gameTimeTarget = true;
-      fighter.lastHitOpponent.speed = 1; // Set speed to 1
-      fighter.lastHitOpponent.gameTargetDuration = 10; // 10 seconds
-      fighter.lastHitOpponent.gameTargetHits = 5; // 5 hits
-      fighter.lastHitOpponent.gameTargetHitsTaken = 0; // Track hits received
+      const target = fighter.lastHitOpponent;
+      
+      // Apply Game Target status to opponent (duration: 10 seconds)
+      target.addStatus('Game Target', 10, 0); // 10 second duration, 0 potency
+      
+      // Store original speed and set to 1
+      target.originalSpeed = target.originalSpeed || target.speed;
+      target.speed = 1;
+      
+      // Store reference for cleanup
+      target.gameTargetCaster = fighter;
       
       fighter.timeToHuntCooldown = 15; // 15 second cooldown
-      console.log('⚡ Time to Hunt activated!');
+      console.log(`⚡ Time to Hunt activated on ${target.name}! Speed set to 1 for 10 seconds.`);
     },
    
     
@@ -1786,7 +1810,36 @@ CALLISTO: {
       fighter.ultimateDamageDealt += damage;
       console.log('[ULTIMATE DEBUG] Damage applied - total:', fighter.ultimateTotalDamage);
     }
-  }
+  },
+    
+    // Initialize character
+    initializeCharacter: function(fighter) {
+      console.log('[DEBUG] Valencina initializeCharacter called for:', fighter.name);
+      fighter.weapon = this.weapon;
+      
+      // Initialize Valencina-specific properties
+      fighter.timeToHuntCooldown = 0;
+      fighter.gameTimeTarget = false;
+      fighter.accelerationRounds = 0;
+      fighter.precognition = this.maxPrecognition;
+      fighter.overheat = 0;
+      fighter.combo = 0;
+      fighter.shinActive = false;
+      fighter.protection = 0;
+      fighter.poiseCount = 0;
+      fighter.poisePotency = 0;
+      fighter.burnPotency = 0;
+      fighter.burnCount = 0;
+      fighter.tremorPotency = 0;
+      fighter.tremorCount = 0;
+      fighter.accelerationActive = false;
+      fighter.disposialActive = false;
+      fighter.disposialPhase = 0;
+      fighter.lastEvadeTime = 0;
+      fighter.lastHitTime = 0;
+      
+      console.log('[DEBUG] Valencina initialized - timeToHuntCooldown:', fighter.timeToHuntCooldown);
+    }
 };
 
 let currentCharacter = 'JOHN';

@@ -200,45 +200,49 @@ function loadSpriteAtlases() {
   atlases.cslash2 = loadImage("data/callisto/cslash2.png");
   atlases.cslash3 = loadImage("data/callisto/cslash3.png");
 
-  // Pre-scale all atlas images to common sizes
-  setTimeout(() => {
+  // Pre-scale all atlas images to common sizes asynchronously
+  const preScaleAtlases = async () => {
     for (const [atlasName, img] of Object.entries(atlases)) {
+      // Wait for image to be fully loaded
       if (img && img.width > 0) {
-
         for (const scale of COMMON_SCALES) {
           if (scale !== 1.0) {
-
             const newWidth = img.width * scale;
             const newHeight = img.height * scale;
-
             const pg = createGraphics(newWidth, newHeight);
-
-            pg.image(
-              img,
-              0,
-              0,
-              newWidth,
-              newHeight
-            );
-
+            pg.image(img, 0, 0, newWidth, newHeight);
+            
             const cacheKey = `${atlasName}_scaled_${scale}`;
-
             if (!window.PRE_SCALED_ATLASES) {
               window.PRE_SCALED_ATLASES = {};
             }
-
             window.PRE_SCALED_ATLASES[cacheKey] = pg;
           }
         }
+      } else {
+        // Wait for image to load if not ready
+        await new Promise(resolve => {
+          const checkLoaded = () => {
+            if (img && img.width > 0) {
+              resolve();
+            } else {
+              setTimeout(checkLoaded, 50);
+            }
+          };
+          checkLoaded();
+        });
       }
     }
-
     console.log("Pre-scaled atlases loaded");
+  };
 
-  }, 1000);
+  // Start pre-scaling but don't block game initialization
+  preScaleAtlases();
 
   // Pre-cache sprite data after atlases start loading
-  precacheSpriteData();
+  setTimeout(() => {
+    precacheSpriteData();
+  }, 100);
 }
 
 // ==========================
@@ -315,6 +319,12 @@ function drawSprite(name, x, y) {
     return null;
   }
   
+  // Check if image is loaded
+  if (img.width <= 0 || img.height <= 0) {
+    console.warn("Atlas not loaded yet:", cached.sprite.atlas);
+    return null;
+  }
+  
   // Update cache with image reference
   cached.img = img;
 
@@ -357,7 +367,16 @@ function drawSpriteScaled(name, x, y, spriteScale = 1) {
   
   // Fallback to runtime scaling for uncommon scales
   let img = cached.img || atlases[cached.sprite.atlas];
-  if (!img) return null;
+  if (!img) {
+    console.warn("Missing atlas for scaled sprite:", cached.sprite.atlas);
+    return null;
+  }
+  
+  // Check if image is loaded
+  if (img.width <= 0 || img.height <= 0) {
+    console.warn("Atlas not loaded yet for scaled sprite:", cached.sprite.atlas);
+    return null;
+  }
 
   push();
   translate(x, y);
@@ -495,44 +514,8 @@ CALLISTO: {
           // Use cevade sprite for execution
           fighter.currentSprite = 'cevade';
           
-          // Try to find target using multiple methods
-          let target = opponent;
-          
-          // Fallback 1: Check if fighter has a lastHitOpponent
-          if (!target && fighter.lastHitOpponent && fighter.lastHitOpponent.hp > 0) {
-            target = fighter.lastHitOpponent;
-            console.log('[DEBUG] Installation Art - Using lastHitOpponent as target');
-          }
-          
-          // Fallback 2: Try to find any enemy in the game
-          if (!target && window.fighters && window.fighters.length > 0) {
-            for (let otherFighter of window.fighters) {
-              if (otherFighter !== fighter && otherFighter.hp > 0) {
-                target = otherFighter;
-                console.log(`[DEBUG] Installation Art - Found enemy in global fighters: ${target.name}`);
-                break;
-              }
-            }
-          }
-          
-          console.log(`[DEBUG] Installation Art - Target found: ${target ? target.name : 'None'}`);
-          if (target && target.hp > 0) {
-            console.log(`[DEBUG] Installation Art - Executing on ${target.name}`);
-            
-            // Check if target is within hitbox range (ground-based attack)
-            const attackRange = 150; // Installation Art attack range
-            const distance = dist(fighter.pos.x, fighter.spawnY, target.pos.x, target.spawnY);
-            console.log(`[DEBUG] Installation Art - Distance to target: ${distance}, Range: ${attackRange}`);
-            
-            if (distance <= attackRange) {
-              console.log(`[DEBUG] Installation Art - Target in range, executing attack!`);
-              this.executeImprovisedRibcage(fighter, target);
-            } else {
-              console.log(`[DEBUG] Installation Art - Target out of range!`);
-            }
-          } else {
-            console.log('[DEBUG] Installation Art - No valid target found!');
-          }
+          console.log('[DEBUG] Installation Art - Executing AOE attack!');
+          this.executeImprovisedRibcage(fighter);
         }
         
         // End ability after execution
@@ -645,17 +628,29 @@ CALLISTO: {
     // Installation Art ability
     useInstallationArt: function(fighter) {
       if (fighter.installationArtActive) return;
+      if (fighter.installationArtCooldown > 0) {
+        console.log(`🎨 Installation Art on cooldown: ${fighter.installationArtCooldown.toFixed(1)}s`);
+        return;
+      }
       
       fighter.installationArtActive = true;
       fighter.installationArtTimer = 0.5;
       fighter.installationArtExecuted = false;
+      
+      // Use cguard sprite for windup
+      fighter.currentSprite = 'cguard';
+      
       console.log('🎨 Callisto activated Installation Art!');
     },
 
-    // Execute Improvised Ribcage attack
-    executeImprovisedRibcage: function(fighter, opponent) {
-      if (!opponent) return;
-
+    // Execute Improvised Ribcage attack (AOE - hits all players in range)
+    executeImprovisedRibcage: function(fighter) {
+      const attackRange = 300; // Same range as hitbox check
+      let targetsHit = 0;
+      
+      console.log(`[DEBUG] Installation Art AOE - Fighter position: (${fighter.pos.x.toFixed(1)}, ${fighter.spawnY.toFixed(1)})`);
+      console.log(`[DEBUG] Installation Art AOE - Attack range: ${attackRange}px`);
+      
       // Count as normal attack (damage + combo)
       fighter.attackCounter = Math.min(3, fighter.attackCounter + 1);
       fighter.attackCounterDisplay = fighter.attackCounter;
@@ -664,34 +659,121 @@ CALLISTO: {
       // Increment combo count for Callisto
       fighter.combo++;
       fighter.comboTimer = 1.4; // Reset combo timer
-
+      
       // Use cevade sprite for execution
       fighter.currentSprite = 'cevade';
-
-      // Deal damage and apply effects
-      const damage = fighter.baseDamage;
-      const finalDamage = fighter.calculateDamage(damage, opponent);
-      opponent.receiveHit(finalDamage, fighter, 0);
-
-      // Inflict 8 bleed
-      opponent.addStatus('Bleed', 8, 8);
-      console.log('🩸 Installation Art inflicted 8 Bleed on enemy!');
-
-      // Inflict sinking potency by damage dealt
-      opponent.addStatus('Sinking', 1, finalDamage);
-      console.log(`� Installation Art inflicted Sinking with potency ${finalDamage}!`);
-
-      // Deal 500% of damage dealt to stagger damage
-      const staggerDamage = finalDamage * 5;
-      opponent.stagger += staggerDamage;
-      console.log(`💥 Installation Art dealt ${staggerDamage} stagger damage!`);
-
-      // Spawn cbsk1 slash effect
-      fighter.spawnSlashEffect('cbsk1', { x: 0, y: 0 });
-      console.log('🎨 Installation Art spawned cbsk1 slash effect!');
-
-      // Set ability on cooldown
-      fighter.installationArtCooldown = 10; // 10 second cooldown
+      
+      // Find all targets in range (AOE)
+      const allTargets = [];
+      
+      console.log(`[DEBUG] Installation Art AOE - window.fighters: ${window.fighters ? window.fighters.length : 'null'}`);
+      console.log(`[DEBUG] Installation Art AOE - lastHitOpponent: ${fighter.lastHitOpponent ? fighter.lastHitOpponent.name : 'null'}`);
+      
+      // Add opponent if in range
+      if (fighter.lastHitOpponent && fighter.lastHitOpponent.hp > 0) {
+        const distance = dist(fighter.pos.x, fighter.spawnY, fighter.lastHitOpponent.pos.x, fighter.lastHitOpponent.spawnY);
+        console.log(`[DEBUG] Installation Art AOE - Distance to lastHitOpponent ${fighter.lastHitOpponent.name}: ${distance.toFixed(1)}px`);
+        if (distance <= attackRange) {
+          allTargets.push(fighter.lastHitOpponent);
+          console.log(`[DEBUG] Installation Art AOE - Added lastHitOpponent to targets`);
+        } else {
+          console.log(`[DEBUG] Installation Art AOE - lastHitOpponent out of range`);
+        }
+      }
+      
+      // Add all other fighters in range
+      if (window.fighters && window.fighters.length > 0) {
+        console.log(`[DEBUG] Installation Art AOE - Checking ${window.fighters.length} fighters...`);
+        for (let i = 0; i < window.fighters.length; i++) {
+          const otherFighter = window.fighters[i];
+          console.log(`[DEBUG] Installation Art AOE - Fighter ${i}: ${otherFighter ? otherFighter.name : 'null'}, HP: ${otherFighter ? otherFighter.hp : 'null'}, IsSelf: ${otherFighter === fighter}`);
+          
+          if (otherFighter !== fighter && otherFighter.hp > 0) {
+            const distance = dist(fighter.pos.x, fighter.spawnY, otherFighter.pos.x, otherFighter.spawnY);
+            console.log(`[DEBUG] Installation Art AOE - Distance to ${otherFighter.name}: ${distance.toFixed(1)}px`);
+            
+            if (distance <= attackRange) {
+              // Avoid duplicates
+              if (!allTargets.includes(otherFighter)) {
+                allTargets.push(otherFighter);
+                console.log(`[DEBUG] Installation Art AOE - Added ${otherFighter.name} to targets`);
+              } else {
+                console.log(`[DEBUG] Installation Art AOE - ${otherFighter.name} already in targets (duplicate)`);
+              }
+            } else {
+              console.log(`[DEBUG] Installation Art AOE - ${otherFighter.name} out of range`);
+            }
+          } else {
+            console.log(`[DEBUG] Installation Art AOE - Skipping ${otherFighter ? otherFighter.name : 'null'} (self or dead)`);
+          }
+        }
+      } else {
+        console.log(`[DEBUG] Installation Art AOE - No window.fighters available!`);
+      }
+      
+      console.log(`[DEBUG] Installation Art AOE - Total targets found: ${allTargets.length}`);
+      
+      // Fallback: If no targets found, try alternative targeting
+      if (allTargets.length === 0) {
+        console.log(`[DEBUG] Installation Art AOE - No targets found, trying fallback methods...`);
+        
+        // Try to find any enemy using different methods
+        if (typeof window.allFighters !== 'undefined' && window.allFighters && window.allFighters.length > 0) {
+          console.log(`[DEBUG] Installation Art AOE - Checking window.allFighters: ${window.allFighters.length} fighters`);
+          for (let otherFighter of window.allFighters) {
+            if (otherFighter !== fighter && otherFighter.hp > 0) {
+              const distance = dist(fighter.pos.x, fighter.spawnY, otherFighter.pos.x, otherFighter.spawnY);
+              console.log(`[DEBUG] Installation Art AOE - Fallback distance to ${otherFighter.name}: ${distance.toFixed(1)}px`);
+              
+              if (distance <= attackRange) {
+                allTargets.push(otherFighter);
+                console.log(`[DEBUG] Installation Art AOE - Fallback added ${otherFighter.name} to targets`);
+              }
+            }
+          }
+        }
+        
+        // Try using opponent parameter if available
+        if (typeof opponent !== 'undefined' && opponent && opponent.hp > 0 && opponent !== fighter) {
+          const distance = dist(fighter.pos.x, fighter.spawnY, opponent.pos.x, opponent.spawnY);
+          console.log(`[DEBUG] Installation Art AOE - Distance to opponent ${opponent.name}: ${distance.toFixed(1)}px`);
+          
+          if (distance <= attackRange) {
+            allTargets.push(opponent);
+            console.log(`[DEBUG] Installation Art AOE - Added opponent ${opponent.name} to targets`);
+          }
+        }
+        
+        console.log(`[DEBUG] Installation Art AOE - After fallback, targets found: ${allTargets.length}`);
+      }
+      
+      // Apply effects to all targets in range
+      allTargets.forEach(target => {
+        // Calculate and deal damage
+        const damage = fighter.baseDamage;
+        const finalDamage = fighter.calculateDamage(damage, target);
+        target.receiveHit(finalDamage, fighter, 0);
+        
+        // Apply 8 bleed
+        target.addStatus('Bleed', 8, 8);
+        
+        // Apply sinking potency by damage dealt and 1 sinking count
+        target.addStatus('Sinking', 1, finalDamage);
+        
+        // Deal 500% of damage dealt to stagger damage
+        target.stagger += finalDamage * 5;
+        
+        // Spawn cbsk1 slash effect at target location
+        target.spawnSlashEffect('cbsk1', { x: 0, y: 0 });
+        
+        targetsHit++;
+        console.log(`🎨 Installation Art hit ${target.name}! Damage: ${finalDamage.toFixed(1)}, Stagger: ${(finalDamage * 5).toFixed(1)}`);
+      });
+      
+      // Set cooldown
+      fighter.installationArtCooldown = 10;
+      
+      console.log(`🎨 Installation Art executed! Hit ${targetsHit} targets in range`);
     },
 
     

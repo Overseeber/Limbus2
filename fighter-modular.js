@@ -2843,7 +2843,7 @@ addCombo(attacker) {
 
   // Draw Installation Art range and hitbox
   drawInstallationArtRange() {
-    const attackRange = 150; // Same range as hitbox check
+    const attackRange = 300; // Same range as hitbox check (2x radius)
     
     push();
     

@@ -433,6 +433,278 @@ const CHARACTERS = {
     initializeCharacter: function(fighter) {
       // Default initialization
       fighter.weapon = this.weapon;
+    },
+
+    // 🖼️ BASIC ULTIMATE TEMPLATE
+    // This is a simple template that can be easily modified for each character
+    activateUltimate: function(fighter, enemies) {
+      // Handle both single opponent (backward compatibility) and multiple enemies
+      const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+
+      fighter.ultimateActive = true;
+      fighter.ultimatePhase = 0;
+      fighter.ultimateTimer = 1; // 1 second initial pose
+      fighter.ultimateTotalDamage = 0;
+      fighter.ultimateDamageDealt = 0;
+      fighter.ultimateCameraZoom = 2.5;
+      fighter.ultimateBackgroundDim = 0.7;
+
+      // Set ultimate name and dialogue (customize per character)
+      fighter.ultimateName = "BASIC ULTIMATE";
+      fighter.ultimateDialogue = "This is a basic ultimate template!";
+
+      // Set all enemies as protected during ultimate
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.ultimateProtected = true;
+          enemy.setState('idle');
+          // Lock enemy stagger bar during ultimate
+          enemy.ultimateStaggerLocked = true;
+          enemy.originalStaggerDecay = enemy.staggerDecayRate || 1;
+          enemy.staggerDecayRate = 0; // Prevent stagger decay
+        }
+      });
+
+      // Turn off collision between all players during ultimate
+      fighter.originalCollisionEnabled = fighter.collisionEnabled !== false;
+      fighter.collisionEnabled = false; // Disable collision
+
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.originalCollisionEnabled = enemy.collisionEnabled !== false;
+          enemy.collisionEnabled = false; // Disable enemy collision
+        }
+      });
+
+      // Teleport to center of arena with boundary clamping
+      const centerPos = this.clampToArena(width / 2, height - 100);
+      fighter.pos.x = centerPos.x;
+      fighter.pos.y = centerPos.y;
+
+      // Halt all momentum/velocity on teleport for all fighters
+      fighter.vel.x = 0;
+      fighter.vel.y = 0;
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.vel.x = 0;
+          enemy.vel.y = 0;
+        }
+      });
+
+      // Set initial pose (use idle sprite for basic template, but only for atlas sprites)
+      if (fighter.spriteType === 'atlas') {
+        fighter.currentSprite = 'idle';
+      }
+
+      console.log(`[BASIC ULTIMATE] ${fighter.name} activated ${fighter.ultimateName}!`);
+    },
+
+    updateUltimate: function(fighter, enemies, dt) {
+      // Handle both single opponent (backward compatibility) and multiple enemies
+      const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+
+      // ENFORCE BOUNDARIES CONTINUOUSLY - PREVENT ALL CLIPPING
+      this.enforceBoundaries(fighter);
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          this.enforceBoundaries(enemy);
+        }
+      });
+
+      // Only decrement ultimate timer when not in attack sequences
+      if (fighter.ultimatePhase === 0 || fighter.ultimatePhase === 1 ||
+          (fighter.ultimatePhase >= 3 && fighter.ultimatePhase % 2 === 1)) {
+        fighter.ultimateTimer -= dt;
+      }
+
+      switch (fighter.ultimatePhase) {
+        case 0: // Initial pose (1 second)
+          if (fighter.ultimateTimer <= 0) {
+            fighter.ultimatePhase = 1;
+            fighter.ultimateTimer = 0.5; // Timing before first attack
+          }
+          break;
+
+        case 1: // Attack 1 setup - Position enemies and attack
+          if (fighter.ultimateTimer <= 0) {
+            // Position all enemies in front of the character
+            targetEnemies.forEach((enemy, index) => {
+              if (enemy) {
+                const enemyPos = this.clampToArena(fighter.pos.x + (fighter.facing * 80), fighter.pos.y);
+                enemy.pos.x = enemyPos.x;
+                enemy.pos.y = enemyPos.y;
+                enemy.vel.x = 0;
+                enemy.vel.y = 0;
+              }
+            });
+
+            fighter.ultimatePhase = 2;
+            fighter.ultimateAttackFrame = 0;
+            fighter.ultimateAttackTimer = 0.3;
+          }
+          break;
+
+        case 2: // Attack 1 sequence - Deal damage
+          fighter.ultimateAttackTimer -= dt;
+
+          if (fighter.ultimateAttackTimer <= 0) {
+            fighter.ultimateAttackFrame++;
+
+            switch (fighter.ultimateAttackFrame) {
+              case 1:
+                // Deal damage to ALL enemies
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 1);
+                  }
+                });
+                fighter.ultimateAttackTimer = 0.3;
+                break;
+              case 2:
+                // End attack sequence
+                fighter.ultimatePhase = 3;
+                fighter.ultimateTimer = 0.5; // Timing before final attack
+                break;
+            }
+          }
+          break;
+
+        case 3: // Final attack setup
+          if (fighter.ultimateTimer <= 0) {
+            fighter.ultimatePhase = 4;
+            fighter.ultimateAttackFrame = 0;
+            fighter.ultimateAttackTimer = 0.3;
+          }
+          break;
+
+        case 4: // Final attack sequence - Deal final damage and zoom out
+          fighter.ultimateAttackTimer -= dt;
+
+          if (fighter.ultimateAttackTimer <= 0) {
+            fighter.ultimateAttackFrame++;
+
+            switch (fighter.ultimateAttackFrame) {
+              case 1:
+                // Deal final damage to ALL enemies (2x damage)
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage * 2, true, 2);
+                  }
+                });
+
+                // Zoom out camera during final attack
+                fighter.ultimateCameraZoom = 1.0;
+                fighter.ultimateBackgroundDim = 0;
+                fighter.ultimateAttackTimer = 1.0; // Hold for 1 second
+                break;
+              case 2:
+                // Move to final phase to allow ending
+                fighter.ultimatePhase = 5;
+                fighter.ultimateTimer = 0.1; // Short timer to end immediately
+                break;
+            }
+          }
+          break;
+
+        case 5: // Final hold phase
+          if (fighter.ultimateTimer <= 0) {
+            // Ultimate will end via the generic system
+          }
+          break;
+      }
+    },
+
+    endUltimate: function(fighter) {
+      // Reset ultimate states
+      if (fighter.spriteType === 'atlas') {
+        fighter.currentSprite = 'idle';
+      }
+      fighter.ultimateCameraZoom = 1;
+      fighter.ultimateBackgroundDim = 0;
+
+      // Remove protection from all enemies
+      if (fighter.allEnemies && Array.isArray(fighter.allEnemies)) {
+        fighter.allEnemies.forEach(enemy => {
+          if (enemy) {
+            enemy.ultimateProtected = false;
+            enemy.setState('idle');
+            // Unlock enemy stagger bar
+            if (enemy.ultimateStaggerLocked) {
+              enemy.ultimateStaggerLocked = false;
+              enemy.staggerDecayRate = enemy.originalStaggerDecay || 1;
+            }
+          }
+        });
+      }
+
+      // Restore collision
+      if (fighter.originalCollisionEnabled !== undefined) {
+        fighter.collisionEnabled = fighter.originalCollisionEnabled;
+      }
+
+      console.log(`[BASIC ULTIMATE] ${fighter.name}'s ultimate ended`);
+    },
+
+    // Helper methods for ultimate
+    clampToArena: function(x, y) {
+      const margin = 100;
+      return {
+        x: constrain(x, margin, width - margin),
+        y: constrain(y, margin, height - margin)
+      };
+    },
+
+    enforceBoundaries: function(fighter) {
+      const clamped = this.clampToArena(fighter.pos.x, fighter.pos.y);
+      fighter.pos.x = clamped.x;
+      fighter.pos.y = clamped.y;
+
+      // Stop velocity if hitting boundaries
+      if (fighter.pos.x <= 100 || fighter.pos.x >= width - 100) {
+        fighter.vel.x = 0;
+      }
+    },
+
+    dealUltimateDamage: function(fighter, enemy, damage, isFinalAttack = false, attackPhase = 1) {
+      // Store original values before modification
+      const previousProtected = enemy.ultimateProtected;
+      const previousCooldown = enemy.hitCooldown;
+
+      // Calculate knockback amount (increased for ultimate)
+      const knockbackAmount = isFinalAttack ? 150 : 100;
+
+      // Apply damage with custom knockback
+      enemy.receiveHit(damage, fighter, knockbackAmount);
+
+      // Restore ultimate protection and cooldown after damage is applied
+      enemy.ultimateProtected = previousProtected;
+      enemy.hitCooldown = previousCooldown;
+
+      // Add doubled ultimate screenshake
+      if (typeof addScreenShake === 'function') {
+        addScreenShake(damage, true); // isUltimate = true for doubled intensity
+      }
+
+      // ENFORCE BOUNDARIES AFTER KNOCKBACK - PREVENT ALL CLIPPING
+      this.enforceBoundaries(enemy);
+      this.enforceBoundaries(fighter);
+
+      // Reset stagger to original value (prevent any stagger gain)
+      enemy.stagger = enemy.stagger; // Keep current stagger
+
+      // Add friction to knockback unless it's final attack
+      if (!isFinalAttack && enemy.vel.x !== 0) {
+        enemy.vel.x *= 0.8; // Apply friction (20% reduction)
+      }
+
+      // Stop character from pushing enemy
+      fighter.vel.x = 0;
+      fighter.vel.y = 0;
+
+      fighter.ultimateTotalDamage += damage;
+      fighter.ultimateDamageDealt += damage;
+
+      console.log(`[BASIC ULTIMATE] Damage applied: ${damage}, total: ${fighter.ultimateTotalDamage}`);
     }
   },
 CALLISTO: {
@@ -818,6 +1090,276 @@ CALLISTO: {
       fighter.installationArtTimer = 0;
       fighter.installationArtExecuted = false;
       fighter.installationArtCooldown = 0;
+    },
+
+    // 🖼️ BASIC ULTIMATE TEMPLATE
+    // This is a simple template that can be easily modified for each character
+    activateUltimate: function(fighter, enemies) {
+      // Handle both single opponent (backward compatibility) and multiple enemies
+      const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+
+      fighter.ultimateActive = true;
+      fighter.ultimatePhase = 0;
+      fighter.ultimateTimer = 1; // 1 second initial pose
+      fighter.ultimateTotalDamage = 0;
+      fighter.ultimateDamageDealt = 0;
+      fighter.ultimateCameraZoom = 2.5;
+      fighter.ultimateBackgroundDim = 0.7;
+
+      // Set ultimate name and dialogue (customize per character)
+      fighter.ultimateName = "CORPUS ULTIMATE";
+      fighter.ultimateDialogue = "Behold the masterpiece of flesh and bone!";
+
+      // Set all enemies as protected during ultimate
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.ultimateProtected = true;
+          enemy.setState('idle');
+          // Lock enemy stagger bar during ultimate
+          enemy.ultimateStaggerLocked = true;
+          enemy.originalStaggerDecay = enemy.staggerDecayRate || 1;
+          enemy.staggerDecayRate = 0; // Prevent stagger decay
+        }
+      });
+
+      // Turn off collision between all players during ultimate
+      fighter.originalCollisionEnabled = fighter.collisionEnabled !== false;
+      fighter.collisionEnabled = false; // Disable collision
+
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.originalCollisionEnabled = enemy.collisionEnabled !== false;
+          enemy.collisionEnabled = false; // Disable enemy collision
+        }
+      });
+
+      // Teleport to center of arena with boundary clamping
+      const centerPos = this.clampToArena(width / 2, height - 100);
+      fighter.pos.x = centerPos.x;
+      fighter.pos.y = centerPos.y;
+
+      // Halt all momentum/velocity on teleport for all fighters
+      fighter.vel.x = 0;
+      fighter.vel.y = 0;
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.vel.x = 0;
+          enemy.vel.y = 0;
+        }
+      });
+
+      // Set initial pose (use idle sprite for basic template, but only for atlas sprites)
+      if (fighter.spriteType === 'atlas') {
+        fighter.currentSprite = 'idle';
+      }
+
+      console.log(`[CORPUS ULTIMATE] ${fighter.name} activated ${fighter.ultimateName}!`);
+    },
+
+    updateUltimate: function(fighter, enemies, dt) {
+      // Handle both single opponent (backward compatibility) and multiple enemies
+      const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+
+      // ENFORCE BOUNDARIES CONTINUOUSLY - PREVENT ALL CLIPPING
+      this.enforceBoundaries(fighter);
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          this.enforceBoundaries(enemy);
+        }
+      });
+
+      // Only decrement ultimate timer when not in attack sequences
+      if (fighter.ultimatePhase === 0 || fighter.ultimatePhase === 1 ||
+          (fighter.ultimatePhase >= 3 && fighter.ultimatePhase % 2 === 1)) {
+        fighter.ultimateTimer -= dt;
+      }
+
+      switch (fighter.ultimatePhase) {
+        case 0: // Initial pose (1 second)
+          if (fighter.ultimateTimer <= 0) {
+            fighter.ultimatePhase = 1;
+            fighter.ultimateTimer = 0.5; // Timing before first attack
+          }
+          break;
+
+        case 1: // Attack 1 setup - Position enemies and attack
+          if (fighter.ultimateTimer <= 0) {
+            // Position all enemies in front of the character
+            targetEnemies.forEach((enemy, index) => {
+              if (enemy) {
+                const enemyPos = this.clampToArena(fighter.pos.x + (fighter.facing * 80), fighter.pos.y);
+                enemy.pos.x = enemyPos.x;
+                enemy.pos.y = enemyPos.y;
+                enemy.vel.x = 0;
+                enemy.vel.y = 0;
+              }
+            });
+
+            fighter.ultimatePhase = 2;
+            fighter.ultimateAttackFrame = 0;
+            fighter.ultimateAttackTimer = 0.3;
+          }
+          break;
+
+        case 2: // Attack 1 sequence - Deal damage
+          fighter.ultimateAttackTimer -= dt;
+
+          if (fighter.ultimateAttackTimer <= 0) {
+            fighter.ultimateAttackFrame++;
+
+            switch (fighter.ultimateAttackFrame) {
+              case 1:
+                // Deal damage to ALL enemies
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 1);
+                  }
+                });
+                fighter.ultimateAttackTimer = 0.3;
+                break;
+              case 2:
+                // End attack sequence
+                fighter.ultimatePhase = 3;
+                fighter.ultimateTimer = 0.5; // Timing before final attack
+                break;
+            }
+          }
+          break;
+
+        case 3: // Final attack setup
+          if (fighter.ultimateTimer <= 0) {
+            fighter.ultimatePhase = 4;
+            fighter.ultimateAttackFrame = 0;
+            fighter.ultimateAttackTimer = 0.3;
+          }
+          break;
+
+        case 4: // Final attack sequence - Deal final damage and zoom out
+          fighter.ultimateAttackTimer -= dt;
+
+          if (fighter.ultimateAttackTimer <= 0) {
+            fighter.ultimateAttackFrame++;
+
+            switch (fighter.ultimateAttackFrame) {
+              case 1:
+                // Deal final damage to ALL enemies (2x damage)
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage * 2, true, 2);
+                  }
+                });
+
+                // Zoom out camera during final attack
+                fighter.ultimateCameraZoom = 1.0;
+                fighter.ultimateBackgroundDim = 0;
+                fighter.ultimateAttackTimer = 1.0; // Hold for 1 second
+                break;
+              case 2:
+                // Move to final phase to allow ending
+                fighter.ultimatePhase = 5;
+                fighter.ultimateTimer = 0.1; // Short timer to end immediately
+                break;
+            }
+          }
+          break;
+
+        case 5: // Final hold phase
+          if (fighter.ultimateTimer <= 0) {
+            // Ultimate will end via the generic system
+          }
+          break;
+      }
+    },
+
+    endUltimate: function(fighter) {
+      // Reset ultimate states
+      fighter.currentSprite = 'idle';
+      fighter.ultimateCameraZoom = 1;
+      fighter.ultimateBackgroundDim = 0;
+
+      // Remove protection from all enemies
+      if (fighter.allEnemies && Array.isArray(fighter.allEnemies)) {
+        fighter.allEnemies.forEach(enemy => {
+          if (enemy) {
+            enemy.ultimateProtected = false;
+            enemy.setState('idle');
+            // Unlock enemy stagger bar
+            if (enemy.ultimateStaggerLocked) {
+              enemy.ultimateStaggerLocked = false;
+              enemy.staggerDecayRate = enemy.originalStaggerDecay || 1;
+            }
+          }
+        });
+      }
+
+      // Restore collision
+      if (fighter.originalCollisionEnabled !== undefined) {
+        fighter.collisionEnabled = fighter.originalCollisionEnabled;
+      }
+
+      console.log(`[CORPUS ULTIMATE] ${fighter.name}'s ultimate ended`);
+    },
+
+    // Helper methods for ultimate
+    clampToArena: function(x, y) {
+      const margin = 100;
+      return {
+        x: constrain(x, margin, width - margin),
+        y: constrain(y, margin, height - margin)
+      };
+    },
+
+    enforceBoundaries: function(fighter) {
+      const clamped = this.clampToArena(fighter.pos.x, fighter.pos.y);
+      fighter.pos.x = clamped.x;
+      fighter.pos.y = clamped.y;
+
+      // Stop velocity if hitting boundaries
+      if (fighter.pos.x <= 100 || fighter.pos.x >= width - 100) {
+        fighter.vel.x = 0;
+      }
+    },
+
+    dealUltimateDamage: function(fighter, enemy, damage, isFinalAttack = false, attackPhase = 1) {
+      // Store original values before modification
+      const previousProtected = enemy.ultimateProtected;
+      const previousCooldown = enemy.hitCooldown;
+
+      // Calculate knockback amount (increased for ultimate)
+      const knockbackAmount = isFinalAttack ? 150 : 100;
+
+      // Apply damage with custom knockback
+      enemy.receiveHit(damage, fighter, knockbackAmount);
+
+      // Restore ultimate protection and cooldown after damage is applied
+      enemy.ultimateProtected = previousProtected;
+      enemy.hitCooldown = previousCooldown;
+
+      // Add doubled ultimate screenshake
+      if (typeof addScreenShake === 'function') {
+        addScreenShake(damage, true); // isUltimate = true for doubled intensity
+      }
+
+      // ENFORCE BOUNDARIES AFTER KNOCKBACK - PREVENT ALL CLIPPING
+      this.enforceBoundaries(enemy);
+      this.enforceBoundaries(fighter);
+
+      // Reset stagger to original value (prevent any stagger gain)
+      enemy.stagger = enemy.stagger; // Keep current stagger
+
+      // Add friction to knockback unless it's final attack
+      if (!isFinalAttack && enemy.vel.x !== 0) {
+        enemy.vel.x *= 0.8; // Apply friction (20% reduction)
+      }
+
+      // Stop character from pushing enemy
+      fighter.vel.x = 0;
+      fighter.vel.y = 0;
+
+      fighter.ultimateTotalDamage += damage;
+      fighter.ultimateDamageDealt += damage;
+
+      console.log(`[CORPUS ULTIMATE] Damage applied: ${damage}, total: ${fighter.ultimateTotalDamage}`);
     }
   },
 

@@ -24,7 +24,11 @@ let characterSelectOption = 0; // 0: character, 1: AI, 2: ready, 3: remove playe
 
 function preload() {
   // Load sprite atlases for character sprites
-  loadSpriteAtlases();
+  if (typeof loadSpriteAtlases === 'function') {
+    loadSpriteAtlases();
+  } else {
+    console.warn('loadSpriteAtlases not yet loaded');
+  }
 }
 
 function setup() {//test
@@ -63,7 +67,7 @@ function initBattle() {
     }
     
     // Validate selected character keys against the roster
-    const characterKey = CHARACTERS[playerData.character] ? playerData.character : 'VALENCINA';
+    const characterKey = (CHARACTERS && CHARACTERS[playerData.character]) ? playerData.character : 'VALENCINA';
     const fighter = new Fighter(isAI, `P${i + 1}`, characterKey, isPlayerControlled);
     fighter.playerId = i + 1; // Store player ID for UI
     
@@ -527,7 +531,7 @@ function drawCharacterSelect() {
       fill(255);
     }
     
-    const charData = CHARACTERS[player.character];
+    const charData = CHARACTERS && CHARACTERS[player.character] ? CHARACTERS[player.character] : null;
     text(charData ? charData.name : player.character, x + columnWidth/2, 180);
     
     // AI toggle

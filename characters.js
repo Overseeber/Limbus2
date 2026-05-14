@@ -1092,23 +1092,27 @@ CALLISTO: {
       fighter.installationArtCooldown = 0;
     },
 
-    // 🖼️ BASIC ULTIMATE TEMPLATE
-    // This is a simple template that can be easily modified for each character
+    // 🎨 CALLISTO'S ULTIMATE: Closing Time - Installation Art no. 1: Your Flesh and Bones as the Gallery's Seats
     activateUltimate: function(fighter, enemies) {
       // Handle both single opponent (backward compatibility) and multiple enemies
       const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
 
       fighter.ultimateActive = true;
       fighter.ultimatePhase = 0;
-      fighter.ultimateTimer = 1; // 1 second initial pose
+      fighter.ultimateTimer = 3; // 3 seconds for centered pose (cpose)
       fighter.ultimateTotalDamage = 0;
       fighter.ultimateDamageDealt = 0;
       fighter.ultimateCameraZoom = 2.5;
       fighter.ultimateBackgroundDim = 0.7;
 
-      // Set ultimate name and dialogue (customize per character)
-      fighter.ultimateName = "CORPUS ULTIMATE";
-      fighter.ultimateDialogue = "Behold the masterpiece of flesh and bone!";
+      // Set ultimate name and dialogue
+      fighter.ultimateName = "CLOSING TIME";
+      fighter.ultimateDialogue = "Installation Art no. 1: Your Flesh and Bones as the Gallery's Seats";
+
+      // Initialize ultimate-specific properties
+      fighter.ultimateRedLines = []; // Array to store red line effects
+      fighter.ultimateSkulls = []; // Array to store skull instances
+      fighter.ultimateDamageInstances = 0; // Counter for attack 5 damage instances
 
       // Set all enemies as protected during ultimate
       targetEnemies.forEach(enemy => {
@@ -1119,6 +1123,8 @@ CALLISTO: {
           enemy.ultimateStaggerLocked = true;
           enemy.originalStaggerDecay = enemy.staggerDecayRate || 1;
           enemy.staggerDecayRate = 0; // Prevent stagger decay
+          // Store original position for restoration
+          enemy.ultimateOriginalPos = { x: enemy.pos.x, y: enemy.pos.y };
         }
       });
 
@@ -1148,12 +1154,14 @@ CALLISTO: {
         }
       });
 
-      // Set initial pose (use idle sprite for basic template, but only for atlas sprites)
-      if (fighter.spriteType === 'atlas') {
-        fighter.currentSprite = 'idle';
-      }
+      // Set initial pose (cpose for 3 seconds)
+      fighter.currentSprite = 'cpose';
 
-      console.log(`[CORPUS ULTIMATE] ${fighter.name} activated ${fighter.ultimateName}!`);
+      // Initialize ultimate state
+      fighter.ultimateAttackFrame = 0;
+      fighter.ultimateAttackTimer = 0;
+
+      console.log(`[CLOSING TIME] ${fighter.name} activated CLOSING TIME!`);
     },
 
     updateUltimate: function(fighter, enemies, dt) {
@@ -1169,25 +1177,27 @@ CALLISTO: {
       });
 
       // Only decrement ultimate timer when not in attack sequences
-      if (fighter.ultimatePhase === 0 || fighter.ultimatePhase === 1 ||
-          (fighter.ultimatePhase >= 3 && fighter.ultimatePhase % 2 === 1)) {
+      if (fighter.ultimatePhase === 0 || fighter.ultimatePhase === 1 || 
+          fighter.ultimatePhase === 3 || fighter.ultimatePhase === 5 ||
+          fighter.ultimatePhase === 7 || fighter.ultimatePhase === 9 ||
+          fighter.ultimatePhase === 11) {
         fighter.ultimateTimer -= dt;
       }
 
       switch (fighter.ultimatePhase) {
-        case 0: // Initial pose (1 second)
+        case 0: // Centered pose (cpose) - 3 seconds
           if (fighter.ultimateTimer <= 0) {
             fighter.ultimatePhase = 1;
-            fighter.ultimateTimer = 0.5; // Timing before first attack
+            fighter.ultimateTimer = 0.3; // Timing before attack 1
           }
           break;
 
-        case 1: // Attack 1 setup - Position enemies and attack
+        case 1: // Attack 1 setup
           if (fighter.ultimateTimer <= 0) {
-            // Position all enemies in front of the character
-            targetEnemies.forEach((enemy, index) => {
+            // Teleport opponent to 300 pixels to the right of Callisto
+            targetEnemies.forEach(enemy => {
               if (enemy) {
-                const enemyPos = this.clampToArena(fighter.pos.x + (fighter.facing * 80), fighter.pos.y);
+                const enemyPos = this.clampToArena(fighter.pos.x + 300, fighter.pos.y);
                 enemy.pos.x = enemyPos.x;
                 enemy.pos.y = enemyPos.y;
                 enemy.vel.x = 0;
@@ -1198,10 +1208,11 @@ CALLISTO: {
             fighter.ultimatePhase = 2;
             fighter.ultimateAttackFrame = 0;
             fighter.ultimateAttackTimer = 0.3;
+            fighter.currentSprite = 'cuf1';
           }
           break;
 
-        case 2: // Attack 1 sequence - Deal damage
+        case 2: // Attack 1 sequence
           fighter.ultimateAttackTimer -= dt;
 
           if (fighter.ultimateAttackTimer <= 0) {
@@ -1209,32 +1220,46 @@ CALLISTO: {
 
             switch (fighter.ultimateAttackFrame) {
               case 1:
-                // Deal damage to ALL enemies
+                // Deal damage with cus1
                 targetEnemies.forEach(enemy => {
                   if (enemy) {
                     this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 1);
                   }
                 });
+                fighter.spawnSlashEffect('cus1', { x: 0, y: -10 });
                 fighter.ultimateAttackTimer = 0.3;
                 break;
               case 2:
                 // End attack sequence
                 fighter.ultimatePhase = 3;
-                fighter.ultimateTimer = 0.5; // Timing before final attack
+                fighter.ultimateTimer = 1; // 1 second before next attack
                 break;
             }
           }
           break;
 
-        case 3: // Final attack setup
+        case 3: // Attack 2 setup
           if (fighter.ultimateTimer <= 0) {
+            fighter.currentSprite = 'cuf2';
+            
+            // Draw opponent at callisto's position (x-288, y-430)
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                const enemyPos = this.clampToArena(fighter.pos.x - 288, fighter.pos.y - 430);
+                enemy.pos.x = enemyPos.x;
+                enemy.pos.y = enemyPos.y;
+                enemy.vel.x = 0;
+                enemy.vel.y = 0;
+              }
+            });
+
             fighter.ultimatePhase = 4;
             fighter.ultimateAttackFrame = 0;
-            fighter.ultimateAttackTimer = 0.3;
+            fighter.ultimateAttackTimer = 0.5; // Hold for 0.5 sec
           }
           break;
 
-        case 4: // Final attack sequence - Deal final damage and zoom out
+        case 4: // Attack 2 sequence
           fighter.ultimateAttackTimer -= dt;
 
           if (fighter.ultimateAttackTimer <= 0) {
@@ -1242,28 +1267,214 @@ CALLISTO: {
 
             switch (fighter.ultimateAttackFrame) {
               case 1:
-                // Deal final damage to ALL enemies (2x damage)
+                fighter.currentSprite = 'cuf3';
+                // Deal damage with cus2
                 targetEnemies.forEach(enemy => {
                   if (enemy) {
-                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage * 2, true, 2);
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 2);
                   }
                 });
-
-                // Zoom out camera during final attack
-                fighter.ultimateCameraZoom = 1.0;
-                fighter.ultimateBackgroundDim = 0;
-                fighter.ultimateAttackTimer = 1.0; // Hold for 1 second
+                fighter.spawnSlashEffect('cus2', { x: 0, y: -10 });
+                fighter.ultimateAttackTimer = 0.3;
                 break;
               case 2:
-                // Move to final phase to allow ending
+                // End attack sequence
                 fighter.ultimatePhase = 5;
-                fighter.ultimateTimer = 0.1; // Short timer to end immediately
+                fighter.ultimateTimer = 1; // 1 second before next attack
                 break;
             }
           }
           break;
 
-        case 5: // Final hold phase
+        case 5: // Attack 3 setup
+          if (fighter.ultimateTimer <= 0) {
+            // Teleport enemy to the ground 600 pixels in front of Callisto
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                const enemyPos = this.clampToArena(fighter.pos.x + (fighter.facing * 600), height - 100);
+                enemy.pos.x = enemyPos.x;
+                enemy.pos.y = enemyPos.y;
+                enemy.vel.x = 0;
+                enemy.vel.y = 0;
+              }
+            });
+
+            fighter.currentSprite = 'cuf3';
+            fighter.ultimatePhase = 6;
+            fighter.ultimateAttackFrame = 0;
+            fighter.ultimateAttackTimer = 0.3;
+          }
+          break;
+
+        case 6: // Attack 3 sequence
+          fighter.ultimateAttackTimer -= dt;
+
+          if (fighter.ultimateAttackTimer <= 0) {
+            fighter.ultimateAttackFrame++;
+
+            switch (fighter.ultimateAttackFrame) {
+              case 1:
+                // Deal damage with cus3
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 3);
+                  }
+                });
+                fighter.spawnSlashEffect('cus3', { x: 0, y: -10 });
+                fighter.ultimateAttackTimer = 0.3;
+                break;
+              case 2:
+                // End attack sequence
+                fighter.ultimatePhase = 7;
+                fighter.ultimateTimer = 1; // 1 second before next attack
+                break;
+            }
+          }
+          break;
+
+        case 7: // Attack 4 setup - jump upward
+          if (fighter.ultimateTimer <= 0) {
+            // Jump upward and a bit towards the opponent
+            fighter.vel.y = -15;
+            fighter.vel.x = fighter.facing * 5;
+            fighter.currentSprite = 'cuf4';
+            
+            fighter.ultimatePhase = 8;
+            fighter.ultimateAttackFrame = 0;
+            fighter.ultimateAttackTimer = 1; // Hold for 1 second
+          }
+          break;
+
+        case 8: // Attack 4 sequence
+          fighter.ultimateAttackTimer -= dt;
+
+          if (fighter.ultimateAttackTimer <= 0) {
+            fighter.ultimateAttackFrame++;
+
+            switch (fighter.ultimateAttackFrame) {
+              case 1:
+                // Teleport 300 pixels in front of the enemy
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    const teleportPos = this.clampToArena(enemy.pos.x + (enemy.facing * 300), enemy.pos.y);
+                    fighter.pos.x = teleportPos.x;
+                    fighter.pos.y = teleportPos.y;
+                    fighter.vel.x = 0;
+                    fighter.vel.y = 0;
+                  }
+                });
+
+                fighter.currentSprite = 'cuf5';
+                // Deal damage with cus4
+                targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 4);
+                  }
+                });
+                fighter.spawnSlashEffect('cus4', { x: 0, y: -10 });
+                fighter.ultimateAttackTimer = 0.3;
+                break;
+              case 2:
+                // End attack sequence
+                fighter.ultimatePhase = 9;
+                fighter.ultimateTimer = 1; // 1 second before next attack
+                break;
+            }
+          }
+          break;
+
+        case 9: // Attack 5 setup - move to right in front
+          if (fighter.ultimateTimer <= 0) {
+            // Move to right in front of the enemy
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                const movePos = this.clampToArena(enemy.pos.x + (enemy.facing * 100), enemy.pos.y);
+                fighter.pos.x = movePos.x;
+                fighter.pos.y = movePos.y;
+                fighter.vel.x = 0;
+                fighter.vel.y = 0;
+              }
+            });
+
+            fighter.currentSprite = 'cs3f2';
+            fighter.ultimateCameraZoom = 4.0; // Zoom in to Callisto
+            fighter.ultimateDamageInstances = 0; // Reset damage counter
+            
+            fighter.ultimatePhase = 10;
+            fighter.ultimateAttackFrame = 0;
+            fighter.ultimateAttackTimer = 0.05; // 20 instances over 1 second = 0.05s each
+          }
+          break;
+
+        case 10: // Attack 5 sequence - 20 damage instances with red lines
+          fighter.ultimateAttackTimer -= dt;
+
+          if (fighter.ultimateAttackTimer <= 0) {
+            fighter.ultimateAttackFrame++;
+            fighter.ultimateDamageInstances++;
+
+            // Deal damage instance
+            if (fighter.ultimateDamageInstances <= 20) {
+              targetEnemies.forEach(enemy => {
+                if (enemy) {
+                  this.dealUltimateDamage(fighter, enemy, fighter.baseDamage / 20, false, 5);
+                }
+              });
+
+              // Spawn red line effect
+              const lineX = random(100, width - 100);
+              const lineTopDeviation = random(-100, 100);
+              const lineEffect = {
+                type: 'redLine',
+                x: lineX,
+                topY: 0 + lineTopDeviation,
+                bottomY: height,
+                opacity: 0,
+                maxOpacity: 1,
+                fadeSpeed: 2
+              };
+              fighter.ultimateRedLines.push(lineEffect);
+
+              fighter.ultimateAttackTimer = 0.05; // Next instance in 0.05s
+            } else {
+              // All 20 instances done
+              fighter.currentSprite = 'cuend'; // Switch to u (cuend)
+              fighter.ultimateCameraZoom = 1.0; // Zoom out
+              
+              // Spawn 21 skull instances
+              for (let i = 0; i < 21; i++) {
+                const skullTypes = ['cbsk1', 'cbsk2', 'cbsk3'];
+                const randomSkull = skullTypes[Math.floor(random(0, skullTypes.length))];
+                const randomScale = random(1, 6);
+                const randomX = random(100, width - 100);
+                const randomY = random(100, height - 100);
+                const randomRotation = random(-PI/3, PI/3); // +- 60 degrees
+
+                const skullEffect = {
+                  type: randomSkull,
+                  x: randomX,
+                  y: randomY,
+                  scale: randomScale,
+                  rotation: randomRotation,
+                  timer: 3 // Hold for 3 seconds
+                };
+                fighter.ultimateSkulls.push(skullEffect);
+              }
+
+              fighter.ultimatePhase = 11;
+              fighter.ultimateTimer = 3; // Hold for 3 seconds
+            }
+          }
+          break;
+
+        case 11: // Final hold phase - skulls visible
+          // Update red line fade-in
+          fighter.ultimateRedLines.forEach(line => {
+            if (line.opacity < line.maxOpacity) {
+              line.opacity += line.fadeSpeed * dt;
+            }
+          });
+
           if (fighter.ultimateTimer <= 0) {
             // Ultimate will end via the generic system
           }
@@ -1273,9 +1484,14 @@ CALLISTO: {
 
     endUltimate: function(fighter) {
       // Reset ultimate states
-      fighter.currentSprite = 'idle';
+      fighter.currentSprite = 'cidle';
       fighter.ultimateCameraZoom = 1;
       fighter.ultimateBackgroundDim = 0;
+
+      // Clear ultimate effects
+      fighter.ultimateRedLines = [];
+      fighter.ultimateSkulls = [];
+      fighter.ultimateDamageInstances = 0;
 
       // Remove protection from all enemies
       if (fighter.allEnemies && Array.isArray(fighter.allEnemies)) {
@@ -1288,6 +1504,11 @@ CALLISTO: {
               enemy.ultimateStaggerLocked = false;
               enemy.staggerDecayRate = enemy.originalStaggerDecay || 1;
             }
+            // Restore original positions
+            if (enemy.ultimateOriginalPos) {
+              enemy.pos.x = enemy.ultimateOriginalPos.x;
+              enemy.pos.y = enemy.ultimateOriginalPos.y;
+            }
           }
         });
       }
@@ -1297,7 +1518,7 @@ CALLISTO: {
         fighter.collisionEnabled = fighter.originalCollisionEnabled;
       }
 
-      console.log(`[CORPUS ULTIMATE] ${fighter.name}'s ultimate ended`);
+      console.log(`[CLOSING TIME] ${fighter.name}'s ultimate ended`);
     },
 
     // Helper methods for ultimate
@@ -1359,7 +1580,7 @@ CALLISTO: {
       fighter.ultimateTotalDamage += damage;
       fighter.ultimateDamageDealt += damage;
 
-      console.log(`[CORPUS ULTIMATE] Damage applied: ${damage}, total: ${fighter.ultimateTotalDamage}`);
+      console.log(`[CLOSING TIME] Damage applied: ${damage}, total: ${fighter.ultimateTotalDamage}`);
     }
   },
 
@@ -1669,7 +1890,7 @@ CALLISTO: {
       
       fighter.ultimateActive = true;
       fighter.ultimatePhase = 0;
-      fighter.ultimateTimer = 1; // 1 second initial pose
+      fighter.ultimateTimer = 3; // 3 seconds for centered pose (dist1)
       fighter.ultimateTotalDamage = 0;
       fighter.ultimateDamageDealt = 0;
       fighter.ultimateCameraZoom = 2.5;
@@ -1678,6 +1899,10 @@ CALLISTO: {
       // Set ultimate name and dialogue
       fighter.ultimateName = "DISPOSAL";
       fighter.ultimateDialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all! Yeah, I hate you all! The damn Famiglia, you, and Ticket, too!";
+      
+      // [On use] gain 3 poise count and 5 poise potency
+      fighter.poiseCount += 3;
+      fighter.poisePotency += 5;
       
       // Set all enemies as protected during ultimate
       targetEnemies.forEach(enemy => {
@@ -1690,10 +1915,6 @@ CALLISTO: {
           enemy.staggerDecayRate = 0; // Prevent stagger decay
         }
       });
-      
-      // Store Valencina's original combo delay and stop it during ultimate
-      fighter.originalComboDelay = fighter.comboDelay || 0;
-      fighter.comboDelay = 0; // Stop combo delay
       
       // Turn off collision between all players during ultimate
       fighter.originalCollisionEnabled = fighter.collisionEnabled !== false;
@@ -1709,7 +1930,7 @@ CALLISTO: {
       // Teleport to center of arena with boundary clamping
       const centerPos = this.clampToArena(width / 2, height - 100);
       fighter.pos.x = centerPos.x;
-      fighter.pos.y = centerPos.y; // Ground level, not midair
+      fighter.pos.y = centerPos.y;
       
       // Halt all momentum/velocity on teleport for all fighters
       fighter.vel.x = 0;
@@ -1721,38 +1942,17 @@ CALLISTO: {
         }
       });
       
-      // Set initial pose
+      // Set initial pose (dist1 for 3 seconds)
       fighter.currentSprite = 'dist1';
       
-      // Setup ultimate display
-      fighter.ultimateName = 'DISPOSAL';
-      fighter.ultimateDialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all! Yeah, I hate you all! The damn Famiglia, you, and Ticket, too!";
-      
-      // Setup camera zoom and background dimming
-      fighter.ultimateCameraZoom = 2.5; // Zoom in
-      fighter.ultimateBackgroundDim = 0.7; // Dim background
-      
-      // Store original positions for later
-      fighter.ultimateOriginalPos = fighter.pos.copy();
-      
       // Initialize ultimate state
-      fighter.ultimatePhase = 0;
-      fighter.ultimateTimer = 1.0; // 1 second for initial pose
       fighter.ultimateAttackFrame = 0;
       fighter.ultimateAttackTimer = 0;
-      fighter.ultimateEnemySide = 'right'; // Enemy starts on right
       fighter.ultimateAlternateCounter = 0;
+      fighter.ultimateEnemySide = 'right'; // Enemy starts on right
+      fighter.ultimateFacingLocked = false; // Track if facing is locked to left
       
-      // Play dialogue
-      fighter.currentDialogue = fighter.ultimateDialogue;
-      fighter.dialogueTimer = 10; // Show for 10 seconds
-      
-      // Prevent all enemies from dying until final attack
-      targetEnemies.forEach(enemy => {
-        if (enemy) {
-          enemy.ultimateProtected = true;
-        }
-      });
+      console.log(`[DISPOSAL] ${fighter.name} activated DISPOSAL! Gained 3 poise count and 5 poise potency.`);
     },
     
     updateUltimate: function(fighter, enemies, dt) {

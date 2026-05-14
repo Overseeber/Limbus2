@@ -716,18 +716,13 @@ class Fighter {
     // Attack 3: cs3f1 > cs3f2 with cs3s1 (deal an instance of damage) hold for 0.5 seconds, switch to cs3f3 with cs3s2 (deal +5% more damage for every negative effect on enemy (max 25%)) switch to cs3s4
     else if (this.attackSequence === 3) {
       const sequence = ['cs3f1', 'cs3f2', 'cs3f3', 'cs3f4'];
-      const damageFrames = [false, true, false, false]; // cs3f2 deals damage
-      const holdTimes = [0.2, 0.2, 0.2, 0.5]; 
+      const damageFrames = [false, true, true, false]; // cs3f2 and cs3f3 deal damage
+      const holdTimes = [0.2, 0.5, 0.2, 0.5]; 
       
       if (this.attackFrame < sequence.length) {
         this.currentSprite = sequence[this.attackFrame];
         
-        // Use custom frame duration for cs3f3
-        if (this.attackFrame === 2) {
-          this.attackFrameDuration = 0.5;
-        } else {
-          this.attackFrameDuration = 0.2;
-        }
+   
         
         // Spawn slash effects on specific frames (only once per frame)
         if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
@@ -1357,7 +1352,7 @@ class Fighter {
             this.setState('idle');
             this.strikeActive = false;
             this.attackSequence = 0;
-          } else if (this.attackSequence === 3 && this.attackFrame >= 3) { // Attack 3: 3 frames
+          } else if (this.attackSequence === 3 && this.attackFrame >= 4) { // Attack 3: 4 frames
             this.setState('idle');
             this.strikeActive = false;
             this.attackSequence = 0;

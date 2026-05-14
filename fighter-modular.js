@@ -943,7 +943,7 @@ class Fighter {
         }
         const alpha = constrain(redLine.opacity * 255, 0, 255);
         stroke(255, 0, 0, alpha);
-        line(redLine.x, redLine.topY, redLine.x, redLine.bottomY);
+        line(redLine.topX, redLine.topY, redLine.bottomX, redLine.bottomY);
       });
       pop();
     }
@@ -1695,7 +1695,7 @@ class Fighter {
       if (this.isSlamAttacking) {
         // Override gravity for slam attack - maintain high speed descent
         this.vel.y = 30;
-      } else {
+      } else if (!this.ultimateGravityDisabled) {
         this.vel.y += GRAVITY;
       }
     }

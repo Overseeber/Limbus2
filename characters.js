@@ -155,7 +155,7 @@ const SPRITES = {
   cus1:{
     atlas:"cslash2",
     x:0, y:0, w:4, h:4,
-    offsetY:-256
+    offsetY:+256
   },
 
   cus2:{ atlas:"cslash2", x:4, y:0, w:4, h:5 },
@@ -665,13 +665,13 @@ const CHARACTERS = {
       }
     },
 
-    dealUltimateDamage: function(fighter, enemy, damage, isFinalAttack = false, attackPhase = 1) {
+    dealUltimateDamage: function(fighter, enemy, damage, isFinalAttack = false, attackPhase = 1, applyKnockback = true) {
       // Store original values before modification
       const previousProtected = enemy.ultimateProtected;
       const previousCooldown = enemy.hitCooldown;
 
       // Calculate knockback amount (increased for ultimate)
-      const knockbackAmount = isFinalAttack ? 150 : 100;
+      const knockbackAmount = !applyKnockback ? 0 : (isFinalAttack ? 150 : 100);
 
       // Apply damage with custom knockback
       enemy.receiveHit(damage, fighter, knockbackAmount);
@@ -1099,7 +1099,7 @@ CALLISTO: {
 
       fighter.ultimateActive = true;
       fighter.ultimatePhase = 0;
-      fighter.ultimateTimer = 3; // 3 seconds for centered pose (cpose)
+      fighter.ultimateTimer = 1.5; // 1.5 seconds for centered pose (cpose)
       fighter.ultimateTotalDamage = 0;
       fighter.ultimateDamageDealt = 0;
       fighter.ultimateCameraZoom = 2.5;
@@ -1113,6 +1113,7 @@ CALLISTO: {
       fighter.ultimateRedLines = []; // Array to store red line effects
       fighter.ultimateSkulls = []; // Array to store skull instances
       fighter.ultimateDamageInstances = 0; // Counter for attack 5 damage instances
+      fighter.ultimateGravityDisabled = false;
 
       // Set all enemies as protected during ultimate
       targetEnemies.forEach(enemy => {
@@ -1185,7 +1186,7 @@ CALLISTO: {
       }
 
       switch (fighter.ultimatePhase) {
-        case 0: // Centered pose (cpose) - 3 seconds
+        case 0: // Centered pose (cpose) - 1.5 seconds
           if (fighter.ultimateTimer <= 0) {
             fighter.ultimatePhase = 1;
             fighter.ultimateTimer = 0.3; // Timing before attack 1
@@ -1194,10 +1195,10 @@ CALLISTO: {
 
         case 1: // Attack 1 setup
           if (fighter.ultimateTimer <= 0) {
-            // Teleport opponent to 300 pixels to the right of Callisto
+            // Teleport opponent to 100 pixels to the right of Callisto
             targetEnemies.forEach(enemy => {
               if (enemy) {
-                const enemyPos = this.clampToArena(fighter.pos.x + 300, fighter.pos.y);
+                const enemyPos = this.clampToArena(fighter.pos.x + 100, fighter.pos.y);
                 enemy.pos.x = enemyPos.x;
                 enemy.pos.y = enemyPos.y;
                 enemy.vel.x = 0;
@@ -1205,6 +1206,7 @@ CALLISTO: {
               }
             });
 
+            fighter.ultimateCameraZoom = 1.8; // Zoom out before attack 1
             fighter.ultimatePhase = 2;
             fighter.ultimateAttackFrame = 0;
             fighter.ultimateAttackTimer = 0.3;
@@ -1220,10 +1222,11 @@ CALLISTO: {
 
             switch (fighter.ultimateAttackFrame) {
               case 1:
-                // Deal damage with cus1
+                // Deal damage with cus1 without knockback
                 targetEnemies.forEach(enemy => {
                   if (enemy) {
-                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 1);
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 1, false);
+                     fighter.ultimateCameraZoom = 1.5; 
                   }
                 });
                 fighter.spawnSlashEffect('cus1', { x: 0, y: -10 });
@@ -1240,16 +1243,18 @@ CALLISTO: {
 
         case 3: // Attack 2 setup
           if (fighter.ultimateTimer <= 0) {
+            fighter.ultimateCameraZoom = 1.3; // Zoom out before attack 2
             fighter.currentSprite = 'cuf2';
             
-            // Draw opponent at callisto's position (x-288, y-430)
+            // Draw opponent at callisto's position (x+88, y-180)
             targetEnemies.forEach(enemy => {
               if (enemy) {
-                const enemyPos = this.clampToArena(fighter.pos.x - 288, fighter.pos.y - 430);
+                const enemyPos = this.clampToArena(fighter.pos.x + 88, fighter.pos.y - 180);
                 enemy.pos.x = enemyPos.x;
                 enemy.pos.y = enemyPos.y;
                 enemy.vel.x = 0;
                 enemy.vel.y = 0;
+                enemy.ultimateGravityDisabled = true; // Prevent enemy from moving after teleport
               }
             });
 
@@ -1268,13 +1273,15 @@ CALLISTO: {
             switch (fighter.ultimateAttackFrame) {
               case 1:
                 fighter.currentSprite = 'cuf3';
-                // Deal damage with cus2
+                fighter.spawnSlashEffect('cus2', { x: 0, y: -10 });
+                fighter.ultimateCameraZoom = 1.2;
+                // Deal damage with cus2 without knockback
                 targetEnemies.forEach(enemy => {
                   if (enemy) {
-                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 2);
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 2, false);
                   }
                 });
-                fighter.spawnSlashEffect('cus2', { x: 0, y: -10 });
+                
                 fighter.ultimateAttackTimer = 0.3;
                 break;
               case 2:
@@ -1286,59 +1293,57 @@ CALLISTO: {
           }
           break;
 
-        case 5: // Attack 3 setup
+        case 5: // Attack 3 setup + execution
           if (fighter.ultimateTimer <= 0) {
-            // Teleport enemy to the ground 600 pixels in front of Callisto
+            // Teleport enemy to the ground 200 pixels in front of Callisto
             targetEnemies.forEach(enemy => {
               if (enemy) {
-                const enemyPos = this.clampToArena(fighter.pos.x + (fighter.facing * 600), height - 100);
+                const enemyPos = this.clampToArena(fighter.pos.x + (fighter.facing * 200), height - 100);
                 enemy.pos.x = enemyPos.x;
                 enemy.pos.y = enemyPos.y;
                 enemy.vel.x = 0;
                 enemy.vel.y = 0;
+                enemy.ultimateGravityDisabled = false; // Prevent enemy from moving after teleport
               }
             });
 
-            fighter.currentSprite = 'cuf3';
+            fighter.ultimateCameraZoom = 1.8; // Zoom out before attack 3
+            fighter.currentSprite = 'cuf4';
+
+            // Execute attack at the same time as teleport
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 3);
+              }
+            });
+            fighter.spawnSlashEffect('cus3', { x: 0, y: -10 });
+
             fighter.ultimatePhase = 6;
-            fighter.ultimateAttackFrame = 0;
+            fighter.ultimateAttackFrame = 1;
             fighter.ultimateAttackTimer = 0.3;
           }
           break;
 
-        case 6: // Attack 3 sequence
+        case 6: // Attack 3 cooldown
           fighter.ultimateAttackTimer -= dt;
 
           if (fighter.ultimateAttackTimer <= 0) {
-            fighter.ultimateAttackFrame++;
-
-            switch (fighter.ultimateAttackFrame) {
-              case 1:
-                // Deal damage with cus3
-                targetEnemies.forEach(enemy => {
-                  if (enemy) {
-                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 3);
-                  }
-                });
-                fighter.spawnSlashEffect('cus3', { x: 0, y: -10 });
-                fighter.ultimateAttackTimer = 0.3;
-                break;
-              case 2:
-                // End attack sequence
-                fighter.ultimatePhase = 7;
-                fighter.ultimateTimer = 1; // 1 second before next attack
-                break;
-            }
+            fighter.ultimatePhase = 7;
+            fighter.ultimateTimer = 1; // 1 second before next attack
           }
           break;
 
-        case 7: // Attack 4 setup - jump upward
+        case 7: // Attack 4 setup - teleport upward and drift toward opponent
           if (fighter.ultimateTimer <= 0) {
-            // Jump upward and a bit towards the opponent
-            fighter.vel.y = -15;
-            fighter.vel.x = fighter.facing * 5;
-            fighter.currentSprite = 'cuf4';
-            
+            // Teleport Callisto upward by 500 pixels and begin drifting toward the opponent
+            const newY = this.clampToArena(fighter.pos.x, fighter.pos.y - 400).y;
+            fighter.pos.y = newY;
+            fighter.vel.x = fighter.facing * 2;
+            fighter.vel.y = 0;
+            fighter.currentSprite = 'cuf5';
+            fighter.ultimateCameraZoom = 1.8; // Zoom outward while moving vertically
+            fighter.ultimateGravityDisabled = true;
+
             fighter.ultimatePhase = 8;
             fighter.ultimateAttackFrame = 0;
             fighter.ultimateAttackTimer = 1; // Hold for 1 second
@@ -1353,6 +1358,7 @@ CALLISTO: {
 
             switch (fighter.ultimateAttackFrame) {
               case 1:
+                fighter.ultimateGravityDisabled = false;
                 // Teleport 300 pixels in front of the enemy
                 targetEnemies.forEach(enemy => {
                   if (enemy) {
@@ -1364,8 +1370,9 @@ CALLISTO: {
                   }
                 });
 
-                fighter.currentSprite = 'cuf5';
+                fighter.currentSprite = 'cuf6';
                 // Deal damage with cus4
+                fighter.ultimateCameraZoom = 1.3;
                 targetEnemies.forEach(enemy => {
                   if (enemy) {
                     this.dealUltimateDamage(fighter, enemy, fighter.baseDamage, false, 4);
@@ -1383,22 +1390,28 @@ CALLISTO: {
           }
           break;
 
-        case 9: // Attack 5 setup - move to right in front
+        case 9: // Attack 5 setup - teleport to center with enemy in front
           if (fighter.ultimateTimer <= 0) {
-            // Move to right in front of the enemy
+            const centerPos = this.clampToArena(width / 2, height - 100);
+            fighter.pos.x = centerPos.x;
+            fighter.pos.y = centerPos.y;
+            fighter.vel.x = 0;
+            fighter.vel.y = 0;
+
             targetEnemies.forEach(enemy => {
               if (enemy) {
-                const movePos = this.clampToArena(enemy.pos.x + 100, enemy.pos.y);
-                fighter.pos.x = movePos.x;
-                fighter.pos.y = movePos.y;
-                fighter.vel.x = 0;
-                fighter.vel.y = 0;
+                const enemyFrontX = this.clampToArena(fighter.pos.x + 120, fighter.pos.y).x;
+                enemy.pos.x = enemyFrontX;
+                enemy.pos.y = fighter.pos.y;
+                enemy.vel.x = 0;
+                enemy.vel.y = 0;
+                enemy.ultimateGravityDisabled = true; // Prevent enemy from moving after teleport
               }
             });
 
             fighter.currentSprite = 'cs3f2';
             fighter.spawnSlashEffect('cs3s1', { x: 0, y: -10 });
-            fighter.ultimateCameraZoom = 4.0; // Zoom in to Callisto
+            fighter.ultimateCameraZoom = 3.0; // Zoom in to Callisto
             fighter.ultimateDamageInstances = 0; // Reset damage counter
             
             fighter.ultimatePhase = 10;
@@ -1418,17 +1431,18 @@ CALLISTO: {
             if (fighter.ultimateDamageInstances <= 20) {
               targetEnemies.forEach(enemy => {
                 if (enemy) {
-                  this.dealUltimateDamage(fighter, enemy, fighter.baseDamage / 20, false, 5);
+                  this.dealUltimateDamage(fighter, enemy, fighter.baseDamage / 20, false, 5, false);
                 }
               });
 
               // Spawn red line effect
-              const lineX = random(100, width - 100);
-              const lineTopDeviation = random(-100, 100);
+              const bottomX = random(100, width - 100);
+              const topX = constrain(bottomX + random(-100, 100), 100, width - 100);
               const lineEffect = {
                 type: 'redLine',
-                x: lineX,
-                topY: 0 + lineTopDeviation,
+                topX,
+                bottomX,
+                topY: 0,
                 bottomY: height,
                 opacity: 0,
                 maxOpacity: 1,
@@ -1446,9 +1460,9 @@ CALLISTO: {
               for (let i = 0; i < 21; i++) {
                 const skullTypes = ['cbsk1', 'cbsk2', 'cbsk3'];
                 const randomSkull = skullTypes[Math.floor(random(0, skullTypes.length))];
-                const randomScale = random(1, 6);
-                const randomX = random(100, width - 100);
-                const randomY = random(100, height - 100);
+                const randomScale = random(1, 2);
+                const randomX = constrain(fighter.pos.x + random(-500, 500), 100, width - 100);
+                const randomY = height + random(100, 500);
                 const randomRotation = random(-PI/3, PI/3); // +- 60 degrees
 
                 const skullEffect = {
@@ -1488,6 +1502,7 @@ CALLISTO: {
       fighter.currentSprite = 'cidle';
       fighter.ultimateCameraZoom = 1;
       fighter.ultimateBackgroundDim = 0;
+      fighter.ultimateGravityDisabled = false;
 
       // Clear ultimate effects
       fighter.ultimateRedLines = [];
@@ -1510,6 +1525,8 @@ CALLISTO: {
               enemy.pos.x = enemy.ultimateOriginalPos.x;
               enemy.pos.y = enemy.ultimateOriginalPos.y;
             }
+            // Reset gravity disable
+            enemy.ultimateGravityDisabled = false;
           }
         });
       }
@@ -1542,13 +1559,13 @@ CALLISTO: {
       }
     },
 
-    dealUltimateDamage: function(fighter, enemy, damage, isFinalAttack = false, attackPhase = 1) {
+    dealUltimateDamage: function(fighter, enemy, damage, isFinalAttack = false, attackPhase = 1, applyKnockback = true) {
       // Store original values before modification
       const previousProtected = enemy.ultimateProtected;
       const previousCooldown = enemy.hitCooldown;
 
       // Calculate knockback amount (increased for ultimate)
-      const knockbackAmount = isFinalAttack ? 150 : 100;
+      const knockbackAmount = !applyKnockback ? 0 : (isFinalAttack ? 150 : 100);
 
       // Apply damage with custom knockback
       enemy.receiveHit(damage, fighter, knockbackAmount);
@@ -2475,14 +2492,14 @@ CALLISTO: {
       return damage;
     },
     
-    dealUltimateDamage: function(fighter, enemy, damage, isFinalAttack = false, attackPhase = 1) {
+    dealUltimateDamage: function(fighter, enemy, damage, isFinalAttack = false, attackPhase = 1, applyKnockback = true) {
       // Store original values before modification
       const previousProtected = enemy.ultimateProtected;
       const previousCooldown = enemy.hitCooldown;
       const originalStagger = enemy.stagger;
       
       // Calculate knockback amount (increased for ultimate)
-      const knockbackAmount = isFinalAttack ? 150 : 100;
+      const knockbackAmount = !applyKnockback ? 0 : (isFinalAttack ? 150 : 100);
       
       // Apply damage with custom knockback
       enemy.receiveHit(damage, fighter, knockbackAmount);

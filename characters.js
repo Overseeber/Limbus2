@@ -1388,7 +1388,7 @@ CALLISTO: {
             // Move to right in front of the enemy
             targetEnemies.forEach(enemy => {
               if (enemy) {
-                const movePos = this.clampToArena(enemy.pos.x + (enemy.facing * 100), enemy.pos.y);
+                const movePos = this.clampToArena(enemy.pos.x + 100, enemy.pos.y);
                 fighter.pos.x = movePos.x;
                 fighter.pos.y = movePos.y;
                 fighter.vel.x = 0;
@@ -1397,6 +1397,7 @@ CALLISTO: {
             });
 
             fighter.currentSprite = 'cs3f2';
+            fighter.spawnSlashEffect('cs3s1', { x: 0, y: -10 });
             fighter.ultimateCameraZoom = 4.0; // Zoom in to Callisto
             fighter.ultimateDamageInstances = 0; // Reset damage counter
             

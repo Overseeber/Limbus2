@@ -924,6 +924,44 @@ class Fighter {
         }
       }
     }
+
+    // Draw ultimate-specific effects (red lines and skulls)
+    if (this.ultimateActive && this.characterKey === 'CALLISTO') {
+      this.drawUltimateEffects(dt);
+    }
+  }
+
+  drawUltimateEffects(dt) {
+    // Draw red lines from Attack 5
+    if (this.ultimateRedLines && this.ultimateRedLines.length > 0) {
+      push();
+      stroke(255, 0, 0);
+      strokeWeight(3);
+      this.ultimateRedLines.forEach(redLine => {
+        if (redLine.opacity < redLine.maxOpacity) {
+          redLine.opacity += redLine.fadeSpeed * dt;
+        }
+        const alpha = constrain(redLine.opacity * 255, 0, 255);
+        stroke(255, 0, 0, alpha);
+        line(redLine.x, redLine.topY, redLine.x, redLine.bottomY);
+      });
+      pop();
+    }
+
+    // Draw skull instances from Attack 5
+    if (this.ultimateSkulls && this.ultimateSkulls.length > 0) {
+      this.ultimateSkulls.forEach(skull => {
+        if (skull.timer > 0) {
+          skull.timer -= dt;
+          push();
+          translate(skull.x, skull.y);
+          rotate(skull.rotation);
+          scale(skull.scale);
+          drawSprite(skull.type, 0, 0);
+          pop();
+        }
+      });
+    }
   }
 
   handleInput() {

@@ -674,6 +674,7 @@ const CHARACTERS = {
       const knockbackAmount = !applyKnockback ? 0 : (isFinalAttack ? 150 : 100);
 
       // Apply damage with custom knockback
+      enemy.ultimateProtected = false;
       enemy.receiveHit(damage, fighter, knockbackAmount);
 
       // Restore ultimate protection and cooldown after damage is applied
@@ -747,6 +748,15 @@ CALLISTO: {
       );
       
       console.log(`🎨 Callisto gained 5 Corpus Ingredient! Total: ${fighter.corpusIngredient}/${fighter.maxCorpusIngredient}`);
+    },
+
+    applyArtworkBleedBonus: function(opponent, fighter) {
+      if (!opponent || fighter.artworkTibiaStacks <= 0) return;
+      const bleedStatus = opponent.statuses.find((s) => s.type === 'Bleed');
+      if (!bleedStatus) return;
+      const bonusPotency = fighter.artworkTibiaStacks;
+      bleedStatus.potency += bonusPotency;
+      console.log(`🎨 Callisto's Artwork: Tibia added +${bonusPotency} bleed potency to ${opponent.name}`);
     },
     
     onReceiveHit: function(amount, attacker, fighter) {
@@ -858,6 +868,11 @@ CALLISTO: {
       fighter.corpusIngredient -= corpusToSpend;
       fighter.corpusSpentTotal += corpusToSpend;
       
+      // Consume bleed stacks when using this ability
+      if (fighter.statusSystem && typeof fighter.statusSystem.consumeOnAbility === 'function') {
+        fighter.statusSystem.consumeOnAbility();
+      }
+      
       // Gain 1 Artwork: Tibia for every 10 spent Corpus Ingredient
       const newArtworkStacks = Math.floor(fighter.corpusSpentTotal / 10);
       if (newArtworkStacks > fighter.artworkTibiaStacks) {
@@ -913,6 +928,11 @@ CALLISTO: {
       fighter.installationArtActive = true;
       fighter.installationArtTimer = 0.5;
       fighter.installationArtExecuted = false;
+      
+      // Consume bleed stacks when using this ability
+      if (fighter.statusSystem && typeof fighter.statusSystem.consumeOnAbility === 'function') {
+        fighter.statusSystem.consumeOnAbility();
+      }
       
       // Use cguard sprite for windup
       fighter.currentSprite = 'cguard';
@@ -1536,6 +1556,12 @@ CALLISTO: {
         fighter.collisionEnabled = fighter.originalCollisionEnabled;
       }
 
+      // Consume all stored resource stacks at ultimate end
+      fighter.corpusIngredient = 0;
+      fighter.artworkTibiaStacks = 0;
+      fighter.corpusSpentTotal = 0;
+      console.log(`🎨 Callisto consumed all Corpus Ingredient and Artwork: Tibia at ultimate end`);
+
       console.log(`[CLOSING TIME] ${fighter.name}'s ultimate ended`);
     },
 
@@ -1568,6 +1594,7 @@ CALLISTO: {
       const knockbackAmount = !applyKnockback ? 0 : (isFinalAttack ? 150 : 100);
 
       // Apply damage with custom knockback
+      enemy.ultimateProtected = false;
       enemy.receiveHit(damage, fighter, knockbackAmount);
 
       // Restore ultimate protection and cooldown after damage is applied
@@ -2502,6 +2529,7 @@ CALLISTO: {
       const knockbackAmount = !applyKnockback ? 0 : (isFinalAttack ? 150 : 100);
       
       // Apply damage with custom knockback
+      enemy.ultimateProtected = false;
       enemy.receiveHit(damage, fighter, knockbackAmount);
       
       // Restore ultimate protection and cooldown after damage is applied

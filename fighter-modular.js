@@ -226,6 +226,7 @@ class Fighter {
       removeStatus: (type) => this.removeStatus(type),
       consumeOnHit: () => this.consumeStatusOnHit(),
       consumeOnAttack: () => this.consumeStatusOnAttack(),
+      consumeOnAbility: () => this.consumeStatusOnAbility(),
       applyStatuses: (dt) => this.applyStatuses(dt)
     };
     
@@ -2479,6 +2480,23 @@ addCombo(attacker) {
   }
 
   consumeStatusOnHit() {
+    // Handle Bleed when hit (lose 1 count, trigger damage if count reaches 0)
+    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
+    if (bleedStatus) {
+      bleedStatus.count -= 1;
+      if (bleedStatus.count <= 0) {
+        const damage = bleedStatus.potency;
+        if (damage > 0) {
+          this.hp -= damage;
+          spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
+          if (this.hp <= 0 && !this.isDefeated) {
+            this.defeat();
+          }
+        }
+        this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
+      }
+    }
+    
     // Handle Rupture and Sinking when hit
     ['Rupture', 'Sinking'].forEach((type) => {
       const status = this.statuses.find((s) => s.type === type);
@@ -2495,9 +2513,38 @@ addCombo(attacker) {
   }
 
   consumeStatusOnAttack() {
-    // Handle Bleed when attacking
+    // Handle Bleed when attacking - deal damage by potency, then lose 1 count
     const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
-    if (bleedStatus) {
+    if (bleedStatus && bleedStatus.potency > 0) {
+      // Deal damage by current potency
+      const damage = bleedStatus.potency;
+      this.hp -= damage;
+      spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
+      if (this.hp <= 0 && !this.isDefeated) {
+        this.defeat();
+      }
+      
+      // Then lose 1 count
+      bleedStatus.count -= 1;
+      if (bleedStatus.count <= 0) {
+        this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
+      }
+    }
+  }
+
+  consumeStatusOnAbility() {
+    // Handle Bleed when using an ability - deal damage by potency, then lose 1 count
+    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
+    if (bleedStatus && bleedStatus.potency > 0) {
+      // Deal damage by current potency
+      const damage = bleedStatus.potency;
+      this.hp -= damage;
+      spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
+      if (this.hp <= 0 && !this.isDefeated) {
+        this.defeat();
+      }
+      
+      // Then lose 1 count
       bleedStatus.count -= 1;
       if (bleedStatus.count <= 0) {
         this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
@@ -2543,6 +2590,9 @@ addCombo(attacker) {
         if (status.timer >= 1) {
           status.timer = 0;
           status.potency = max(0, status.potency - 1);
+          if (status.potency <= 0) {
+            status.count = 0;
+          }
         }
       }
       

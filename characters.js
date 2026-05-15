@@ -673,9 +673,9 @@ const CHARACTERS = {
       // Calculate knockback amount (increased for ultimate)
       const knockbackAmount = !applyKnockback ? 0 : (isFinalAttack ? 150 : 100);
 
-      // Apply damage with custom knockback
+      // Request authoritative damage with custom knockback
       enemy.ultimateProtected = false;
-      enemy.receiveHit(damage, fighter, knockbackAmount);
+      fighter.requestDamageTo(enemy, damage, knockbackAmount, { ultimate: true, phase: attackPhase });
 
       // Restore ultimate protection and cooldown after damage is applied
       enemy.ultimateProtected = previousProtected;
@@ -1050,16 +1050,11 @@ CALLISTO: {
         // Calculate and deal damage
         const damage = fighter.baseDamage;
         const finalDamage = fighter.calculateDamage(damage, target);
-        target.receiveHit(finalDamage, fighter, 0);
-        
-        // Apply 8 bleed
-        target.addStatus('Bleed', 8, 8);
-        
-        // Apply sinking potency by damage dealt and 1 sinking count
-        target.addStatus('Sinking', 1, finalDamage);
-        
-        // Deal 500% of damage dealt to stagger damage
-        target.stagger += finalDamage * 5;
+        // Request authoritative hit and status applications via network/local simulator
+        fighter.requestDamageTo(target, finalDamage, 0);
+        fighter.requestApplyStatus(target, { type: 'Bleed', count: 8, potency: 8 });
+        fighter.requestApplyStatus(target, { type: 'Sinking', count: 1, potency: finalDamage });
+        fighter.requestApplyStatus(target, { type: 'Stagger', potency: finalDamage * 5, duration: 1 });
         
         // Spawn random cbsk slash effect at target location
         const cbskEffects = ['cbsk1', 'cbsk2', 'cbsk3'];
@@ -1593,9 +1588,9 @@ CALLISTO: {
       // Calculate knockback amount (increased for ultimate)
       const knockbackAmount = !applyKnockback ? 0 : (isFinalAttack ? 150 : 100);
 
-      // Apply damage with custom knockback
+      // Request authoritative ultimate damage
       enemy.ultimateProtected = false;
-      enemy.receiveHit(damage, fighter, knockbackAmount);
+      fighter.requestDamageTo(enemy, damage, knockbackAmount, { ultimate: true, phase: attackPhase });
 
       // Restore ultimate protection and cooldown after damage is applied
       enemy.ultimateProtected = previousProtected;
@@ -2560,9 +2555,9 @@ CALLISTO: {
       // Calculate knockback amount (increased for ultimate)
       const knockbackAmount = !applyKnockback ? 0 : (isFinalAttack ? 150 : 100);
       
-      // Apply damage with custom knockback
+      // Request authoritative ultimate damage
       enemy.ultimateProtected = false;
-      enemy.receiveHit(damage, fighter, knockbackAmount);
+      fighter.requestDamageTo(enemy, damage, knockbackAmount, { ultimate: true, phase: attackPhase });
       
       // Restore ultimate protection and cooldown after damage is applied
       enemy.ultimateProtected = previousProtected;

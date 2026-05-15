@@ -274,6 +274,11 @@ function keyPressed() {
   if (battleState === 'battle') {
     const controlledFighter = getPlayerControlledFighter();
     if (controlledFighter) {
+      // Send input intent to server/local simulator
+      if (typeof Network !== 'undefined' && Network.sendInput) {
+        Network.sendInput({ type: 'keyPressed', key, playerId: controlledFighter.playerId });
+      }
+      // Local fallback for single-player responsiveness
       controlledFighter.processKeyPressed(key);
       if (key === ' ' || keyCode === 32) {
         controlledFighter.startDash();
@@ -286,6 +291,9 @@ function keyReleased() {
   if (battleState === 'battle') {
     const controlledFighter = getPlayerControlledFighter();
     if (controlledFighter) {
+      if (typeof Network !== 'undefined' && Network.sendInput) {
+        Network.sendInput({ type: 'keyReleased', key, playerId: controlledFighter.playerId });
+      }
       controlledFighter.processKeyReleased(key);
     }
   }
@@ -388,9 +396,15 @@ function mousePressed() {
 
   const controlledFighter = getPlayerControlledFighter();
   if (mouseButton === LEFT) {
+    if (typeof Network !== 'undefined' && Network.sendInput) {
+      Network.sendInput({ type: 'mouse', action: 'attackPress', playerId: controlledFighter.playerId });
+    }
     controlledFighter.requestAttack();
     lastMouseDown = millis();
   } else if (mouseButton === RIGHT) {
+    if (typeof Network !== 'undefined' && Network.sendInput) {
+      Network.sendInput({ type: 'mouse', action: 'guardPress', playerId: controlledFighter.playerId });
+    }
     controlledFighter.requestGuard(enemy);
   }
 }
@@ -448,9 +462,15 @@ function mouseReleased() {
   const controlledFighter = getPlayerControlledFighter();
   if (mouseButton === LEFT) {
     const held = millis() - (lastMouseDown || 0);
+    if (typeof Network !== 'undefined' && Network.sendInput) {
+      Network.sendInput({ type: 'mouse', action: 'attackRelease', held, playerId: controlledFighter.playerId });
+    }
     controlledFighter.releaseAttack(held > 300);
     lastMouseDown = null;
   } else if (mouseButton === RIGHT) {
+    if (typeof Network !== 'undefined' && Network.sendInput) {
+      Network.sendInput({ type: 'mouse', action: 'guardRelease', playerId: controlledFighter.playerId });
+    }
     controlledFighter.releaseGuard();
   }
 }

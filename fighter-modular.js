@@ -89,6 +89,65 @@ class Fighter {
     this.reset();                        // Initialize all combat systems
   }
 
+  // Networking / event helpers (client-side only)
+  requestDamageTo(target, amount, knockback = 0, meta = {}) {
+    const ev = {
+      type: 'REQUEST_HIT',
+      attackerId: this.playerId || this.characterKey,
+      targetId: target.playerId || target.characterKey,
+      damage: amount,
+      knockback: knockback,
+      meta
+    };
+    if (typeof Network !== 'undefined' && Network.sendEvent) {
+      Network.sendEvent(ev);
+    } else if (window.LocalSimulator) {
+      window.LocalSimulator.enqueue(ev);
+    }
+  }
+
+  requestSelfDamage(amount, meta = {}) {
+    const ev = {
+      type: 'REQUEST_HIT',
+      attackerId: this.playerId || this.characterKey,
+      targetId: this.playerId || this.characterKey,
+      damage: amount,
+      knockback: 0,
+      meta
+    };
+    if (typeof Network !== 'undefined' && Network.sendEvent) {
+      Network.sendEvent(ev);
+    } else if (window.LocalSimulator) {
+      window.LocalSimulator.enqueue(ev);
+    }
+  }
+
+  requestApplyStatus(target, status) {
+    const ev = {
+      type: 'STATUS_APPLY',
+      targetId: target.playerId || target.characterKey,
+      status
+    };
+    if (typeof Network !== 'undefined' && Network.sendEvent) {
+      Network.sendEvent(ev);
+    } else if (window.LocalSimulator) {
+      window.LocalSimulator.enqueue(ev);
+    }
+  }
+
+  // Called by server or LocalSimulator to apply authoritative damage
+  applyAuthoritativeDamage(amount, attacker, knockback = 0, ev = {}) {
+    // Apply damage and visuals locally when authoritative update arrives
+    this.hp = max(0, (this.hp || 0) - amount);
+    spawnDamageNumber(amount, this.pos.copy(), attacker ? attacker.facing : 1, false, 'normal', false, 'normal');
+    if (typeof addScreenShake === 'function') addScreenShake(amount);
+    this.addSpriteShake && this.addSpriteShake(amount, false);
+    if (this.hp <= 0 && !this.isDefeated) {
+      this.defeat();
+    }
+    this.events.emit('damageDealt', { attacker: attacker ? attacker.characterKey : null, target: this.characterKey, damage: amount, knockback });
+  }
+
   /**
    * RESET METHOD: Initialize or reset all fighter properties to default state
    * Called during construction and when respawning after defeat
@@ -1858,7 +1917,7 @@ class Fighter {
           // Deal damage based on burn + tremor potency / 2
           const burnStatus = this.statuses.find((s) => s.type === 'Burn');
           const damage = (burnStatus?.potency || 0 + tremorStatus.potency) / 2;
-          opponent.hp -= damage;
+          this.requestDamageTo(opponent, damage, 0, { source: 'tremorBurst' });
           spawnDamageNumber(damage, opponent.pos.copy(), this.facing, false, 'tremor', false, 'slam');
           
           // Tremor bursts are impactful - add screen shake
@@ -1992,12 +2051,10 @@ class Fighter {
         // Calculate final damage with 50% bonus stagger damage
         const finalDamage = this.calculateDamage(this.slamLandingHitbox.damage, target);
         const staggerDamage = finalDamage * 0.5; // 50% of damage as stagger
-        
-        target.receiveHit(finalDamage, this, 20);
-        // Only add stagger damage if opponent is not already staggered
-        if (target.state !== 'staggered') {
-          target.stagger += staggerDamage;
-        }
+        // Request authoritative hit on target
+        this.requestDamageTo(target, finalDamage, 20, { type: 'slam' });
+        // Request authoritative stagger application (server-side should decide)
+        this.requestApplyStatus(target, { type: 'Stagger', potency: staggerDamage, duration: 1 });
         spawnDamageNumber(finalDamage, target.pos.copy(), this.facing, false, 'normal', false, 'slam');
         
         hitAnyTarget = true;
@@ -2054,9 +2111,8 @@ class Fighter {
         knockback: this.attackKnockback
       });
       
-      // Apply damage to opponent through their receiveHit method
-      // This handles damage reduction, status effects, defeat conditions, etc.
-      opponent.receiveHit(finalDamage, this, this.attackKnockback);
+      // Request authoritative damage application (client emits intent)
+      this.requestDamageTo(opponent, finalDamage, this.attackKnockback, { attackSequence: this.attackSequence });
       
       // Special character interaction: Valencina's tremor burst on 3rd attack
       // This is character-specific logic that triggers on certain attack counts
@@ -2116,18 +2172,18 @@ class Fighter {
   }
 
   receiveHit(amount, attacker, knockback) {
-    // Don't take damage if already defeated
-    if (this.isDefeated) {
-      return;
-    }
-    
+    // Convert immediate hit resolution into a networked request/event.
+    if (this.isDefeated) return;
+
+    // Local guard/evade handling remains visual, but actual HP reduction is authoritative
     if (this.isGuarding) {
       amount *= 0.45;
-      // Spawn guard sparks at impact point
       spawnGuardSparks(this.pos.x, this.pos.y - 30, 8);
-      
       if (this.isCountering) {
-        attacker.receiveHit(amount * 0.8, this, knockback * 0.8);
+        // Request counter damage on attacker
+        if (attacker && attacker.requestSelfDamage) {
+          attacker.requestSelfDamage(amount * 0.8, { source: 'counter', from: this.playerId || this.characterKey });
+        }
         this.isCountering = false;
       }
     }
@@ -2137,88 +2193,28 @@ class Fighter {
       return;
     }
 
-    // hitCooldown removed to allow consecutive hits
-
-    // Ultimate protection - prevent HP reduction until final attack
     if (this.ultimateProtected) {
-      // Still apply hit effects but don't reduce HP
-      const wasGuarding = this.isGuarding;
       this.setState('hit');
       this.hitCooldown = 0.25;
-      
-      // Apply knockback but reduced
-      const awayFromAttacker = this.pos.x < attacker.pos.x ? -1 : 1;
-      this.vel.x = awayFromAttacker * knockback * 0.5;
+      const awayFromAttacker = attacker ? (this.pos.x < attacker.pos.x ? -1 : 1) : -1;
+      this.vel.x = awayFromAttacker * (knockback || 0) * 0.5;
       this.vel.y = -5;
-      
       return;
     }
 
-    this.hp -= amount;
-    const wasGuarding = this.isGuarding;
-    spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding, 'normal', false, 'normal');
-    
-    // Check for defeat condition
-    if (this.hp <= 0 && !this.isDefeated) {
-      this.hp = 0;
-      this.defeat();
-      return;
-    }
-    
-    // Add screen shake based on damage
-    if (typeof addScreenShake === 'function') {
-      console.log('[NORMAL ATTACK DEBUG] Adding screen shake for damage:', amount);
-      addScreenShake(amount);
-    }
-    
-    // Add sprite shake to character taking damage
-    this.addSpriteShake(amount, false);
-    
-    // Emit damageDealt event
-    this.events.emit('damageDealt', {
-      attacker: attacker.characterKey,
-      target: this.characterKey,
+    // Send a request to authoritative resolver (server or local simulator)
+    const ev = {
+      type: 'REQUEST_HIT',
+      attackerId: attacker ? (attacker.playerId || attacker.characterKey) : null,
+      targetId: this.playerId || this.characterKey,
       damage: amount,
-      knockback: knockback
-    });
-    
-    // Apply hitstun
-    if (this.state !== 'staggered') {
-      this.setState('hit');
-      this.staggerTimer = 0.18;
-      // FACE TOWARDS SPECIFIC ATTACKER: Face the direction damage came from
-      // This ensures the hurt animation faces the correct direction
-      this.faceTowards(attacker);
+      knockback: knockback || 0
+    };
+    if (typeof Network !== 'undefined' && Network.sendEvent) {
+      Network.sendEvent(ev);
+    } else if (window.LocalSimulator) {
+      window.LocalSimulator.enqueue(ev);
     }
-    
-    // Only add stagger if not already staggered (applies to both players and enemies)
-    if (this.state !== 'staggered') {
-      this.stagger += amount * 1.2;
-      this.staggerRecoveryTimer = 0;
-    }
-    
-    const strength = max(1, amount * 0.05);
-    const awayFromAttacker = this.pos.x < attacker.pos.x ? -1 : 1;
-    // Apply knockback with attacker's knockback multiplier (if available)
-    const knockbackMultiplier = attacker.knockbackMultiplier || 1.0;
-    this.vel.x = awayFromAttacker * knockback * strength * knockbackMultiplier;
-    this.vel.y = -5;
-    this.hitCooldown = 0.25;
-
-    if (this.stagger >= this.staggerThreshold) {
-      this.setStaggerState(this.staggerLength);
-    }
-
-    // Consume status effects when hit
-    this.statusSystem.consumeOnHit();
-    
-    // Call character-specific onReceiveHit method
-    const character = CHARACTERS[this.characterKey];
-    if (character && character.onReceiveHit) {
-      character.onReceiveHit(amount, attacker, this);
-    }
-
-    this.addCombo(attacker);
   }
   
   defeat() {
@@ -2489,11 +2485,8 @@ addCombo(attacker) {
       if (bleedStatus.count <= 0) {
         const damage = bleedStatus.potency;
         if (damage > 0) {
-          this.hp -= damage;
+          this.requestSelfDamage(damage, { source: 'Bleed' });
           spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
-          if (this.hp <= 0 && !this.isDefeated) {
-            this.defeat();
-          }
         }
         this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
       }
@@ -2505,10 +2498,8 @@ addCombo(attacker) {
       if (status) {
         status.count -= 1;
         if (type === 'Rupture') {
-          this.hp -= status.potency;
+          this.requestSelfDamage(status.potency, { source: 'Rupture' });
           spawnDamageNumber(status.potency, this.pos.copy(), 1, false, 'rupture', false, 'status');
-          
-          // Status effects don't cause screen shake (only direct combat damage)
         }
       }
     });
@@ -2520,11 +2511,8 @@ addCombo(attacker) {
     if (bleedStatus && bleedStatus.potency > 0) {
       // Deal damage by current potency
       const damage = bleedStatus.potency;
-      this.hp -= damage;
+      this.requestSelfDamage(damage, { source: 'Bleed' });
       spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
-      if (this.hp <= 0 && !this.isDefeated) {
-        this.defeat();
-      }
       
       // Then lose 1 count
       bleedStatus.count -= 1;
@@ -2540,11 +2528,8 @@ addCombo(attacker) {
     if (bleedStatus && bleedStatus.potency > 0) {
       // Deal damage by current potency
       const damage = bleedStatus.potency;
-      this.hp -= damage;
+      this.requestSelfDamage(damage, { source: 'Bleed' });
       spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
-      if (this.hp <= 0 && !this.isDefeated) {
-        this.defeat();
-      }
       
       // Then lose 1 count
       bleedStatus.count -= 1;
@@ -2563,7 +2548,7 @@ addCombo(attacker) {
         if (status.timer >= 1) {
           status.timer = 0;
           status.count -= 1;
-          this.hp -= status.potency;
+          this.requestSelfDamage(status.potency, { source: 'Burn' });
           spawnDamageNumber(status.potency, this.pos.copy(), 1, false, 'burn', false, 'status');
           
           // Status effects don't cause screen shake (only direct combat damage)
@@ -3321,7 +3306,7 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
     const damage = burnPotency + tremorPotency;
     
     if (damage > 0) {
-      this.hp -= damage;
+      this.requestSelfDamage(damage, { source: 'TremorBurst' });
       spawnDamageNumber(damage, this.pos.copy(), 1, false, 'tremor', false, 'status');
       
       // Tremor bursts are impactful - add screen shake

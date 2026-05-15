@@ -530,6 +530,13 @@ class Fighter {
       ultimate: 'dist1' // Use dist1 sprite for ultimate state
     };
 
+    // For Valencina, respect currentSprite during Time to Hunt casting
+    if (this.characterKey === 'VALENCINA' && this.timeToHuntCasting) {
+      // Don't override sprite during Time to Hunt casting - use currentSprite
+      // this.currentSprite is already set by Time to Hunt logic
+      return;
+    }
+
     // Handle special states
     if (this.isSlamAttacking) {
       // Character-specific slam sprites

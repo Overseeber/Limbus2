@@ -924,20 +924,20 @@ CALLISTO: {
         console.log(`🎨 Installation Art on cooldown: ${fighter.installationArtCooldown.toFixed(1)}s`);
         return;
       }
-      
+
       fighter.installationArtActive = true;
-      fighter.installationArtTimer = 0.5;
+      fighter.installationArtTimer = 1.0; // Increased to 1 second for visible pose
       fighter.installationArtExecuted = false;
-      
+
       // Consume bleed stacks when using this ability
       if (fighter.statusSystem && typeof fighter.statusSystem.consumeOnAbility === 'function') {
         fighter.statusSystem.consumeOnAbility();
       }
-      
+
       // Use cguard sprite for windup
       fighter.currentSprite = 'cguard';
       console.log(`[DEBUG] Installation Art - Set sprite to cguard, current: ${fighter.currentSprite}`);
-      
+
       console.log('🎨 Callisto activated Installation Art!');
     },
 
@@ -1712,6 +1712,7 @@ CALLISTO: {
       this.updatePrecognition(fighter, dt);
       this.updateOverheat(fighter, dt);
       this.updateTimeToHuntCooldown(fighter, dt);
+      this.updateTimeToHuntCast(fighter, dt);
     },
     
     processKeyPressed: function(key, fighter) {
@@ -1727,6 +1728,7 @@ CALLISTO: {
         if (fighter.timeToHuntCooldown <= 0) {
           console.log('[DEBUG] Time to Hunt - Activating!');
           this.useTimeToHunt(fighter);
+
         } else {
           console.log(`[DEBUG] Time to Hunt - On cooldown: ${fighter.timeToHuntCooldown.toFixed(1)}s`);
         }
@@ -1768,21 +1770,44 @@ CALLISTO: {
         console.log('[DEBUG] Time to Hunt - No lastHitOpponent found!');
         return;
       }
-      
+
       const target = fighter.lastHitOpponent;
-      
-      // Apply Game Target status to opponent (duration: 10 seconds)
-      target.addStatus('Game Target', 10, 0); // 10 second duration, 0 potency
-      
-      // Store original speed and set to 1
-      target.originalSpeed = target.originalSpeed || target.speed;
-      target.speed = 1;
-      
-      // Store reference for cleanup
-      target.gameTargetCaster = fighter;
-      
-      fighter.timeToHuntCooldown = 15; // 15 second cooldown
-      console.log(`⚡ Time to Hunt activated on ${target.name}! Speed set to 1 for 10 seconds.`);
+
+      // Set casting state and timer
+      fighter.timeToHuntCasting = true;
+      fighter.timeToHuntCastTimer = 1.0; // 1 second casting time
+      fighter.timeToHuntTarget = target;
+
+      // Set sprite to de1 when casting
+      fighter.currentSprite = 'de1';
+      console.log(`⚡ Time to Hunt casting on ${target.name}!`);
+    },
+
+    updateTimeToHuntCast: function(fighter, dt) {
+      if (fighter.timeToHuntCasting) {
+        fighter.timeToHuntCastTimer -= dt;
+
+        if (fighter.timeToHuntCastTimer <= 0) {
+          // Execute Time to Hunt effect
+          const target = fighter.timeToHuntTarget;
+
+          // Apply Game Target status to opponent (duration: 10 seconds)
+          target.addStatus('Game Target', 10, 0); // 10 second duration, 0 potency
+
+          // Store original speed and set to 1
+          target.originalSpeed = target.originalSpeed || target.speed;
+          target.speed = 1;
+
+          // Store reference for cleanup
+          target.gameTargetCaster = fighter;
+
+          fighter.timeToHuntCooldown = 15; // 15 second cooldown
+          fighter.timeToHuntCasting = false;
+          fighter.timeToHuntTarget = null;
+
+          console.log(`⚡ Time to Hunt activated on ${target.name}! Speed set to 1 for 10 seconds.`);
+        }
+      }
     },
    
     
@@ -2604,9 +2629,12 @@ CALLISTO: {
     initializeCharacter: function(fighter) {
       console.log('[DEBUG] Valencina initializeCharacter called for:', fighter.name);
       fighter.weapon = this.weapon;
-      
+
       // Initialize Valencina-specific properties
       fighter.timeToHuntCooldown = 0;
+      fighter.timeToHuntCasting = false;
+      fighter.timeToHuntCastTimer = 0;
+      fighter.timeToHuntTarget = null;
       fighter.gameTimeTarget = false;
       fighter.accelerationRounds = 0;
       fighter.precognition = this.maxPrecognition;
@@ -2625,7 +2653,7 @@ CALLISTO: {
       fighter.disposialPhase = 0;
       fighter.lastEvadeTime = 0;
       fighter.lastHitTime = 0;
-      
+
       console.log('[DEBUG] Valencina initialized - timeToHuntCooldown:', fighter.timeToHuntCooldown);
     }
 };

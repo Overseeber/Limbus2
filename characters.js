@@ -1601,6 +1601,9 @@ CALLISTO: {
       enemy.ultimateProtected = previousProtected;
       enemy.hitCooldown = previousCooldown;
 
+      // Build combo on hit
+      fighter.addCombo(fighter);
+
       // Add doubled ultimate screenshake
       if (typeof addScreenShake === 'function') {
         addScreenShake(damage, true); // isUltimate = true for doubled intensity
@@ -1621,6 +1624,10 @@ CALLISTO: {
       // Stop character from pushing enemy
       fighter.vel.x = 0;
       fighter.vel.y = 0;
+
+      // Stop enemy from drifting
+      enemy.vel.x = 0;
+      enemy.vel.y = 0;
 
       fighter.ultimateTotalDamage += damage;
       fighter.ultimateDamageDealt += damage;

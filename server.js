@@ -6,16 +6,11 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-// Serve static files from /public (preferred) and fallback to project root
+// Serve static files from /public
 const path = require('path');
 const publicDir = path.join(__dirname, 'public');
-if (require('fs').existsSync(publicDir)) {
-  app.use(express.static(publicDir));
-  console.log('Serving static from /public');
-} else {
-  app.use(express.static(__dirname));
-  console.log('Serving static from project root');
-}
+app.use(express.static(publicDir));
+console.log('Serving static from /public');
 
 const PORT = process.env.PORT || 3000;
 

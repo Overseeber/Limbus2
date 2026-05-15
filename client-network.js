@@ -6,7 +6,18 @@ window.Network = {
   eventHandlers: {},
 
   init() {
-    // Try to connect if socket.io is available
+    // Prefer an externally-created socket (index.html) via window._externalSocket
+    if (window._externalSocket) {
+      this.socket = window._externalSocket;
+      this.isConnected = true;
+      this.isLocalAuthority = false;
+      this.socket.on('connect', () => { this.isConnected = true; this.isLocalAuthority = false; console.log('[Network] connected (external)', this.socket.id); });
+      this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
+      this.socket.on('event', (ev) => this._emit('event', ev));
+      return;
+    }
+
+    // Try to connect if socket.io is available and no external socket provided
     if (typeof io !== 'undefined') {
       try {
         this.socket = io();

@@ -11,6 +11,15 @@
     <script src="libraries/p5.min.js"></script>
     <script src="libraries/p5.sound.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
+    <script>
+      // Explicit server connect (replace IP if needed)
+      try {
+        const socket = io.connect('http://10.21.70.111:3000');
+        window._externalSocket = socket;
+      } catch (e) {
+        console.warn('socket.io connect failed', e);
+      }
+    </script>
     <script src="client-network.js"></script>
     <script src="constants.js"></script>
     <script src="camera.js"></script>

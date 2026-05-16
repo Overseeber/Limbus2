@@ -1,144 +1,170 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
+var express = require('express');
+var app = express();
+var server = app.listen(3000);
+app.use(express.static('public'));
 
-const app = express();
-const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: '*' } });
+var socket = require('socket.io');
+var io = socket(server);
 
-// Serve static files from /public
-const path = require('path');
-const publicDir = path.join(__dirname, 'public');
-app.use(express.static(publicDir));
-console.log('Serving static from /public');
+console.log("Server is Running");
 
-const PORT = process.env.PORT || 3000;
+class Client {
+    constructor(id)
+    {
+        this.id = id;
+        this.fighter = null;
+    }
+}
+//get client side match with server side, then resolve any conflicts
+class Fighter {
+    constructor(name)
+    {
+        this.class = name.class;
+        this.hp = name.hp;
+        this.maxHp = name.maxHp;
+        this.speed = name.speed;
+        this.jumpHeight = name.jumpHeight;
+        this.baseDamage = name.baseDamage;
+        this.staggerThreshold = name.staggerThreshold;
+        this.staggerLength = name.staggerLength;
+        this.weapon = name.weapon;
+        this.knockbackMultiplier = name.knockbackMultiplier;
+        this.combo = 0;
+        this.hitbox = { width: 50, height: 50 }; // Example hitbox size
+        this.state= 'idle'; // idle, attacking, moving, staggered
+        this.pos= new Vector2(0,0);
+        this.statuses = [];
+        
+    }
 
-// Simple authoritative world state
-const entities = new Map(); // key = entityId (socket.id or playerId), value = { id, hp, maxHp, statuses: [] }
-const eventQueue = [];
+    takeDamage(amount,source)
+    {
+      this.hp = Math.max(0, this.hp - amount);
+      console.log(`${this.class} took ${amount} damage from ${source.class}. Remaining HP: ${this.hp}`);
 
-function findEntity(id) {
-  if (!id) return null;
-  // try direct id
-  if (entities.has(id)) return entities.get(id);
-  // try numeric playerId match
-  for (const e of entities.values()) {
-    if (e.playerId && String(e.playerId) === String(id)) return e;
-    if (e.characterKey && String(e.characterKey) === String(id)) return e;
+    }
+
+    heal(amount,source)
+    {
+      this.hp += Math.min(this.maxHp, this.hp + amount);
+      console.log(`${this.class} healed ${amount} HP from ${source.class}. Current HP: ${this.hp}`);
+    }
+
+
+    
+
+}
+
+//functions for stuff
+function validMove(fighter, moveRequest) {
+    const { dx, dy, direction } = moveRequest;
+  
+     // Check speed limits
+    if (Math.abs(dx) > fighter.maxSpeed * deltaTime) {
+        return { valid: false, reason: 'SPEED_EXCEEDED' };
+    }
+  
+     // Check boundaries
+    if (fighter.x + dx < 0 || fighter.x + dx > ARENA_WIDTH) {
+        return { valid: false, reason: 'BOUNDARY_EXCEEDED' };
   }
-  return null;
+  
+  return { valid: true, position: { x: fighter.x + dx, y: fighter.y + dy } };
+    }
+
+function detectcollision(fighterA, fighterB) {
+    return !(
+      fighterA.pos.x + fighterA.hitbox.width < fighterB.pos.x ||    
+        fighterA.pos.x > fighterB.pos.x + fighterB.hitbox.width ||
+        fighterA.pos.y + fighterA.hitbox.height < fighterB.pos.y ||
+        fighterA.pos.y > fighterB.pos.y + fighterB.hitbox.height
+    );
+    //do collision stuff here
+  }
+
+  function detecthit(){
+    //check if hitbox of attack overlaps with opponent hitbox, if so, apply damage and knockback
+  }
+
+  function applyKnockback(fighter, knockbackAmount, direction){
+    //move fighter in direction of knockback by knockbackAmount, while checking for collisions and boundaries
+  }
+
+  function applyStatusEffect(fighter, statusType, potency, count){
+    //add status effect to fighter's statuses array, and apply any immediate effects (e.g. damage over time)
+  }
+
+  class Cooldownmanager {
+    constructor() {
+      this.cooldowns = {};
+    }
 }
 
-function enqueueEvent(ev) {
-  eventQueue.push(ev);
-}
-
-io.on('connection', (socket) => {
-  console.log('socket connected', socket.id);
-  // create lightweight entity record for this connection
-  const ent = { id: socket.id, hp: 1000, maxHp: 1000, statuses: [] };
-  entities.set(socket.id, ent);
-
-  socket.emit('welcome', { id: socket.id });
-
-  socket.on('register', (data) => {
-    // optional: clients can register metadata (playerId, characterKey, maxHp)
-    const e = entities.get(socket.id);
-    if (!e) return;
-    if (data.playerId) e.playerId = data.playerId;
-    if (data.characterKey) e.characterKey = data.characterKey;
-    if (data.maxHp) { e.maxHp = data.maxHp; e.hp = data.maxHp; }
-    console.log('registered entity', socket.id, data);
-  });
-
-  socket.on('input', (input) => {
-    // store input for processing (could be used for movement validation)
-    enqueueEvent({ type: 'INPUT', socket: socket.id, data: input, time: Date.now() });
-  });
-
-  socket.on('event', (ev) => {
-    // Expect structured events from client: REQUEST_HIT, STATUS_APPLY, etc.
-    ev._from = socket.id;
-    enqueueEvent(ev);
-  });
-
-  socket.on('disconnect', () => {
-    console.log('socket disconnected', socket.id);
-    entities.delete(socket.id);
-  });
-});
-
-// Authoritative handlers
-function applyDamage(targetId, amount, attackerId, meta = {}) {
-  const target = findEntity(targetId);
-  if (!target) return null;
-  const dmg = Math.max(0, Number(amount) || 0);
-  target.hp = Math.max(0, (target.hp || target.maxHp || 0) - dmg);
-  // emit event to clients for visuals
-  io.emit('event', { type: 'HIT', attackerId, targetId: target.id || target.playerId, damage: dmg, meta });
-  return { targetId: target.id, hp: target.hp };
-}
-
-function applyStatus(targetId, status) {
-  const target = findEntity(targetId);
-  if (!target) return null;
-  target.statuses = target.statuses || [];
-  target.statuses.push(status);
-  io.emit('event', { type: 'STATUS_APPLIED', targetId: target.id || target.playerId, status });
-  return status;
-}
-
-// Simulation loop: fixed tick
-const TICK_RATE = 60; // ticks per second
-setInterval(() => {
-  const tickStart = Date.now();
-  // 1) Process queued events
-  while (eventQueue.length > 0) {
-    const ev = eventQueue.shift();
-    if (!ev || !ev.type) continue;
-    switch (ev.type) {
-      case 'REQUEST_HIT':
-      case 'HIT': {
-        // ev: { attackerId, targetId, damage }
-        const attackerId = ev.attackerId || ev.attacker || ev._from;
-        const targetId = ev.targetId || ev.target;
-        applyDamage(targetId, ev.damage || 0, attackerId, ev.meta || {});
-        break;
-      }
-      case 'STATUS_APPLY':
-      case 'APPLY_STATUS': {
-        const targetId = ev.targetId || ev.target;
-        applyStatus(targetId, ev.status || ev.data || {});
-        break;
-      }
-      case 'INPUT': {
-        // if needed, could validate input here
-        // optional broadcast for debugging
-        // io.emit('inputDebug', ev);
-        break;
-      }
-      default:
-        console.log('Unhandled event type', ev.type, ev);
+function updateStagger(fighter) { // run every time is hit, only run constantly once fighter is staggered
+     if (fighter.stagger >= fighter.staggerThreshold) {
+    if (!fighter.isStaggered) {
+      fighter.isStaggered = true;
+      fighter.staggerTimer = fighter.staggerDuration;
+      
+      // Emit stagger event for clients
+      broadcastEvent({
+        type: 'STAGGER_START',
+        fighterId: fighter.id,
+        duration: fighter.staggerDuration
+      });
     }
   }
-
-  // 2) Periodic authoritative snapshot broadcast (20Hz recommended)
-  // We'll send a lighter update at ~20Hz using time sampling
-}, 1000 / TICK_RATE);
-
-// Broadcast lighter state snapshots on separate interval
-setInterval(() => {
-  const snapshot = [];
-  for (const e of entities.values()) {
-    snapshot.push({ id: e.id, playerId: e.playerId || null, hp: e.hp, maxHp: e.maxHp, statuses: e.statuses });
+  
+  // Stagger recovery
+  if (fighter.isStaggered) {
+    fighter.staggerTimer -= deltaTime;
+    if (fighter.staggerTimer <= 0) {
+      fighter.isStaggered = false;
+      broadcastEvent({
+        type: 'STAGGER_END',
+        fighterId: fighter.id
+      });
+    }
   }
-  io.emit('stateUpdate', { time: Date.now(), entities: snapshot });
-}, 1000 / 20);
+}
 
-// Simple user list update
+function processDeath(fighter) { if (fighter.hp <= 0 && !fighter.isDefeated) {
+    fighter.isDefeated = true;
+    fighter.defeatedAt = getCurrentTick();
+    fighter.vel.x = 0;
+    fighter.vel.y = 0;
+    
+    // Emit death event
+    broadcastEvent({
+      type: 'FIGHTER_DEFEATED',
+      fighterId: fighter.id,
+      defeatedBy: fighter.lastAttackedBy || null
+    });
+    
+    // Check for battle end (only 1 fighter remaining)
+    const activeFighters = match.fighters.filter(f => !f.isDefeated);
+    if (activeFighters.length <= 1) {
+      endBattle(match, activeFighters[0]);
+    }
+  }
+}
+
+
+
+
+
+io.sockets.on('connection', (socket) => {
+  
+    console.log(socket.id + ' ' + 'is connected');
+
+  
+
+});
+
+
+
 setInterval(() => {
-  io.emit('updatelist', { time: new Date().toTimeString(), users: Array.from(entities.keys()) });
-}, 1000);
 
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+    
+}, 50 );
+

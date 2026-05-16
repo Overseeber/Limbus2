@@ -13,12 +13,13 @@
     <script src="/socket.io/socket.io.js"></script>
     <script>
       // Explicit server connect (replace IP if needed)
-      try {
-        const socket = io.connect('http://10.21.70.111:3000');
-        window._externalSocket = socket;
-      } catch (e) {
-        console.warn('socket.io connect failed', e);
-      }
+      //try {
+      //  const socket = io.connect('http://10.21.70.111:3000'); //for pi
+      const socket = io.connect('http://localhost:3000');//for local testing
+    //    window._externalSocket = socket;
+     // } catch (e) {
+      //  console.warn('socket.io connect failed', e);
+      //}
     </script>
     <script src="client-network.js"></script>
     <script src="constants.js"></script>

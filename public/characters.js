@@ -739,7 +739,7 @@ CALLISTO: {
       fighter.comboTimer = 1.4; // Reset combo timer
       
       // ON HIT: Inflict 4 bleed and bleed count
-      opponent.addStatus('Bleed', 4, 4);
+      fighter.requestApplyStatus(opponent, { type: 'Bleed', count: 4, potency: 4 });
       
       // ON HIT: Gain 5 [Corpus Ingredient]
       fighter.corpusIngredient = Math.min(
@@ -1677,9 +1677,9 @@ CALLISTO: {
       fighter.lastHitOpponent = opponent;
       
       // ON HIT: Inflict 2 burn potency and count
-      opponent.addStatus('Burn', 2, 2);
+      fighter.requestApplyStatus(opponent, { type: 'Burn', count: 2, potency: 2 });
       // ON HIT: Inflict 2 tremor potency and count
-      opponent.addStatus('Tremor', 2, 2);
+      fighter.requestApplyStatus(opponent, { type: 'Tremor', count: 2, potency: 2 });
       
       // Accelerating Future: Gain combo and apply effects
       fighter.combo++;
@@ -1914,8 +1914,8 @@ CALLISTO: {
       const intervalReduction = Math.min(fighter.combo * 0.05, 0.5); // Cap reduction at 50%
       fighter.attackInterval = 1 * (1 - intervalReduction); // Base 1 second
       
-      if (fighter.addStatus) {
-        fighter.addStatus('Accelerating Future', fighter.combo, 1);
+      if (fighter.requestApplyStatus) {
+        fighter.requestApplyStatus(fighter, { type: 'Accelerating Future', count: fighter.combo, potency: 1 });
       }
     },
     
@@ -1925,8 +1925,8 @@ CALLISTO: {
         fighter.shinActive = true;
         fighter.protection = 1; // Gain 1 protection (10% damage reduction)
         
-        if (fighter.addStatus) {
-          fighter.addStatus('Shin (心) - Valencina', 999, 1); // Permanent until HP restored
+        if (fighter.requestApplyStatus) {
+          fighter.requestApplyStatus(fighter, { type: 'Shin (心) - Valencina', count: 999, potency: 1 }); // Permanent until HP restored
           console.log('❤️ Shin (心) - Valencina status applied!');
         }
         console.log('❤️ Shin (心) - Valencina activated!');

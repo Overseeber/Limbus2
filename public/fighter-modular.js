@@ -733,10 +733,10 @@ class Fighter {
           
           // Apply Attack 1 effects: inflict 1 bind on enemy, gain 1 haste
           if (this.target) {
-            this.target.addStatus('Bind', 1, 1);
+            this.requestApplyStatus(this.target, { type: 'Bind', count: 1, potency: 1 });
             console.log('🔗 Callisto inflicted Bind on enemy!');
           }
-          this.addStatus('Haste', 1, 1);
+          this.requestApplyStatus(this, { type: 'Haste', count: 1, potency: 1 });
           console.log('⚡ Callisto gained Haste!');
         }
       }
@@ -765,7 +765,7 @@ class Fighter {
             const fragileStatus = this.target.statuses.find(s => s.type === 'Fragile');
             const currentFragileStacks = fragileStatus ? fragileStatus.potency : 0;
             if (currentFragileStacks < 5) {
-              this.target.addStatus('Fragile', 1, 1);
+              this.requestApplyStatus(this.target, { type: 'Fragile', count: 1, potency: 1 });
               console.log('💔 Callisto inflicted Fragile on enemy!');
             }
           }
@@ -773,7 +773,7 @@ class Fighter {
           const protectionStatus = this.statuses.find(s => s.type === 'Protection');
           const currentProtectionStacks = protectionStatus ? protectionStatus.potency : 0;
           if (currentProtectionStacks < 5) {
-            this.addStatus('Protection', 1, 1);
+            this.requestApplyStatus(this, { type: 'Protection', count: 1, potency: 1 });
             console.log('🛡️ Callisto gained Protection!');
           }
         }

@@ -1,6 +1,15 @@
 // Character roster system is globally available
 
-
+function preload() {
+  //stuff here
+  // Load character roster data from JSON file
+  loadJSON('characters.json', (data) => {
+    window.CHARACTERS = data;
+    console.log('Character roster loaded:', window.CHARACTERS);
+  }, (err) => {
+    console.error('Failed to load character roster:', err);
+  });
+}
 
 let player;
 let enemy;

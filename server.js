@@ -5,16 +5,38 @@ app.use(express.static('public'));
 
 var socket = require('socket.io');
 var io = socket(server);
+var clientList = {};
+
+
 
 console.log("Server is Running");
+
+
+
+
+
+
+
 
 class Client {
     constructor(id)
     {
         this.id = id;
         this.fighter = null;
+        this.room = null;
+        this.state = 'MainMenu'; // MainMenu, CharacterSelect, InGame, PostGame
     }
 }
+
+class Room {
+    constructor(id)
+    {
+        this.id = id;
+        this.clients = [];
+        this.match = null;
+    }
+}
+
 //get client side match with server side, then resolve any conflicts
 class Fighter {
     constructor(name)
@@ -149,15 +171,90 @@ function processDeath(fighter) { if (fighter.hp <= 0 && !fighter.isDefeated) {
   }
 }
 
+class Status {
+    constructor(type, potency, count) {
+        this.type = type;
+        this.potency = potency;
+        this.count = count;
+    }
+}
 
+const EVENT_TYPES = {
+  // Input Events (from client → server)
+  INPUT_MOVE: 'INPUT_MOVE',           // { direction, magnitude }
+  INPUT_ATTACK: 'INPUT_ATTACK',       // { sequence }
+  INPUT_GUARD: 'INPUT_GUARD',         // { pressed }
+  INPUT_DASH: 'INPUT_DASH',           // { direction }
+  INPUT_ABILITY: 'INPUT_ABILITY',     // { abilityId }
+  
+  // Combat Events (server → all)
+  HIT: 'HIT',                         // { attacker, target, damage, knockback }
+  BLOCK: 'BLOCK',                     // { defender, attacker, damage_reduced }
+  PARRY: 'PARRY',                     // { defender, attacker }
+  COUNTER: 'COUNTER',                 // { defender, attacker, damage }
+  
+  // Status Events
+  STATUS_APPLY: 'STATUS_APPLY',       // { target, status, duration, potency }
+  STATUS_TICK: 'STATUS_TICK',         // { target, status, damage }
+  STATUS_REMOVE: 'STATUS_REMOVE',     // { target, status }
+  
+  // Movement Events
+  MOVE: 'MOVE',                       // { fighter, position, velocity }
+  DASH: 'DASH',                       // { fighter, direction, duration }
+  
+  // Stagger Events
+  STAGGER_START: 'STAGGER_START',     // { fighter, duration }
+  STAGGER_END: 'STAGGER_END',         // { fighter }
+  
+  // Ability Events
+  ABILITY_START: 'ABILITY_START',     // { fighter, ability, startup }
+  ABILITY_HIT: 'ABILITY_HIT',         // { fighter, target, damage }
+  ABILITY_END: 'ABILITY_END',         // { fighter, ability }
+  
+  // Ultimate Events
+  ULTIMATE_START: 'ULTIMATE_START',   // { fighter, duration }
+  ULTIMATE_HIT: 'ULTIMATE_HIT',       // { fighter, targets, damage }
+  ULTIMATE_END: 'ULTIMATE_END',       // { fighter }
+  
+  // Game Events
+  FIGHTER_DEFEATED: 'FIGHTER_DEFEATED', // { fighter, defeatedBy }
+  MATCH_END: 'MATCH_END',             // { winner, loser }
+  
+
+};
 
 
 
 io.sockets.on('connection', (socket) => {
   
     console.log(socket.id + ' ' + 'is connected');
+    //every client gets a fighter assigned to them, and they can control that fighter with inputs that are sent to the server, which then processes the inputs and updates the game state accordingly, and sends updates back to all clients to keep them in sync
 
-  
+    const client = new Client(socket.id);
+    const fighter = new Fighter({ class: null, hp: null, maxHp: null, speed: null, jumpHeight: null, baseDamage: null, staggerThreshold: null, staggerLength: null, weapon: 'Sword', knockbackMultiplier: 1 });
+    client.fighter = fighter;
+    
+ socket.on("changeState", (newState) => {
+
+    players[socket.id].state = newState;
+
+    console.log(socket.id + " -> " + newState);
+
+    });
+    socket.on('input', (data) => {
+        console.log('Received input from client', socket.id, data);
+        // Process input and update fighter state
+        // For example, if data is { type: 'move', direction: 'left', magnitude: 1 }, you would update fighter's position accordingly
+    });
+
+  socket.on('disconnect', () => {
+      
+        delete clientList[socket.id];
+        console.log(clientList.hasOwnProperty(socket.id));
+        console.log('Client has disconnected')
+        
+    });
+    
 
 });
 

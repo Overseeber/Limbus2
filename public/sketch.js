@@ -38,10 +38,31 @@ function preload() {
   } else {
     console.warn('loadSpriteAtlases not yet loaded');
   }
+
+  // Load background layers
+  window.bgSky = loadImage('data/batlbkg/bkgsy.png');
+  window.bgTr = loadImage('data/batlbkg/bkgtr.png');
+  window.bgFlr = loadImage('data/batlbkg/bkgflr.png');
+  window.bgView = loadImage('data/batlbkg/bkgview.png');
 }
 
 function setup() {//test
+  // Set canvas size to original constraints
   createCanvas(ARENA_WIDTH, ARENA_HEIGHT);
+
+  // Calculate scale factor to fit background images within original width while maintaining aspect ratio
+  if (window.bgSky && window.bgSky.width > 0) {
+    const scale = ARENA_WIDTH / window.bgSky.width;
+    window.bgScale = scale;
+    window.bgScaledWidth = ARENA_WIDTH;
+    window.bgScaledHeight = window.bgSky.height * scale;
+    console.log(`Background scaled by ${scale.toFixed(3)} to fit ${ARENA_WIDTH}px width, maintaining aspect ratio`);
+  } else {
+    window.bgScale = 1;
+    window.bgScaledWidth = ARENA_WIDTH;
+    window.bgScaledHeight = ARENA_HEIGHT;
+  }
+
   document.oncontextmenu = () => false;
   // Don't initialize fighters here - let character select handle it
 }
@@ -175,13 +196,53 @@ function draw() {
 }
 
 function drawArena() {
-  noStroke();
-  fill('#1f1f1f');
-  rect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
-  fill('#333');
-  rect(0, FLOOR_Y + 50, ARENA_WIDTH, ARENA_HEIGHT - FLOOR_Y - 50);
-  fill('#555');
-  rect(0, FLOOR_Y + 50, ARENA_WIDTH, 6);
+  // Use scaled background dimensions to maintain aspect ratio
+  const bgWidth = window.bgScaledWidth || ARENA_WIDTH;
+  const bgHeight = window.bgScaledHeight || ARENA_HEIGHT;
+
+  // Calculate vertical offset (1/4 of image height higher)
+  const yOffset = +bgHeight * 0;
+
+  // Get camera position for parallax effect
+  const camX = typeof cameraX !== 'undefined' ? cameraX : 0;
+  const camY = typeof cameraY !== 'undefined' ? cameraY : 0;
+
+  // Calculate center of arena
+  const arenaCenterX = ARENA_WIDTH / 2;
+  const arenaCenterY = ARENA_HEIGHT / 2;
+
+  // Parallax factors: lower values = less movement with camera
+  const parallaxSky = 0.05;   // Sky moves very little
+  const parallaxTr = 0.1;     // Terrain moves moderately
+  const parallaxFlr = 0.0;    // Floor has no parallax
+  const parallaxView = 0.0;   // Foreground has no parallax
+
+  // Draw layered background from backmost to foremost: bkgsy > bkgtr > bkgflr > bkgview
+  // Center background at arena center, then apply yOffset and parallax (x-axis only)
+  const centerX = arenaCenterX - (bgWidth / 2);
+  const centerY = arenaCenterY - (bgHeight / 2) + yOffset;
+
+  if (window.bgSky) {
+    const skyOffsetX = centerX - (camX - arenaCenterX) * parallaxSky;
+    const skyOffsetY = centerY; // No parallax on y-axis
+    image(window.bgSky, skyOffsetX, skyOffsetY, bgWidth, bgHeight);
+  }
+  if (window.bgTr) {
+    const trOffsetX = centerX - (camX - arenaCenterX) * parallaxTr;
+    const trOffsetY = centerY; // No parallax on y-axis
+    image(window.bgTr, trOffsetX, trOffsetY, bgWidth, bgHeight);
+  }
+  if (window.bgFlr) {
+    const flrOffsetX = centerX - (camX - arenaCenterX) * parallaxFlr;
+    const flrOffsetY = centerY; // No parallax on y-axis
+    image(window.bgFlr, flrOffsetX, flrOffsetY, bgWidth, bgHeight);
+  }
+  if (window.bgView) {
+    const viewOffsetX = centerX - (camX - arenaCenterX) * parallaxView;
+    const viewOffsetY = centerY; // No parallax on y-axis
+    image(window.bgView, viewOffsetX, viewOffsetY, bgWidth, bgHeight);
+  }
+
   if (DEBUG) {
     fill(255);
     textSize(12);

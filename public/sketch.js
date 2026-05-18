@@ -638,6 +638,16 @@ function mousePressed() {
   if (battleState === 'characterSelect' && myRoomState) {
     const mx = mouseX;
     const my = mouseY;
+    
+    // Check Leave Room button click
+    if (mx > width - 140 && mx < width - 20 && my > 40 && my < 68) {
+      Network.leaveRoom();
+      myRoomState = null;
+      myRoomId = null;
+      localSlotSelections = [];
+      return;
+    }
+    
     const slots = myRoomState.slots || [];
     const columnWidth = 200;
     const count = Math.max(2, slots.length);
@@ -674,6 +684,40 @@ function mousePressed() {
     }
 
     return;
+  }
+
+  // Room selection screen (when not in a room)
+  if (battleState === 'characterSelect' && !myRoomState) {
+    const mx = mouseX;
+    const my = mouseY;
+    
+    const availRooms = availableRooms || [];
+    const roomButtonWidth = 200;
+    const roomButtonHeight = 40;
+    let roomY = 150;
+    
+    // Check clicks on available room buttons
+    if (availRooms.length === 0) {
+      roomY += 40;
+    } else {
+      for (let i = 0; i < availRooms.length; i++) {
+        const roomId = availRooms[i];
+        if (mx > 50 && mx < 50 + roomButtonWidth && my > roomY && my < roomY + roomButtonHeight) {
+          Network.joinRoom(roomId);
+          return;
+        }
+        roomY += roomButtonHeight + 10;
+      }
+    }
+    
+    // Check click on Create New Room button
+    const createButtonX = 50;
+    const createButtonY = roomY + 50;
+    if (mx > createButtonX && mx < createButtonX + roomButtonWidth && my > createButtonY && my < createButtonY + roomButtonHeight) {
+      const newRoomId = `room-${Date.now()}`;
+      Network.createRoom(newRoomId);
+      return;
+    }
   }
 
   if (battleState === 'characterSelect') {

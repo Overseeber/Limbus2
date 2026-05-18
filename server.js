@@ -70,6 +70,27 @@ class Room {
     }
 }
 
+// Rooms registry (roomId -> Room)
+const ROOMS = {};
+
+function createRoom(id) {//makes new room
+    if (ROOMS[id]) return ROOMS[id];//returns if room aready exists
+    const r = new Room(id);
+    ROOMS[id] = r;
+    return r;
+}
+
+function getRoomState(room) {//checks room state
+    const slots = (room.clients || []).map(cid => {
+        const client = clientList[cid];
+        return {
+            clientId: cid,
+            character: client && client.fighter ? client.fighter.class : null
+        };
+    });
+    return { id: room.id, slots };
+}
+
 //get client side match with server side, then resolve any conflicts
 class Fighter {
     constructor(name)
@@ -112,6 +133,21 @@ class Fighter {
 }
 
 //functions for stuff
+
+function broadcastEvent(event, excludeClientId = null) {
+    // Broadcast an event to all clients in the same room, excluding the sender if specified
+    const roomId = clientList[excludeClientId] ? clientList[excludeClientId].room : null;
+    if (!roomId) return;
+    const room = ROOMS[roomId];
+    if (!room) return;
+
+    room.clients.forEach(cid => {
+        if (cid === excludeClientId) return;
+        const s = io.sockets.sockets.get(cid);
+        if (s) s.emit('event', event);
+    });
+}
+
 function validMove(fighter, moveRequest) {
     const { dx, dy, direction } = moveRequest;
   
@@ -265,10 +301,11 @@ io.sockets.on('connection', (socket) => {
     //every client gets a fighter assigned to them, and they can control that fighter with inputs that are sent to the server, which then processes the inputs and updates the game state accordingly, and sends updates back to all clients to keep them in sync
 
     const client = new Client(socket.id);
-    //blank state fighter, changes whem player selects fighter
+    // blank state fighter; class is null until client selects
     const fighter = new Fighter({ class: null, hp: null, maxHp: null, speed: null, jumpHeight: null, baseDamage: null, staggerThreshold: null, staggerLength: null, weapon: 'Sword', knockbackMultiplier: 1 });
     client.fighter = fighter;
-    //if no rooms in room list, create new room and add client to it, otherwise add client to existing room with less than 2 clients
+    client.room = null; // not in a room yet
+//if no rooms in room list, create new room and add client to it, otherwise add client to existing room with less than 2 clients
     if (Object.keys(roomList).length === 0) {
         const roomId = 'room1';//intitiate first room
         const room = new Room(roomId);
@@ -299,7 +336,93 @@ io.sockets.on('connection', (socket) => {
     console.log('Current Clients:', Object.keys(clientList));
 //order of operations here is: client connects -> server creates client object and fighter object -> client sends inputs to server -> server processes inputs and updates fighter state -> server broadcasts updated state to all clients
 
+    // register client
     clientList[socket.id] = client;
+
+    // Send current rooms list to the client
+    socket.emit('roomsList', Object.keys(ROOMS));
+
+    // Helper to notify all clients in a room of its state
+    function emitRoomState(roomId) {
+        const room = ROOMS[roomId];
+        if (!room) return;
+        const state = getRoomState(room);
+        (room.clients || []).forEach(cid => {
+            const s = io.sockets.sockets.get(cid);
+            if (s) s.emit('roomState', state);
+        });
+    }
+
+    // Create and join a room
+    socket.on('createRoom', (roomId) => {
+        if (!roomId) return;
+        const room = createRoom(roomId);
+        if (!room.clients.includes(socket.id)) {
+            room.clients.push(socket.id);
+            client.room = room.id;
+        }
+        socket.emit('joinedRoom', room.id);
+        emitRoomState(room.id);
+    });
+
+    // Join existing room
+    socket.on('joinRoom', (roomId) => {
+        const room = ROOMS[roomId];
+        if (!room) {
+            socket.emit('error', { message: 'ROOM_NOT_FOUND' });
+            return;
+        }
+        if (!room.clients.includes(socket.id)) {
+            room.clients.push(socket.id);
+            client.room = room.id;
+        }
+        socket.emit('joinedRoom', room.id);
+        emitRoomState(room.id);
+    });
+
+    // Leave current room
+    socket.on('leaveRoom', () => {
+        if (!client.room) return;
+        const room = ROOMS[client.room];
+        if (!room) return;
+        room.clients = room.clients.filter(id => id !== socket.id);
+        client.room = null;
+        emitRoomState(room.id);
+    });
+
+    // Change character selection for this client in their room
+    socket.on('changeCharacter', (characterKey) => {
+        client.fighter.class = characterKey;
+        // Optionally, populate other fighter stats server-side from a CHARACTERS list if available
+        if (client.room) emitRoomState(client.room);
+    });
+
+    // Broadcast inputs to room peers
+    socket.on('input', (data) => {
+        // If client is in a room, broadcast to other clients in room
+        if (client.room) {
+            const room = ROOMS[client.room];
+            if (room) {
+                room.clients.forEach(cid => {
+                    if (cid === socket.id) return;
+                    const s = io.sockets.sockets.get(cid);
+                    if (s) s.emit('peerInput', { from: socket.id, data });
+                });
+            }
+        }
+    });
+
+    // Handle disconnect
+    socket.on('disconnect', () => {
+        // Remove from any room
+        if (client.room && ROOMS[client.room]) {
+            const room = ROOMS[client.room];
+            room.clients = room.clients.filter(id => id !== socket.id);
+            emitRoomState(room.id);
+        }
+        delete clientList[socket.id];
+        console.log('Client has disconnected', socket.id);
+    });
 
 
  socket.on("changeState", (newState) => {

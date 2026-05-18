@@ -14,6 +14,7 @@ window.Network = {
       this.socket.on('connect', () => { this.isConnected = true; this.isLocalAuthority = false; console.log('[Network] connected (external)', this.socket.id); });
       this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
       this.socket.on('event', (ev) => this._emit('event', ev));
+      this._setupSocketHandlers(this.socket);
       return;
     }
 
@@ -26,6 +27,7 @@ window.Network = {
         this.socket.on('connect', () => { this.isConnected = true; this.isLocalAuthority = false; console.log('[Network] connected', this.socket.id); });
         this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
         this.socket.on('event', (ev) => this._emit('event', ev));
+        this._setupSocketHandlers(this.socket);
       } catch (e) {
         console.warn('[Network] socket.io available but connection failed, using local simulator', e);
         this._startLocal();
@@ -42,6 +44,40 @@ window.Network = {
     if (!window.LocalSimulator) {
       window.LocalSimulator = new LocalSimulator();
     }
+  },
+
+  _setupSocketHandlers(socket) {
+    if (!socket) return;
+    socket.on('roomsList', (rooms) => {
+      window.availableRooms = rooms;
+      this._emit('roomsList', rooms);
+    });
+    socket.on('roomState', (state) => {
+      // state: { id, slots: [{clientId, character}] }
+      window.myRoomState = state;
+      this._emit('roomState', state);
+    });
+    socket.on('joinedRoom', (roomId) => {
+      window.myRoomId = roomId;
+      this._emit('joinedRoom', roomId);
+    });
+    socket.on('peerInput', (data) => {
+      this._emit('peerInput', data);
+    });
+  },
+
+  // Room API helpers
+  createRoom(roomId) {
+    if (this.socket) this.socket.emit('createRoom', roomId);
+  },
+  joinRoom(roomId) {
+    if (this.socket) this.socket.emit('joinRoom', roomId);
+  },
+  leaveRoom() {
+    if (this.socket) this.socket.emit('leaveRoom');
+  },
+  changeCharacter(characterKey) {
+    if (this.socket) this.socket.emit('changeCharacter', characterKey);
   },
 
   sendInput(input) {

@@ -48,6 +48,10 @@ window.Network = {
 
   _setupSocketHandlers(socket) {
     if (!socket) return;
+    socket.on('joinedRoom', (roomId) => {
+      window.myRoomId = roomId;
+      this._emit('joinedRoom', roomId);
+    });
     socket.on('roomsList', (rooms) => {
       window.availableRooms = rooms;
       this._emit('roomsList', rooms);

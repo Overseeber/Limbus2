@@ -41,10 +41,9 @@ const INTRO_ANIMATIONS = {
 // Character selection variables - Super Smash Bros style
 let players = [
   { active: true, character: 'VALENCINA', ai: false, controlled: true, ready: false },
-  { active: true, character: 'CALLISTO', ai: true, controlled: false, ready: true },
-  { active: false, character: 'JOHN', ai: true, controlled: false, ready: true },
-  { active: false, character: 'VALENCINA', ai: true, controlled: false, ready: true },
-  { active: false, character: 'VALENCINA', ai: true, controlled: false, ready: true }
+  { active: false, character: null, ai: false, controlled: false, ready: false },
+  { active: false, character: null, ai: false, controlled: false, ready: false },
+  { active: false, character: null, ai: false, controlled: false, ready: false }
 ];
 const MAX_PLAYERS = 4;
 let selectedPlayerSlot = 0; // Which player slot is currently selected
@@ -928,7 +927,7 @@ function drawCharacterSelect() {
 
     for (let i = 0; i < Math.max(2, slots.length); i++) {
       const x = startX + i * columnWidth;
-      const y = 100;
+      const y = 130;
 
       // Slot background
       push();
@@ -947,7 +946,7 @@ function drawCharacterSelect() {
 
       const slot = slots[i];
 
-      if (!slot) {
+      if (!slot || !slot.character) {
         push();
         textAlign(CENTER, CENTER);
         textSize(14);
@@ -955,7 +954,7 @@ function drawCharacterSelect() {
         text('Empty', x + (columnWidth - 20) / 2, y + 70);
         fill(100, 255, 100);
         textSize(12);
-        text('Click to claim', x + (columnWidth - 20) / 2, y + 100);
+        text('Click to join', x + (columnWidth - 20) / 2, y + 100);
         pop();
         continue;
       }
@@ -975,18 +974,82 @@ function drawCharacterSelect() {
       text(charName, x + (columnWidth - 20) / 2, y + 80);
       pop();
 
-      // Show control/ready markers
+      // Show player info
       push();
       textAlign(CENTER, CENTER);
       textSize(12);
       fill(180);
-      text(`id: ${slot.clientId}`, x + (columnWidth - 20) / 2, y + 220);
+      text(`Player ${i + 1}`, x + (columnWidth - 20) / 2, y + 220);
       pop();
     }
 
     pop();
     return;
   }
+
+  // Room selection screen if not in a room
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  fill(200);
+  text('Join or Create a Room', width / 2, 80);
+  
+  // Available rooms
+  textSize(16);
+  fill(150);
+  text('Available Rooms:', 50, 120);
+  
+  const availRooms = availableRooms || [];
+  const roomButtonWidth = 200;
+  const roomButtonHeight = 40;
+  let roomY = 150;
+  
+  if (availRooms.length === 0) {
+    fill(100);
+    textSize(14);
+    text('No rooms available', 50, roomY);
+    roomY += 40;
+  } else {
+    for (let i = 0; i < availRooms.length; i++) {
+      const roomId = availRooms[i];
+      
+      // Draw room button
+      fill(60, 100, 60);
+      stroke(100, 200, 100);
+      strokeWeight(2);
+      rect(50, roomY, roomButtonWidth, roomButtonHeight, 6);
+      
+      // Room label
+      fill(100, 255, 100);
+      noStroke();
+      textAlign(CENTER, CENTER);
+      textSize(14);
+      text(`${roomId}`, 150, roomY + roomButtonHeight / 2);
+      
+      roomY += roomButtonHeight + 10;
+    }
+  }
+  
+  // Create new room section
+  textSize(16);
+  fill(150);
+  text('Create New Room:', 50, roomY + 20);
+  
+  // Create room button
+  fill(100, 100, 150);
+  stroke(150, 150, 255);
+  strokeWeight(2);
+  const createButtonX = 50;
+  const createButtonY = roomY + 50;
+  rect(createButtonX, createButtonY, roomButtonWidth, roomButtonHeight, 6);
+  
+  fill(150, 150, 255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(14);
+  text('Create New Room', createButtonX + roomButtonWidth / 2, createButtonY + roomButtonHeight / 2);
+  
+  pop();
 
   // Legacy column style when not using rooms
   // Draw player columns - Super Smash Bros style

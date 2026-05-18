@@ -312,6 +312,7 @@ io.sockets.on('connection', (socket) => {
         room.clients.push(client);//add client to room
         client.room = room;//assign room to client
         roomList[roomId] = room;//add room to room list
+        socket.emit('joinedRoom', roomId);//notify client of room join
     } else {
         let addedToRoom = false;//add client to existing room
         for (const roomId in roomList) {
@@ -319,6 +320,7 @@ io.sockets.on('connection', (socket) => {
             if (room.clients.length < 2) {
                 room.clients.push(client);
                 client.room = room;
+                socket.emit('joinedRoom', room.id);
                 addedToRoom = true;
                 break;
             }

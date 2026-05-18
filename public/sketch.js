@@ -30,11 +30,11 @@ let introAnimationsStarted = false;
 const INTRO_ANIMATIONS = {
   VALENCINA: {
     sprites: ['idle', 'prepat', 'd1', 's4f2', 's4f2', 's4f1', 'dist1'],
-    duration: 0.3 // seconds per sprite
+    duration: 0.2 // seconds per sprite
   },
   CALLISTO: {
     sprites: ['cidle', 'cevade', 'chalt', 'cuf2', 'cuf1'],
-    duration: 0.5 // seconds per sprite
+    duration: 0.3 // seconds per sprite
   }
 };
 
@@ -262,7 +262,7 @@ function drawOpeningSequence() {
   // 4s+: Transition to battle
   
   const introDelay = 1;
-  const fadeDuration = 2;
+  const fadeDuration = 1;
   const holdDuration = 2;
   const totalDuration = introDelay + fadeDuration + holdDuration;
   
@@ -280,6 +280,13 @@ function drawOpeningSequence() {
   }
   
   if (openingSequenceTimer >= totalDuration) {
+    // Stop intro animations and reset fighters to idle
+    if (window.allFighters) {
+      window.allFighters.forEach(fighter => {
+        fighter.isPlayingIntro = false;
+        fighter.introAnimationIndex = 0;
+      });
+    }
     battleState = 'battle';
     return;
   }

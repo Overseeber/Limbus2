@@ -122,8 +122,10 @@ class Fighter {
 
       // Check if intro animation is complete
       if (this.introAnimationIndex >= this.introAnimationData.sprites.length) {
-        this.isPlayingIntro = false;
-        this.introAnimationIndex = 0;
+        // Hold on the last sprite instead of resetting
+        this.introAnimationIndex = this.introAnimationData.sprites.length - 1;
+        // Keep isPlayingIntro true to continue displaying the last sprite
+        // Animation will be stopped when combat actually starts
       }
     }
   }
@@ -883,7 +885,7 @@ class Fighter {
 
   updateCallistoHaltSequence() {
     // Halt sequence: chalt > cmove > cidle
-    const sequence = ['chalt', 'cmove', 'cidle'];
+    const sequence = ['cmove', 'chalt'];
     
     if (this.haltFrame < sequence.length) {
       this.currentSprite = sequence[this.haltFrame];

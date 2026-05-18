@@ -523,7 +523,12 @@ class Fighter {
     
     // Safe default for currentSprite
     if (!this.currentSprite) {
-      this.currentSprite = character.defaultSprite || 'idle';
+      if (this.spriteType === 'atlas') {
+        const defaultAtlasIdle = this.characterKey === 'CALLISTO' ? 'cidle' : 'idle';
+        this.currentSprite = character.defaultSprite || defaultAtlasIdle;
+      } else {
+        this.currentSprite = character.defaultSprite || 'idle';
+      }
     }
     
     // Initialize dash sprite properties
@@ -2880,6 +2885,7 @@ addCombo(attacker) {
   }
 
   draw() {
+    this.updateSprite();
     push();
     translate(this.pos.x + this.spriteShakeX, this.pos.y + this.spriteShakeY);
     

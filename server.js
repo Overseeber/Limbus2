@@ -7,6 +7,37 @@ var socket = require('socket.io');
 var io = socket(server);
 var clientList = {};
 
+// Minimal server-side Vector2 implementation for position/velocity math.
+class Vector2 {
+    constructor(x = 0, y = 0) {
+        this.x = x;
+        this.y = y;
+    }
+
+    set(x, y) {
+        this.x = x;
+        this.y = y;
+        return this;
+    }
+
+    copy() {
+        return new Vector2(this.x, this.y);
+    }
+
+    add(v) {
+        this.x += v.x;
+        this.y += v.y;
+        return this;
+    }
+
+    sub(v) {
+        this.x -= v.x;
+        this.y -= v.y;
+        return this;
+    }
+}
+
+
 
 
 console.log("Server is Running");
@@ -55,6 +86,7 @@ class Fighter {
         this.hitbox = { width: 50, height: 50 }; // Example hitbox size
         this.state= 'idle'; // idle, attacking, moving, staggered
         this.pos= new Vector2(0,0);
+        this.vel = new Vector2(0,0);
         this.statuses = [];
         
     }

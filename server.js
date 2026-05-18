@@ -6,21 +6,22 @@ app.use(express.static('public'));
 var socket = require('socket.io');
 var io = socket(server);
 var clientList = {};
+var roomList = {};
 
 // Minimal server-side Vector2 implementation for position/velocity math.
-class Vector2 {
+class Vector2 { //2 diemtional vector
     constructor(x = 0, y = 0) {
         this.x = x;
         this.y = y;
     }
 
-    set(x, y) {
+    set(x, y) {//teleportst and stufdf
         this.x = x;
         this.y = y;
         return this;
     }
 
-    copy() {
+    copy() { //dubing
         return new Vector2(this.x, this.y);
     }
 
@@ -65,6 +66,7 @@ class Room {
         this.id = id;
         this.clients = [];
         this.match = null;
+        this.type = '1v1'; // 1v1, free-for-all, etc.
     }
 }
 
@@ -263,9 +265,43 @@ io.sockets.on('connection', (socket) => {
     //every client gets a fighter assigned to them, and they can control that fighter with inputs that are sent to the server, which then processes the inputs and updates the game state accordingly, and sends updates back to all clients to keep them in sync
 
     const client = new Client(socket.id);
+    //blank state fighter, changes whem player selects fighter
     const fighter = new Fighter({ class: null, hp: null, maxHp: null, speed: null, jumpHeight: null, baseDamage: null, staggerThreshold: null, staggerLength: null, weapon: 'Sword', knockbackMultiplier: 1 });
     client.fighter = fighter;
-    
+    //if no rooms in room list, create new room and add client to it, otherwise add client to existing room with less than 2 clients
+    if (Object.keys(roomList).length === 0) {
+        const roomId = 'room1';//intitiate first room
+        const room = new Room(roomId);
+        room.clients.push(client);//add client to room
+        client.room = room;//assign room to client
+        roomList[roomId] = room;//add room to room list
+    } else {
+        let addedToRoom = false;//add client to existing room
+        for (const roomId in roomList) {
+            const room = roomList[roomId];
+            if (room.clients.length < 2) {
+                room.clients.push(client);
+                client.room = room;
+                addedToRoom = true;
+                break;
+            }
+        }
+        if (!addedToRoom) {
+            const newRoomId = 'room' + (Object.keys(roomList).length + 1);
+            const newRoom = new Room(newRoomId);
+            newRoom.clients.push(client);
+            client.room = newRoom;
+            roomList[newRoomId] = newRoom;
+        }
+    }
+    //for testing, log room list and client list
+    console.log('Current Rooms:', Object.keys(roomList));
+    console.log('Current Clients:', Object.keys(clientList));
+//order of operations here is: client connects -> server creates client object and fighter object -> client sends inputs to server -> server processes inputs and updates fighter state -> server broadcasts updated state to all clients
+
+    clientList[socket.id] = client;
+
+
  socket.on("changeState", (newState) => {
 
     players[socket.id].state = newState;
@@ -275,9 +311,11 @@ io.sockets.on('connection', (socket) => {
     });
     socket.on('input', (data) => {
         console.log('Received input from client', socket.id, data);
+        socket.broadcastEvent(data, socket.id); // Broadcast the input event to all other clients (you may want to include the sender's ID in the event data)
         // Process input and update fighter state
         // For example, if data is { type: 'move', direction: 'left', magnitude: 1 }, you would update fighter's position accordingly
     });
+
 
   socket.on('disconnect', () => {
       

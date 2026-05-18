@@ -53,6 +53,7 @@ let characterSelectOption = 0; // 0: character, 1: AI, 2: ready, 3: remove playe
 // Pause menu variables
 let pauseMenuOpen = false;
 let pauseMenuOption = 0; // 0: settings, 1: forfeit match
+let pauseSettingsOpen = false; // Settings placeholder open
 
 function preload() {
   // Load sprite atlases for character sprites
@@ -210,7 +211,9 @@ function draw() {
     endCamera();
     
     // Draw pause menu if open
-    if (pauseMenuOpen) {
+    if (pauseSettingsOpen) {
+      drawSettingsPanel();
+    } else if (pauseMenuOpen) {
       drawPauseMenu();
     }
   } else if (battleState === 'summary') {
@@ -419,8 +422,8 @@ function updateBattle() {
     for (let i = 0; i < window.allFighters.length; i++) {
       const fighter = window.allFighters[i];
       
-      // Disable player movement during ultimate for player-controlled fighters
-      if (!fighter.ultimateActive && fighter.isPlayerControlled) {
+      // Disable player movement when pause menu or settings are open
+      if (!pauseMenuOpen && !pauseSettingsOpen && !fighter.ultimateActive && fighter.isPlayerControlled) {
         fighter.handleInput();
       }
       
@@ -475,7 +478,7 @@ function getPlayerControlledFighter() {
 
 function keyPressed() {
   // Handle pause menu navigation
-  if (pauseMenuOpen && battleState === 'battle') {
+  if ((pauseMenuOpen || pauseSettingsOpen) && battleState === 'battle') {
     if (keyCode === UP_ARROW) {
       pauseMenuOption = (pauseMenuOption - 1 + 2) % 2;
       return;
@@ -486,8 +489,8 @@ function keyPressed() {
     }
     if (keyCode === ENTER) {
       if (pauseMenuOption === 0) {
-        // Settings - placeholder
-        console.log('Settings selected (placeholder)');
+        // Open settings placeholder
+        pauseSettingsOpen = true;
       } else if (pauseMenuOption === 1) {
         // Forfeit match
         forfeitMatch();
@@ -495,7 +498,12 @@ function keyPressed() {
       return;
     }
     if (keyCode === ESCAPE) {
-      pauseMenuOpen = false;
+      // Close settings first, otherwise close pause menu
+      if (pauseSettingsOpen) {
+        pauseSettingsOpen = false;
+      } else {
+        pauseMenuOpen = false;
+      }
       return;
     }
     return;
@@ -549,6 +557,17 @@ function keyPressed() {
       }
     }
   }
+}
+
+function forfeitMatch() {
+  // Immediately return to character select and clear fighters
+  pauseMenuOpen = false;
+  pauseSettingsOpen = false;
+  window.allFighters = null;
+  player = null;
+  enemy = null;
+  battleState = 'characterSelect';
+  console.log('Match forfeited - returning to character select');
 }
 
 function keyReleased() {
@@ -657,6 +676,53 @@ function mousePressed() {
   if (battleState !== 'battle') {
     return;
   }
+
+    // Handle pause button click (top-right) and pause menu interactions
+    const mx = mouseX;
+    const my = mouseY;
+    const buttonSize = 40;
+    const buttonX = width - buttonSize - 16;
+    const buttonY = 16;
+
+    // Click on the pause/menu button
+    if (mx > buttonX && mx < buttonX + buttonSize && my > buttonY && my < buttonY + buttonSize) {
+      pauseMenuOpen = true;
+      pauseMenuOption = 0;
+      return;
+    }
+
+    // If settings panel is open, any click will close it (placeholder behavior)
+    if (pauseSettingsOpen) {
+      pauseSettingsOpen = false;
+      return;
+    }
+
+    // If pause menu is open, detect clicks on menu options
+    if (pauseMenuOpen) {
+      const menuWidth = 300;
+      const menuHeight = 200;
+      const menuX = (width - menuWidth) / 2;
+      const menuY = (height - menuHeight) / 2;
+      const optionHeight = 50;
+      const optionStartY = menuY + 60;
+
+      for (let i = 0; i < 2; i++) {
+        const optionY = optionStartY + (i * optionHeight);
+        if (mx > menuX + 20 && mx < menuX + 20 + (menuWidth - 40) && my > optionY && my < optionY + 40) {
+          pauseMenuOption = i;
+          if (i === 0) {
+            pauseSettingsOpen = true;
+          } else if (i === 1) {
+            forfeitMatch();
+          }
+          return;
+        }
+      }
+
+      // Click outside menu closes it
+      pauseMenuOpen = false;
+      return;
+    }
 
   const controlledFighter = getPlayerControlledFighter();
   if (mouseButton === LEFT) {

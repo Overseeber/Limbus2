@@ -97,12 +97,17 @@ class Fighter {
 
   // Start intro animation
   startIntroAnimation() {
+    // Use defined intro animation when available, otherwise fall back to a
+    // single-frame idle animation so every character has an intro.
     if (typeof INTRO_ANIMATIONS !== 'undefined' && INTRO_ANIMATIONS[this.characterKey]) {
       this.introAnimationData = INTRO_ANIMATIONS[this.characterKey];
-      this.isPlayingIntro = true;
-      this.introAnimationIndex = 0;
-      this.introAnimationTimer = 0;
+    } else {
+      const defaultSprite = (typeof CHARACTERS !== 'undefined' && CHARACTERS[this.characterKey] && CHARACTERS[this.characterKey].defaultSprite) || 'idle';
+      this.introAnimationData = { sprites: [defaultSprite], duration: 0.3 };
     }
+    this.isPlayingIntro = true;
+    this.introAnimationIndex = 0;
+    this.introAnimationTimer = 0;
   }
 
   // Update intro animation

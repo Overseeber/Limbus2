@@ -584,6 +584,20 @@ function drawPauseMenuButton() {
   pop();
 }
 
+function drawBattleTimer() {
+  if (typeof battleState === 'undefined' || battleState !== 'battle') return;
+  push();
+  resetMatrix();
+  textAlign(CENTER, TOP);
+  textSize(28);
+  stroke(0, 180);
+  strokeWeight(3);
+  fill(255);
+  const display = (typeof battleTimer !== 'undefined') ? battleTimer.toFixed(1) : '0.0';
+  text(`${display}s`, width / 2, 12);
+  pop();
+}
+
 function drawPauseMenu() {
   const menuWidth = 300;
   const menuHeight = 200;
@@ -646,5 +660,47 @@ function drawPauseMenu() {
   textSize(12);
   text('Use UP/DOWN to select, ENTER to confirm, ESC to close', width / 2, menuY + menuHeight - 20);
   
+  pop();
+}
+
+function drawSettingsPanel() {
+  const panelWidth = 500;
+  const panelHeight = 320;
+  const panelX = (width - panelWidth) / 2;
+  const panelY = (height - panelHeight) / 2;
+
+  push();
+  // Background overlay
+  fill(0, 0, 0, 200);
+  noStroke();
+  rect(0, 0, width, height);
+
+  // Panel
+  fill(28, 28, 28, 240);
+  stroke(255, 100);
+  strokeWeight(2);
+  rect(panelX, panelY, panelWidth, panelHeight, 12);
+
+  // Title
+  noStroke();
+  fill(255);
+  textAlign(CENTER, TOP);
+  textSize(26);
+  text('SETTINGS (Placeholder)', width / 2, panelY + 18);
+
+  // Placeholder content
+  fill(200);
+  textSize(14);
+  textAlign(LEFT, TOP);
+  text('- Audio: (placeholder)
+- Controls: (placeholder)
+- Graphics: (placeholder)', panelX + 24, panelY + 64);
+
+  // Back hint
+  fill(180);
+  textSize(12);
+  textAlign(CENTER, TOP);
+  text('Click anywhere or press ESC to go back', width / 2, panelY + panelHeight - 28);
+
   pop();
 }

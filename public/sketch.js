@@ -19,6 +19,25 @@ let summaryText = '';
 let lastMouseDown = null;
 let battleTimer = 0;
 
+// Opening sequence variables
+let openingSequenceTimer = 0;
+let openingFadeAlpha = 255;
+let openingZoom = 5; // Start zoomed in
+let openingTextAlpha = 0;
+let introAnimationsStarted = false;
+
+// Character intro animation sequences
+const INTRO_ANIMATIONS = {
+  VALENCINA: {
+    sprites: ['idle', 'prepat', 'd1', 's4f2', 's4f2', 's4f1', 'dist1'],
+    duration: 0.3 // seconds per sprite
+  },
+  CALLISTO: {
+    sprites: ['cidle', 'cevade', 'chalt', 'cuf2', 'cuf1'],
+    duration: 0.5 // seconds per sprite
+  }
+};
+
 // Character selection variables - Super Smash Bros style
 let players = [
   { active: true, character: 'VALENCINA', ai: false, controlled: true, ready: false },
@@ -30,6 +49,10 @@ let players = [
 const MAX_PLAYERS = 4;
 let selectedPlayerSlot = 0; // Which player slot is currently selected
 let characterSelectOption = 0; // 0: character, 1: AI, 2: ready, 3: remove player
+
+// Pause menu variables
+let pauseMenuOpen = false;
+let pauseMenuOption = 0; // 0: settings, 1: forfeit match
 
 function preload() {
   // Load sprite atlases for character sprites
@@ -125,10 +148,17 @@ function initBattle() {
   player = fighters.find(f => f.isPlayerControlled);
   enemy = fighters.find(f => !f.isPlayerControlled) || fighters.find(f => f !== player);
 
-  battleState = 'ready';
+  battleState = 'opening';
   winner = null;
   summaryText = '';
   battleTimer = 0;
+  
+  // Initialize opening sequence
+  openingSequenceTimer = 0;
+  openingFadeAlpha = 255;
+  openingZoom = 5;
+  openingTextAlpha = 0;
+  introAnimationsStarted = false;
   
   // Reset all fighters
   fighters.forEach(f => f.reset());
@@ -140,12 +170,14 @@ function draw() {
     drawCharacterSelect();
   } else if (battleState === 'ready') {
     drawReadyScreen();
+  } else if (battleState === 'opening') {
+    drawOpeningSequence();
   } else if (battleState === 'battle') {
     // Check for ultimate background dimming across all fighters
     const ultimateFighters = window.allFighters ? window.allFighters.filter(f => f.ultimateActive) : [];
     const ultimateActive = ultimateFighters.length > 0;
     
-    background(28);
+    background(0);
     
     updateBattle();
     beginCamera();
@@ -164,6 +196,9 @@ function draw() {
     drawDamageNumbers();
     drawParticles();
     
+    // Draw vignette effect on vertical edges
+    drawVignette();
+    
     // Draw overhead healthbars for non-player fighters
     drawOverheadHealthbars();
     
@@ -173,6 +208,11 @@ function draw() {
     }
     
     endCamera();
+    
+    // Draw pause menu if open
+    if (pauseMenuOpen) {
+      drawPauseMenu();
+    }
   } else if (battleState === 'summary') {
     beginCamera();
     drawArena();
@@ -190,8 +230,107 @@ function draw() {
     drawSummary();
   }
 
-  if (battleState !== 'characterSelect') {
+  if (battleState !== 'characterSelect' && battleState !== 'opening') {
     drawHud();
+  }
+}
+
+function drawOpeningSequence() {
+  const dt = deltaTime / 1000;
+  openingSequenceTimer += dt;
+  
+  // Opening sequence phases:
+  // 0-1s: Start zoomed in, black screen
+  // 1-2s: Start intro animations, fade out black screen and zoom out from center (fast to slow)
+  // 2-4s: Hold position with "combat start" text, continue intro animations
+  // 4s+: Transition to battle
+  
+  const introDelay = 1;
+  const fadeDuration = 2;
+  const holdDuration = 2;
+  const totalDuration = introDelay + fadeDuration + holdDuration;
+  
+  // Start intro animations after 1 second delay
+  if (openingSequenceTimer >= introDelay && !introAnimationsStarted) {
+    introAnimationsStarted = true;
+    if (window.allFighters) {
+      window.allFighters.forEach(fighter => fighter.startIntroAnimation());
+    }
+  }
+  
+  // Update intro animations
+  if (introAnimationsStarted && window.allFighters) {
+    window.allFighters.forEach(fighter => fighter.updateIntroAnimation(dt));
+  }
+  
+  if (openingSequenceTimer >= totalDuration) {
+    battleState = 'battle';
+    return;
+  }
+  
+  // Calculate zoom with easing (fast to slow)
+  const zoomProgress = constrain((openingSequenceTimer - introDelay) / fadeDuration, 0, 1);
+  // Easing function: easeOutCubic for fast-to-slow
+  const easedProgress = 1 - Math.pow(1 - zoomProgress, 3);
+  openingZoom = lerp(5, 1, easedProgress);
+  
+  // Calculate fade alpha
+  openingFadeAlpha = lerp(255, 0, zoomProgress);
+  
+  // Calculate text alpha (fade in after zoom completes)
+  if (openingSequenceTimer > introDelay + fadeDuration) {
+    const textProgress = constrain((openingSequenceTimer - introDelay - fadeDuration) / 0.5, 0, 1);
+    openingTextAlpha = lerp(0, 255, textProgress);
+  }
+  
+  // Draw arena with opening zoom
+  background(0);
+  
+  // Override camera for opening sequence
+  const originalZoom = cameraZoom;
+  const originalX = cameraX;
+  const originalY = cameraY;
+  
+  cameraZoom = openingZoom;
+  cameraX = ARENA_WIDTH / 2; // Center of arena
+  cameraY = ARENA_HEIGHT / 2;
+  
+  beginCamera();
+  drawArena();
+  
+  // Draw all fighters
+  if (window.allFighters) {
+    window.allFighters.forEach(fighter => fighter.draw());
+  }
+  
+  endCamera();
+  
+  // Restore camera
+  cameraZoom = originalZoom;
+  cameraX = originalX;
+  cameraY = originalY;
+  
+  // Draw black screen fade overlay
+  if (openingFadeAlpha > 0) {
+    push();
+    resetMatrix();
+    fill(0, 0, 0, openingFadeAlpha);
+    noStroke();
+    rect(0, 0, width, height);
+    pop();
+  }
+  
+  // Draw "combat start" text
+  if (openingSequenceTimer > introDelay + fadeDuration && openingTextAlpha > 0) {
+    push();
+    resetMatrix();
+    textAlign(CENTER, CENTER);
+    textSize(80);
+    fill(255, 255, 255, openingTextAlpha);
+    stroke(0, 0, 0, openingTextAlpha);
+    strokeWeight(4);
+    text('COMBAT START', width / 2, height / 2);
+    pop();
   }
 }
 
@@ -247,6 +386,27 @@ function drawArena() {
     fill(255);
     textSize(12);
     text(`FPS: ${nf(frameRate(), 2, 1)}`, 12, 18);
+  }
+}
+
+function drawVignette() {
+  // Vignette width in pixels
+  const vignetteWidth = 150;
+  
+  // Draw left vignette
+  for (let x = 0; x < vignetteWidth; x++) {
+    const alpha = map(x, 0, vignetteWidth, 255, 0);
+    fill(0, 0, 0, alpha);
+    noStroke();
+    rect(x, 0, 1, height);
+  }
+  
+  // Draw right vignette
+  for (let x = 0; x < vignetteWidth; x++) {
+    const alpha = map(x, 0, vignetteWidth, 0, 255);
+    fill(0, 0, 0, alpha);
+    noStroke();
+    rect(width - vignetteWidth + x, 0, 1, height);
   }
 }
 
@@ -314,6 +474,40 @@ function getPlayerControlledFighter() {
 }
 
 function keyPressed() {
+  // Handle pause menu navigation
+  if (pauseMenuOpen && battleState === 'battle') {
+    if (keyCode === UP_ARROW) {
+      pauseMenuOption = (pauseMenuOption - 1 + 2) % 2;
+      return;
+    }
+    if (keyCode === DOWN_ARROW) {
+      pauseMenuOption = (pauseMenuOption + 1) % 2;
+      return;
+    }
+    if (keyCode === ENTER) {
+      if (pauseMenuOption === 0) {
+        // Settings - placeholder
+        console.log('Settings selected (placeholder)');
+      } else if (pauseMenuOption === 1) {
+        // Forfeit match
+        forfeitMatch();
+      }
+      return;
+    }
+    if (keyCode === ESCAPE) {
+      pauseMenuOpen = false;
+      return;
+    }
+    return;
+  }
+  
+  // Open pause menu with ESC key during battle
+  if (battleState === 'battle' && keyCode === ESCAPE) {
+    pauseMenuOpen = true;
+    pauseMenuOption = 0;
+    return;
+  }
+  
   if (battleState === 'characterSelect') {
     // Remove keyboard controls - everything is mouse-controlled now
     

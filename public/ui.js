@@ -23,12 +23,16 @@ function drawSummary() {
 }
 
 function drawHud() {
+  drawBattleTimer();
   drawPlayerHud();
   
   // Draw multi-player HUDs for all non-player-controlled fighters
   if (window.allFighters && window.allFighters.length >= 2) {
     drawMultiPlayerHuds();
   }
+  
+  // Draw pause menu button
+  drawPauseMenuButton();
 }
 
 function drawPlayerHud() {
@@ -309,6 +313,12 @@ function drawOverheadHealthbars() {
     return;
   }
   
+  // Draw triangular indicator above player-controlled fighter
+  const controlledFighter = getPlayerControlledFighter();
+  if (controlledFighter && !controlledFighter.isDefeated) {
+    drawPlayerIndicator(controlledFighter);
+  }
+  
   // Draw overhead healthbars for all non-player-controlled fighters
   window.allFighters.forEach(fighter => {
     if (fighter.isPlayerControlled) return;
@@ -320,6 +330,7 @@ function drawOverheadHealthbars() {
     const barHeight = 4;
     const nameOffset = 15;
     const barOffset = 3;
+    const controlTypeOffset = 28;
     
     // Get fighter's position and apply camera transforms
     const fighterX = fighter.pos.x;
@@ -344,6 +355,18 @@ function drawOverheadHealthbars() {
     }
     text(displayName, fighterX, fighterY - nameOffset);
     
+    // Draw control type (AI or Player)
+    if (!fighter.isDefeated) {
+      const controlType = fighter.isAI ? 'AI' : (fighter.clientId || 'player');
+      if (fighter.isAI) {
+        fill(255, 150, 100);
+      } else {
+        fill(100, 200, 255);
+      }
+      textSize(8);
+      text(controlType, fighterX, fighterY - controlTypeOffset);
+    }
+    
     // Draw healthbar background
     noStroke();
     fill(0, 0, 0, 150);
@@ -366,6 +389,27 @@ function drawOverheadHealthbars() {
     
     pop();
   });
+}
+
+function drawPlayerIndicator(fighter) {
+  push();
+  
+  const indicatorSize = 20;
+  const indicatorY = fighter.pos.y - 90;
+  const indicatorX = fighter.pos.x;
+  
+  // Draw triangular indicator pointing down
+  fill(100, 255, 100);
+  stroke(0, 0, 0, 200);
+  strokeWeight(2);
+  
+  triangle(
+    indicatorX - indicatorSize/2, indicatorY - indicatorSize/2,
+    indicatorX + indicatorSize/2, indicatorY - indicatorSize/2,
+    indicatorX, indicatorY + indicatorSize/2
+  );
+  
+  pop();
 }
 
 
@@ -515,4 +559,92 @@ function statusColor(type) {
     case 'Poise': return '#4dff8d';
     default: return '#999';
   }
+}
+
+function drawPauseMenuButton() {
+  const buttonSize = 40;
+  const buttonX = width - buttonSize - 16;
+  const buttonY = 16;
+  
+  push();
+  fill(50, 50, 50, 200);
+  stroke(255, 100);
+  strokeWeight(2);
+  rect(buttonX, buttonY, buttonSize, buttonSize, 8);
+  
+  // Draw three horizontal lines (menu icon)
+  stroke(255);
+  strokeWeight(3);
+  const lineSpacing = 8;
+  const lineY = buttonY + buttonSize / 2;
+  line(buttonX + 10, lineY - lineSpacing, buttonX + buttonSize - 10, lineY - lineSpacing);
+  line(buttonX + 10, lineY, buttonX + buttonSize - 10, lineY);
+  line(buttonX + 10, lineY + lineSpacing, buttonX + buttonSize - 10, lineY + lineSpacing);
+  
+  pop();
+}
+
+function drawPauseMenu() {
+  const menuWidth = 300;
+  const menuHeight = 200;
+  const menuX = (width - menuWidth) / 2;
+  const menuY = (height - menuHeight) / 2;
+  
+  push();
+  // Semi-transparent background overlay
+  fill(0, 0, 0, 180);
+  noStroke();
+  rect(0, 0, width, height);
+  
+  // Menu panel
+  fill(30, 30, 30, 240);
+  stroke(255, 100);
+  strokeWeight(2);
+  rect(menuX, menuY, menuWidth, menuHeight, 12);
+  
+  // Menu title
+  fill(255);
+  noStroke();
+  textAlign(CENTER, TOP);
+  textSize(24);
+  text('PAUSED', width / 2, menuY + 20);
+  
+  // Menu options
+  const options = ['SETTINGS', 'FORFEIT MATCH'];
+  const optionHeight = 50;
+  const optionStartY = menuY + 60;
+  
+  options.forEach((option, index) => {
+    const optionY = optionStartY + (index * optionHeight);
+    const isSelected = index === pauseMenuOption;
+    
+    // Option background
+    if (isSelected) {
+      fill(60, 60, 80, 200);
+      stroke(100, 150, 255);
+    } else {
+      fill(40, 40, 40, 200);
+      stroke(255, 50);
+    }
+    strokeWeight(1);
+    rect(menuX + 20, optionY, menuWidth - 40, 40, 8);
+    
+    // Option text
+    if (isSelected) {
+      fill(100, 150, 255);
+    } else {
+      fill(200);
+    }
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(16);
+    text(option, width / 2, optionY + 20);
+  });
+  
+  // Instructions
+  fill(150);
+  textSize(12);
+  text('Use UP/DOWN to select, ENTER to confirm, ESC to close', width / 2, menuY + menuHeight - 20);
+  
+  pop();
 }

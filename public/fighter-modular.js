@@ -68,7 +68,7 @@ class Fighter {
     this.staggeredDisplayTimer = 0;       // Timer for visual stagger effects
     
     // VISUAL PROPERTIES
-    this.color = isAI ? '#e74c3c' : character.color; // Fighter color (AI gets red)
+    this.color = isAI ? '#e74c3c' : (character.color || '#3498db'); // Fighter color (AI gets red, fallback to blue)
     
     // DASH ATTACK PROPERTIES
     this.dashTimer = 0;                  // Cooldown timer for dash attacks
@@ -84,9 +84,49 @@ class Fighter {
     
     // DEFEAT STATE PROPERTIES
     this.isDefeated = false;             // Flag for defeated state
+    
+    // INTRO ANIMATION PROPERTIES
+    this.isPlayingIntro = false;         // Flag for intro animation playing
+    this.introAnimationIndex = 0;        // Current intro animation frame index
+    this.introAnimationTimer = 0;        // Timer for intro animation frame transitions
+    this.introAnimationData = null;      // Intro animation data for this character
     // INPUT CONTROLS SYSTEM
     this.controls = {};                 // Object to store input mappings
     this.reset();                        // Initialize all combat systems
+  }
+
+  // Start intro animation
+  startIntroAnimation() {
+    if (typeof INTRO_ANIMATIONS !== 'undefined' && INTRO_ANIMATIONS[this.characterKey]) {
+      this.introAnimationData = INTRO_ANIMATIONS[this.characterKey];
+      this.isPlayingIntro = true;
+      this.introAnimationIndex = 0;
+      this.introAnimationTimer = 0;
+    }
+  }
+
+  // Update intro animation
+  updateIntroAnimation(dt) {
+    if (!this.isPlayingIntro || !this.introAnimationData) return;
+
+    this.introAnimationTimer += dt;
+
+    if (this.introAnimationTimer >= this.introAnimationData.duration) {
+      this.introAnimationTimer = 0;
+      this.introAnimationIndex++;
+
+      // Check if intro animation is complete
+      if (this.introAnimationIndex >= this.introAnimationData.sprites.length) {
+        this.isPlayingIntro = false;
+        this.introAnimationIndex = 0;
+      }
+    }
+  }
+
+  // Get current intro sprite
+  getIntroSprite() {
+    if (!this.isPlayingIntro || !this.introAnimationData) return null;
+    return this.introAnimationData.sprites[this.introAnimationIndex];
   }
 
   // Networking / event helpers (client-side only)
@@ -513,6 +553,15 @@ class Fighter {
     // Skip sprite updates during ultimate - ultimate controls its own sprites
     if (this.ultimateActive) {
       return;
+    }
+    
+    // Use intro sprite if intro animation is playing
+    if (this.isPlayingIntro) {
+      const introSprite = this.getIntroSprite();
+      if (introSprite) {
+        this.currentSprite = introSprite;
+        return;
+      }
     }
     
     // State to sprite mapping for Callisto

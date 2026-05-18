@@ -9,14 +9,39 @@
     <link rel="stylesheet" type="text/css" href="style.css">
 
     <script src="libraries/p5.min.js"></script>
+    <script>
+      // Lightweight AudioWorklet polyfill: ensure `audioContext.audioWorklet.addModule`
+      // exists so p5.sound won't throw when audioWorklet is unavailable.
+      (function(){
+        try {
+          if (typeof AudioContext === 'undefined' && typeof webkitAudioContext !== 'undefined') {
+            window.AudioContext = webkitAudioContext;
+          }
+          if (typeof AudioContext !== 'undefined') {
+            // Do not force creating AudioContext (may require user gesture),
+            // but ensure global reference if one exists.
+            const ctx = window.audioContext || window._p5_audio_ctx || null;
+            if (ctx && !ctx.audioWorklet) {
+              ctx.audioWorklet = { addModule: function() { return Promise.resolve(); } };
+            }
+            // Provide a safe stub if someone tries to access audioWorklet before ctx exists
+            if (!AudioContext.prototype.audioWorklet) {
+              AudioContext.prototype.audioWorklet = { addModule: function() { return Promise.resolve(); } };
+            }
+          }
+        } catch (e) {
+          console.warn('AudioWorklet polyfill failed', e);
+        }
+      })();
+    </script>
     <script src="libraries/p5.sound.min.js"></script>
     <script src="/socket.io/socket.io.js"></script>
     <script>
       // Explicit server connect (replace IP if needed)
       //try {
       //  const socket = io.connect('http://10.21.70.111:3000'); //for pi school;
-            //  const socket = io.connect('http://192.168.50.60:3000'); //for pi home
-      const socket = io.connect('http://localhost:3000');//for local testing
+             const socket = io.connect('http://192.168.50.60:3000'); //for pi home
+     // const socket = io.connect('http://localhost:3000');//for local testing
     //    window._externalSocket = socket;
      // } catch (e) {
       //  console.warn('socket.io connect failed', e);

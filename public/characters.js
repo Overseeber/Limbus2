@@ -190,15 +190,15 @@ function loadSpriteAtlases() {
   atlases.vslash2 = loadImage("data/valencina/vslash2.png");
 
   // ===== Callisto =====
-  atlases.cal1 = loadImage("data/callisto/cal1.png");
-  atlases.cal2 = loadImage("data/callisto/cal2.png");
-  atlases.cal3 = loadImage("data/callisto/cal3.png");
-  atlases.cal4 = loadImage("data/callisto/cal4.png");
-  atlases.cal5 = loadImage("data/callisto/cal5.png");
+  atlases.cal1 = loadImage("data/callisto/Cal1.png");
+  atlases.cal2 = loadImage("data/callisto/Cal2.png");
+  atlases.cal3 = loadImage("data/callisto/Cal3.png");
+  atlases.cal4 = loadImage("data/callisto/Cal4.png");
+  atlases.cal5 = loadImage("data/callisto/Cal5.png");
 
-  atlases.cslash1 = loadImage("data/callisto/cslash1.png");
-  atlases.cslash2 = loadImage("data/callisto/cslash2.png");
-  atlases.cslash3 = loadImage("data/callisto/cslash3.png");
+  atlases.cslash1 = loadImage("data/callisto/Cslash1.png");
+  atlases.cslash2 = loadImage("data/callisto/Cslash2.png");
+  atlases.cslash3 = loadImage("data/callisto/Cslash3.png");
 
   // Pre-scale all atlas images to common sizes asynchronously
   const preScaleAtlases = async () => {

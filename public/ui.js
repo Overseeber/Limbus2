@@ -692,9 +692,9 @@ function drawSettingsPanel() {
   fill(200);
   textSize(14);
   textAlign(LEFT, TOP);
-  text('- Audio: (placeholder)
-- Controls: (placeholder)
-- Graphics: (placeholder)', panelX + 24, panelY + 64);
+  text('- Audio: (placeholder)', panelX + 24, panelY + 64);
+  text('- Controls: (placeholder)', panelX + 24, panelY + 88);
+  text('- Graphics: (placeholder)', panelX + 24, panelY + 112);
 
   // Back hint
   fill(180);

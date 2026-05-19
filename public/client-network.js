@@ -20,18 +20,48 @@ window.Network = {
 
     // Try to connect if socket.io is available and no external socket provided
     if (typeof io !== 'undefined') {
-      try {
-        this.socket = io();
-        this.isConnected = true;
-        this.isLocalAuthority = false;
-        this.socket.on('connect', () => { this.isConnected = true; this.isLocalAuthority = false; console.log('[Network] connected', this.socket.id); });
-        this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
-        this.socket.on('event', (ev) => this._emit('event', ev));
-        this._setupSocketHandlers(this.socket);
-      } catch (e) {
-        console.warn('[Network] socket.io available but connection failed, using local simulator', e);
-        this._startLocal();
-      }
+      // Try each server address in order until one connects
+      const serverAddresses = [
+        'http://10.21.69.171:3000',  // school Pi
+        'http://192.168.50.60:3000',  // home Pi
+        'http://localhost:3000'       // local testing
+      ];
+
+      // Attempt connection to the first address; if it fails after timeout, try the next
+      const tryConnect = (index) => {
+        if (index >= serverAddresses.length) {
+          console.warn('[Network] all server addresses failed, using local simulator');
+          this._startLocal();
+          return;
+        }
+
+        const address = serverAddresses[index];
+        console.log(`[Network] attempting connection to ${address}`);
+        const sock = io.connect(address, { timeout: 3000 });
+
+        let connected = false;
+
+        sock.on('connect', () => {
+          connected = true;
+          this.socket = sock;
+          this.isConnected = true;
+          this.isLocalAuthority = false;
+          console.log('[Network] connected', sock.id, 'to', address);
+          this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
+          this.socket.on('event', (ev) => this._emit('event', ev));
+          this._setupSocketHandlers(this.socket);
+        });
+
+        sock.on('connect_error', () => {
+          if (!connected) {
+            console.warn(`[Network] connection failed to ${address}, trying next...`);
+            sock.close();
+            tryConnect(index + 1);
+          }
+        });
+      };
+
+      tryConnect(0);
     } else {
       console.log('[Network] socket.io not found, using local simulator');
       this._startLocal();

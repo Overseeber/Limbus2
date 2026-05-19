@@ -98,6 +98,9 @@ window.Network = {
     socket.on('peerInput', (data) => {
       this._emit('peerInput', data);
     });
+    socket.on('battleStart', (data) => {
+      this._emit('battleStart', data);
+    });
   },
 
   // Room API helpers
@@ -112,6 +115,12 @@ window.Network = {
   },
   changeCharacter(characterKey) {
     if (this.socket) this.socket.emit('changeCharacter', characterKey);
+  },
+  toggleReady() {
+    if (this.socket) this.socket.emit('toggleReady');
+  },
+  startBattle() {
+    if (this.socket) this.socket.emit('startBattle');
   },
   claimSlot(slotIndex) {
     if (this.socket) this.socket.emit('claimSlot', slotIndex);

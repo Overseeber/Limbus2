@@ -1,16 +1,5 @@
 // Character roster system is globally available
 
-function preload() {
-  //stuff here
-  // Load character roster data from JSON file
-  loadJSON('characters.json', (data) => {
-    window.CHARACTERS = data;
-    console.log('Character roster loaded:', window.CHARACTERS);
-  }, (err) => {
-    console.error('Failed to load character roster:', err);
-  });
-}
-
 let player;
 let enemy;
 let battleState = 'characterSelect';
@@ -101,6 +90,13 @@ function setup() {//test
     Network.on('roomsList', (rooms) => { availableRooms = rooms || []; console.log('roomsList', availableRooms); });
     Network.on('roomState', (state) => { myRoomState = state; myRoomId = state.id; localSlotSelections = (state.slots || []).map(s => s.character || null); console.log('roomState', state); });
     Network.on('joinedRoom', (roomId) => { myRoomId = roomId; console.log('joinedRoom', roomId); });
+    Network.on('battleStart', (data) => {
+      // This room's battle has started. Initialize battle from the player data.
+      console.log('battleStart received', data);
+      if (data && data.slots) {
+        initRoomBattle(data.slots);
+      }
+    });
   }
 }
 
@@ -177,6 +173,64 @@ function initBattle() {
   // Reset all fighters
   fighters.forEach(f => f.reset());
   damageNumbers = [];
+}
+
+function initRoomBattle(slots) {
+  // Initialize battle from room slot data
+  // slots: [{clientId, character, ready}]
+  const activePlayers = slots.filter(s => s && s.clientId);
+  
+  if (activePlayers.length < 2) {
+    console.log('Need at least 2 players for battle!');
+    return;
+  }
+  
+  const fighters = [];
+  const mySocketId = Network && Network.socket ? Network.socket.id : null;
+  
+  for (let i = 0; i < activePlayers.length; i++) {
+    const slot = activePlayers[i];
+    const characterKey = slot.character || 'JOHN';
+    const isPlayerControlled = slot.clientId === mySocketId;
+    const isAI = !isPlayerControlled;
+    
+    const fighter = new Fighter(isAI, `P${i + 1}`, characterKey, isPlayerControlled);
+    fighter.playerId = i + 1;
+    fighter.isAI = isAI;
+    fighter.isPlayerControlled = isPlayerControlled;
+    
+    const spacing = 300;
+    const centerX = width / 2;
+    const totalWidth = (activePlayers.length - 1) * spacing;
+    const startX = centerX - totalWidth / 2;
+    
+    fighter.pos.x = startX + (i * spacing);
+    fighter.pos.y = height - 100;
+    fighter.facing = isPlayerControlled ? 1 : -1;
+    
+    fighters.push(fighter);
+  }
+  
+  window.allFighters = fighters;
+  player = fighters.find(f => f.isPlayerControlled);
+  enemy = fighters.find(f => !f.isPlayerControlled) || fighters.find(f => f !== player);
+  
+  battleState = 'opening';
+  winner = null;
+  summaryText = '';
+  battleTimer = 0;
+  
+  openingSequenceTimer = 0;
+  openingFadeAlpha = 255;
+  openingZoom = 5;
+  openingTextAlpha = 0;
+  introAnimationsStarted = false;
+  
+  fighters.forEach(f => f.reset());
+  damageNumbers = [];
+  
+  // Clear room state since we're now in battle
+  myRoomState = null;
 }
 
 function draw() {
@@ -676,9 +730,20 @@ function mousePressed() {
     }
     
     const slots = myRoomState.slots || [];
-    const columnWidth = 200;
+    const columnWidth = 220;
     const count = Math.max(2, slots.length);
     const startX = (width - (count * columnWidth)) / 2;
+
+    // Check Start Battle button click
+    if (myRoomState.allReady) {
+      const btnX = width / 2 - 100;
+      const btnY = 430;
+      if (mx > btnX && mx < btnX + 200 && my > btnY && my < btnY + 50) {
+        console.log('Sending startBattle');
+        Network.startBattle();
+        return;
+      }
+    }
 
     for (let i = 0; i < count; i++) {
       const x = startX + i * columnWidth;
@@ -688,28 +753,29 @@ function mousePressed() {
       if (mx > x && mx < x + columnWidth && my > yTop && my < yBottom) {
         const slot = slots[i];
         if (!slot || !slot.clientId) {
-          // Claim this slot
-          if (Network && Network.claimSlot) {
-            Network.claimSlot(i);
-          } else if (Network && Network.joinRoom) {
-            // Fallback: join room if claimSlot not available
-            if (!myRoomId) {
-              Network.joinRoom(myRoomState.id);
-            }
-          }
+          // Empty slot - nothing to do here (auto-join is handled on connection)
           return;
         } else {
-          // If this slot is ours, cycle character
+          // Check if this is our owned slot
           if (Network && Network.socket && slot.clientId === Network.socket.id) {
-            const keys = availableCharacterKeys();
-            if (keys.length === 0) return;
-            const cur = localSlotSelections[i] || keys[0];
-            const idx = keys.indexOf(cur);
-            const next = (idx + 1) % keys.length;
-            const newKey = keys[next];
-            localSlotSelections[i] = newKey;
-            Network.changeCharacter(newKey);
-            return;
+            // Check if click is on the ready/unready button area
+            const readyBtnY = yTop + 210;
+            if (my > readyBtnY && my < readyBtnY + 30) {
+              Network.toggleReady();
+              return;
+            }
+            // Otherwise, click cycles character (on the character area)
+            if (my > yTop && my < yTop + 160) {
+              const keys = availableCharacterKeys();
+              if (keys.length === 0) return;
+              const cur = localSlotSelections[i] || keys[0];
+              const idx = keys.indexOf(cur);
+              const next = (idx + 1) % keys.length;
+              const newKey = keys[next];
+              localSlotSelections[i] = newKey;
+              Network.changeCharacter(newKey);
+              return;
+            }
           }
         }
       }
@@ -1057,12 +1123,84 @@ function drawCharacterSelect() {
       text(charName, x + (columnWidth - 20) / 2, y + 80);
       pop();
 
-      // Show player info
+      // Show ready state
       push();
       textAlign(CENTER, CENTER);
-      textSize(12);
-      fill(180);
-      text(`Player ${i + 1}`, x + (columnWidth - 20) / 2, y + 220);
+      textSize(14);
+      if (slot.ready) {
+        fill(100, 255, 100);
+        text('✓ READY', x + (columnWidth - 20) / 2, y + 140);
+      } else {
+        fill(255, 255, 100);
+        text('NOT READY', x + (columnWidth - 20) / 2, y + 140);
+      }
+      pop();
+
+      // Show click hints for the current player's slot
+      if (slot.clientId === (Network && Network.socket && Network.socket.id)) {
+        push();
+        textAlign(CENTER, CENTER);
+        textSize(12);
+        fill(150);
+        text('Click: cycle character', x + (columnWidth - 20) / 2, y + 170);
+        text('Click READY below', x + (columnWidth - 20) / 2, y + 190);
+        pop();
+
+        // Ready/Unready button for this player
+        const readyBtnY = y + 210;
+        if (slot.ready) {
+          fill(100, 80, 80);
+          stroke(255, 100, 100);
+        } else {
+          fill(60, 100, 60);
+          stroke(100, 255, 100);
+        }
+        strokeWeight(2);
+        const btnW = columnWidth - 40;
+        rect(x + 10, readyBtnY, btnW, 30, 6);
+        fill(255);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(14);
+        text(slot.ready ? 'UNREADY' : 'TOGGLE READY', x + (columnWidth - 20) / 2, readyBtnY + 15);
+        stroke(0);
+        strokeWeight(1);
+      } else {
+        // Show other player info
+        push();
+        textAlign(CENTER, CENTER);
+        textSize(12);
+        fill(180);
+        text(`Player ${i + 1}`, x + (columnWidth - 20) / 2, y + 220);
+        pop();
+      }
+    }
+
+    // Show Start Battle button if all players are ready
+    if (myRoomState.allReady) {
+      push();
+      const btnX = width / 2 - 100;
+      const btnY = 430;
+      fill(60, 180, 60);
+      stroke(100, 255, 100);
+      strokeWeight(3);
+      rect(btnX, btnY, 200, 50, 10);
+      fill(255);
+      noStroke();
+      textAlign(CENTER, CENTER);
+      textSize(20);
+      text('START BATTLE!', width / 2, btnY + 25);
+      stroke(0);
+      strokeWeight(1);
+      pop();
+    } else {
+      // Show waiting text
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(16);
+      fill(255, 255, 100);
+      const notReady = (myRoomState.slots || []).filter(s => s && s.clientId && !s.ready).length;
+      text(`Waiting for ${notReady} player(s) to ready up...`, width / 2, 450);
       pop();
     }
 
@@ -1075,7 +1213,7 @@ function drawCharacterSelect() {
   textAlign(CENTER, CENTER);
   textSize(24);
   fill(200);
-  text('Join or Create a Room', width / 2, 80);
+  text('FIND MATCH', width / 2, 80);
   
   // Available rooms
   textSize(16);
@@ -1090,7 +1228,7 @@ function drawCharacterSelect() {
   if (availRooms.length === 0) {
     fill(100);
     textSize(14);
-    text('No rooms available', 50, roomY);
+    text('No rooms available — create one!', 50, roomY);
     roomY += 40;
   } else {
     for (let i = 0; i < availRooms.length; i++) {
@@ -1132,150 +1270,6 @@ function drawCharacterSelect() {
   textSize(14);
   text('Create New Room', createButtonX + roomButtonWidth / 2, createButtonY + roomButtonHeight / 2);
   
-  pop();
-
-  // Legacy column style when not using rooms
-  // Draw player columns - Super Smash Bros style
-  const columnWidth = 200;
-  const startX = (width - (players.length * columnWidth)) / 2;
-
-  for (let i = 0; i < players.length; i++) {
-    const player = players[i];
-    const x = startX + i * columnWidth;
-
-    // Highlight selected player slot
-    if (i === selectedPlayerSlot) {
-      push();
-      fill(100, 150, 255, 30);
-      rect(x - 10, 80, columnWidth - 20, 400);
-      pop();
-    }
-
-    // Player header
-    push();
-    textAlign(CENTER, CENTER);
-    textSize(20);
-
-    if (!player.active) {
-      fill(100);
-    } else if (i === selectedPlayerSlot && characterSelectOption === 0) {
-      fill(100, 150, 255);
-    } else {
-      fill(255);
-    }
-
-    text(`P${i + 1}`, x + columnWidth/2, 100);
-
-    if (!player.active) {
-      const activeCount = players.filter(p => p.active).length;
-
-      if (activeCount >= 3 && activeCount < MAX_PLAYERS && i === activeCount) {
-        // Show "Add Player" option for the next available slot
-        textSize(14);
-        fill(100, 255, 100);
-        text('Click to add', x + columnWidth/2, 125);
-        textSize(12);
-        fill(150);
-        text('new player', x + columnWidth/2, 145);
-      } else {
-        // Show normal join option
-        textSize(14);
-        fill(150);
-        text('Press A to join', x + columnWidth/2, 125);
-      }
-      pop();
-      continue;
-    }
-
-    // Character selection
-    textSize(16);
-    fill(200);
-    text('Character:', x + columnWidth/2, 160);
-
-    if (i === selectedPlayerSlot && characterSelectOption === 0) {
-      fill(100, 150, 255);
-    } else {
-      fill(255);
-    }
-
-    const charData = CHARACTERS && CHARACTERS[player.character] ? CHARACTERS[player.character] : null;
-    text(charData ? charData.name : player.character, x + columnWidth/2, 180);
-
-    // AI toggle
-    textSize(16);
-    fill(200);
-    text('AI:', x + columnWidth/2, 220);
-
-    if (i === selectedPlayerSlot && characterSelectOption === 1) {
-      fill(100, 150, 255);
-    } else {
-      fill(255);
-    }
-
-    text(player.ai ? 'ON' : 'OFF', x + columnWidth/2, 240);
-
-    // Ready status (only for non-AI players)
-    if (!player.ai) {
-      textSize(16);
-      fill(200);
-      text('Ready:', x + columnWidth/2, 280);
-
-      if (player.ready) {
-        fill(100, 255, 100);
-        text('✓ READY', x + columnWidth/2, 300);
-      } else {
-        fill(255, 255, 100);
-        text('Click to ready', x + columnWidth/2, 300);
-      }
-    } else {
-      // Show auto-ready status for AI players
-      textSize(16);
-      fill(100, 255, 100);
-      text('✓ Auto-ready', x + columnWidth/2, 290);
-    }
-
-    // Remove player option
-    textSize(14);
-    fill(200);
-    text('Remove:', x + columnWidth/2, 330);
-
-    if (i === selectedPlayerSlot && characterSelectOption === 3) {
-      fill(255, 100, 100);
-    } else {
-      fill(255);
-    }
-
-    text('Click here', x + columnWidth/2, 350);
-
-    // Control indicator
-    if (player.controlled) {
-      textSize(16);
-      fill(100, 255, 100);
-      text('YOU CONTROL', x + columnWidth/2, 390);
-    }
-
-    pop();
-  }
-
-  // Instructions
-  push();
-  textAlign(CENTER, CENTER);
-  textSize(16);
-  fill(150);
-  text('Click on options to change them | Click "Click to ready" when prepared', width / 2, 500);
-
-  // Show ready status
-  const activePlayers = players.filter(p => p.active);
-  const allReady = activePlayers.every(p => p.ready);
-
-  if (allReady && activePlayers.length > 0) {
-    fill(100, 255, 100);
-    text('All players ready! Press ENTER to start battle', width / 2, 520);
-  } else {
-    fill(255, 255, 100);
-    const notReadyCount = activePlayers.filter(p => !p.ready).length;
-    text(`Waiting for ${notReadyCount} player(s) to ready up...`, width / 2, 520);
-  }
   pop();
 }
 

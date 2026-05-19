@@ -41,9 +41,8 @@ class Vector2 { //2 diemtional vector
 
 
 
+
 console.log("Server is Running");
-
-
 
 
 
@@ -55,8 +54,9 @@ class Client {
     {
         this.id = id;
         this.fighter = null;
-        this.room = null;
+        this.room = null; // stores room ID string
         this.state = 'MainMenu'; // MainMenu, CharacterSelect, InGame, PostGame
+        this.ready = false;
     }
 }
 
@@ -64,19 +64,16 @@ class Room {
     constructor(id)
     {
         this.id = id;
-        this.clients = [];
+        this.clients = []; // stores socket IDs (strings)
         this.match = null;
         this.type = '1v1'; // 1v1, free-for-all, etc.
     }
 }
 
-// Rooms registry (roomId -> Room)
-const ROOMS = {};
-
 function createRoom(id) {//makes new room
-    if (ROOMS[id]) return ROOMS[id];//returns if room aready exists
+    if (roomList[id]) return roomList[id];//returns if room already exists
     const r = new Room(id);
-    ROOMS[id] = r;
+    roomList[id] = r;
     return r;
 }
 
@@ -85,10 +82,21 @@ function getRoomState(room) {//checks room state
         const client = clientList[cid];
         return {
             clientId: cid,
-            character: client && client.fighter ? client.fighter.class : null
+            character: client && client.fighter ? client.fighter.class : null,
+            ready: client ? client.ready : false
         };
     });
-    return { id: room.id, slots };
+    // Check if all ready
+    const allReady = slots.length >= 2 && slots.every(s => s.ready === true);
+    return { id: room.id, slots, allReady };
+}
+
+// Helper to notify all clients in a room of its state using Socket.IO rooms
+function emitRoomState(roomId) {
+    const room = roomList[roomId];
+    if (!room) return;
+    const state = getRoomState(room);
+    io.to(roomId).emit('roomState', state);
 }
 
 //get client side match with server side, then resolve any conflicts
@@ -134,18 +142,28 @@ class Fighter {
 
 //functions for stuff
 
-function broadcastEvent(event, excludeClientId = null) {
-    // Broadcast an event to all clients in the same room, excluding the sender if specified
-    const roomId = clientList[excludeClientId] ? clientList[excludeClientId].room : null;
-    if (!roomId) return;
-    const room = ROOMS[roomId];
+function broadcastEvent(event, excludeSocketId = null, roomId = null) {
+    // Broadcast an event to all clients in the specified room (or the sender's room)
+    // using Socket.IO rooms for efficient delivery
+    if (!roomId) {
+        if (!excludeSocketId) return;
+        const client = clientList[excludeSocketId];
+        if (!client || !client.room) return;
+        roomId = client.room;
+    }
+    const room = roomList[roomId];
     if (!room) return;
 
-    room.clients.forEach(cid => {
-        if (cid === excludeClientId) return;
-        const s = io.sockets.sockets.get(cid);
-        if (s) s.emit('event', event);
-    });
+    if (excludeSocketId) {
+        // Send to everyone in the room except the sender
+        room.clients.forEach(cid => {
+            if (cid === excludeSocketId) return;
+            const s = io.sockets.sockets.get(cid);
+            if (s) s.emit('event', event);
+        });
+    } else {
+        io.to(roomId).emit('event', event);
+    }
 }
 
 function validMove(fighter, moveRequest) {
@@ -304,122 +322,148 @@ io.sockets.on('connection', (socket) => {
     // blank state fighter; class is null until client selects
     const fighter = new Fighter({ class: null, hp: null, maxHp: null, speed: null, jumpHeight: null, baseDamage: null, staggerThreshold: null, staggerLength: null, weapon: 'Sword', knockbackMultiplier: 1 });
     client.fighter = fighter;
-    client.room = null; // not in a room yet
-//if no rooms in room list, create new room and add client to it, otherwise add client to existing room with less than 2 clients
-    if (Object.keys(roomList).length === 0) {
-        const roomId = 'room1';//intitiate first room
-        const room = new Room(roomId);
-        room.clients.push(client);//add client to room
-        client.room = room;//assign room to client
-        roomList[roomId] = room;//add room to room list
-        socket.emit('joinedRoom', roomId);//notify client of room join
-    } else {
-        let addedToRoom = false;//add client to existing room
-        for (const roomId in roomList) {
-            const room = roomList[roomId];
-            if (room.clients.length < 2) {
-                room.clients.push(client);
-                client.room = room;
-                socket.emit('joinedRoom', room.id);
-                addedToRoom = true;
-                break;
-            }
-        }
-        if (!addedToRoom) {
-            const newRoomId = 'room' + (Object.keys(roomList).length + 1);
-            const newRoom = new Room(newRoomId);
-            newRoom.clients.push(client);
-            client.room = newRoom;
-            roomList[newRoomId] = newRoom;
-        }
-    }
+
+    // Register client in clientList first
+    clientList[socket.id] = client;
+
+    // Do NOT auto-assign to a room.
+    // Client starts in the lobby and must manually create or join a room.
+    // Default character is set when they join a room.
+    client.fighter.class = 'JOHN'; // default, will be set properly on join
+
+    console.log(socket.id + ' connected (no room assigned)');
+
     //for testing, log room list and client list
     console.log('Current Rooms:', Object.keys(roomList));
     console.log('Current Clients:', Object.keys(clientList));
-//order of operations here is: client connects -> server creates client object and fighter object -> client sends inputs to server -> server processes inputs and updates fighter state -> server broadcasts updated state to all clients
 
-    // register client
-    clientList[socket.id] = client;
+    // Send current rooms list to the client so they can see available rooms
+    socket.emit('roomsList', Object.keys(roomList));
 
-    // Send current rooms list to the client
-    socket.emit('roomsList', Object.keys(ROOMS));
-
-    // Helper to notify all clients in a room of its state
-    function emitRoomState(roomId) {
-        const room = ROOMS[roomId];
-        if (!room) return;
-        const state = getRoomState(room);
-        (room.clients || []).forEach(cid => {
-            const s = io.sockets.sockets.get(cid);
-            if (s) s.emit('roomState', state);
-        });
+    // Helper to broadcast room list to all connected clients
+    function broadcastRoomList() {
+        io.sockets.emit('roomsList', Object.keys(roomList));
     }
 
     // Create and join a room
     socket.on('createRoom', (roomId) => {
         if (!roomId) return;
+        // Leave current room first
+        if (client.room) {
+            const oldRoom = roomList[client.room];
+            if (oldRoom) {
+                oldRoom.clients = oldRoom.clients.filter(id => id !== socket.id);
+                socket.leave(client.room);
+                // Clean up empty rooms (except room1 which is the default)
+                if (oldRoom.clients.length === 0 && oldRoom.id !== 'room1') {
+                    delete roomList[oldRoom.id];
+                }
+            }
+        }
+
         const room = createRoom(roomId);
         if (!room.clients.includes(socket.id)) {
             room.clients.push(socket.id);
             client.room = room.id;
+            socket.join(room.id);
         }
         socket.emit('joinedRoom', room.id);
         emitRoomState(room.id);
+        broadcastRoomList();
     });
 
     // Join existing room
     socket.on('joinRoom', (roomId) => {
-        const room = ROOMS[roomId];
+        const room = roomList[roomId];
         if (!room) {
             socket.emit('error', { message: 'ROOM_NOT_FOUND' });
             return;
         }
+        // Leave current room first
+        if (client.room) {
+            const oldRoom = roomList[client.room];
+            if (oldRoom) {
+                oldRoom.clients = oldRoom.clients.filter(id => id !== socket.id);
+                socket.leave(client.room);
+                // Clean up empty rooms (except room1 which is the default)
+                if (oldRoom.clients.length === 0 && oldRoom.id !== 'room1') {
+                    delete roomList[oldRoom.id];
+                }
+            }
+        }
+
         if (!room.clients.includes(socket.id)) {
             room.clients.push(socket.id);
             client.room = room.id;
+            socket.join(room.id);
         }
         socket.emit('joinedRoom', room.id);
         emitRoomState(room.id);
+        broadcastRoomList();
     });
 
     // Leave current room
     socket.on('leaveRoom', () => {
         if (!client.room) return;
-        const room = ROOMS[client.room];
+        const room = roomList[client.room];
         if (!room) return;
         room.clients = room.clients.filter(id => id !== socket.id);
+        socket.leave(client.room);
+        // Clean up empty rooms (except room1 which is the default)
+        if (room.clients.length === 0 && room.id !== 'room1') {
+            delete roomList[room.id];
+        }
         client.room = null;
         emitRoomState(room.id);
+        broadcastRoomList();
     });
 
     // Change character selection for this client in their room
     socket.on('changeCharacter', (characterKey) => {
         client.fighter.class = characterKey;
-        // Optionally, populate other fighter stats server-side from a CHARACTERS list if available
+        // Unready the client when they change character
+        client.ready = false;
         if (client.room) emitRoomState(client.room);
     });
 
-    // Broadcast inputs to room peers
+    // Toggle ready state for this client
+    socket.on('toggleReady', () => {
+        client.ready = !client.ready;
+        if (client.room) emitRoomState(client.room);
+    });
+
+    // Start the battle (sent by room host / first client when all ready)
+    socket.on('startBattle', () => {
+        const room = roomList[client.room];
+        if (!room) return;
+        const state = getRoomState(room);
+        if (state.allReady) {
+            io.to(client.room).emit('battleStart', {
+                slots: state.slots
+            });
+            console.log('Battle started in room ' + client.room);
+        }
+    });
+
+    // Broadcast inputs to room peers using Socket.IO rooms
     socket.on('input', (data) => {
-        // If client is in a room, broadcast to other clients in room
+        // If client is in a room, broadcast to other clients in room using Socket.IO
         if (client.room) {
-            const room = ROOMS[client.room];
-            if (room) {
-                room.clients.forEach(cid => {
-                    if (cid === socket.id) return;
-                    const s = io.sockets.sockets.get(cid);
-                    if (s) s.emit('peerInput', { from: socket.id, data });
-                });
-            }
+            socket.to(client.room).emit('peerInput', { from: socket.id, data });
         }
     });
 
     // Handle disconnect
     socket.on('disconnect', () => {
         // Remove from any room
-        if (client.room && ROOMS[client.room]) {
-            const room = ROOMS[client.room];
+        if (client.room && roomList[client.room]) {
+            const room = roomList[client.room];
             room.clients = room.clients.filter(id => id !== socket.id);
+            socket.leave(client.room);
+            // Clean up empty rooms (except room1 which is the default)
+            if (room.clients.length === 0 && room.id !== 'room1') {
+                delete roomList[room.id];
+            }
             emitRoomState(room.id);
         }
         delete clientList[socket.id];
@@ -427,9 +471,9 @@ io.sockets.on('connection', (socket) => {
     });
 
 
- socket.on("changeState", (newState) => {
+  socket.on("changeState", (newState) => {
 
-    players[socket.id].state = newState;
+    client.state = newState;
 
     console.log(socket.id + " -> " + newState);
 
@@ -441,7 +485,6 @@ io.sockets.on('connection', (socket) => {
 
 
 setInterval(() => {
-
-    
-}, 50 );
-
+    // If client is searching for a room, update room list every 5 seconds
+    io.sockets.emit('roomsList', Object.keys(roomList));
+}, 5000 );

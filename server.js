@@ -165,6 +165,10 @@ class Fighter {
         this.state= 'idle'; // idle, attacking, moving, staggered
         this.pos= new Vector2(0,0);
         this.vel = new Vector2(0,0);
+        this.state = 'idle'; // idle, moving, attacking, staggered, etc.
+        this.stagger = 0;
+        this.isStaggered = false;
+        this.staggerTimer = 0;
         this.statuses = [];
         
     }
@@ -361,6 +365,16 @@ function processDeath(fighter) { if (fighter.hp <= 0 && !fighter.isDefeated) {
       endBattle(match, activeFighters[0]);
     }
   }
+}
+
+
+function updateMatch(match) {
+    match.fighters.forEach(fighter => {
+        updategravity(fighter);
+        updateStagger(fighter);
+        processDeath(fighter);
+        // Other per-tick updates like status effects, cooldowns, etc.
+    });
 }
 
 function updategravity(fighter) {
@@ -610,6 +624,11 @@ io.sockets.on('connection', (socket) => {
         socket.on('INPUT_DASH', (direction) => {
             // Validate dash input and update fighter position and state
             //check how dash works client side, then implement server side with same logic but also check for collisions and boundaries, and broadcast new position to other clients in room in interval loop, not immediately to avoid spamming updates
+            io.to(client.room).emit('event', {
+                type: 'DASH',
+                fighterId: client.fighter.id,
+                direction: direction
+            });
         });
 
 
@@ -625,12 +644,30 @@ io.sockets.on('connection', (socket) => {
             getStatusMods(socket.client.fighter); //get status mods for damage calculation
             getonhit(socket.client.fighter, defenders, attackData); //get unique on hit effects here for each character, type of attack as well 
             resolveHit(socket.client.fighter, defenders, attackData);
+            applyKnockback(defenders, attackData.knockback, attackData.direction); //apply knockback to defenders based on attack data
          }
+         //broadcast hit results to clients in room, including damage dealt, status effects applied, and any stagger or knockback
+         io.to(client.room).emit('attackResult', {
+            attackerId: socket.id,
+            hitPlayers: Hitplayers.map(def => def.id),
+            damage: attackData.damage,
+            statusEffects: attackData.statusEffects,
+            stagger: attackData.stagger,
+            knockback: attackData.knockback
+         });
            //check attacker bleed status
         });
           socket.on('INPUT_GUARD', (inputData) => {
             // Validate guard input and update fighter state
-           
+           socket.fighter.state - 'guarding';
+        });
+        socket.on('INPUT_ABILITY', (abilityId) => {
+            // Validate ability input, check cooldowns, and update fighter state
+            // Broadcast ability usage and effects to clients in room
+        });
+        socket.on('INPUT_ULTIMATE', () => {
+            // Validate ultimate input, check conditions, and update fighter state
+            // Broadcast ultimate usage and effects to clients in room
         });
     }
 
@@ -671,6 +708,16 @@ setInterval(() => {
         const match = roomList[roomId].match;
         // Process match logic, e.g. update fighter positions, check for hits, apply damage, etc.
         // Emit updated match state to clients in the room
+        //send positions
+        for (const fighter of match.fighters) {
+            broadcastEvent({
+                type: 'MOVE',
+                fighterId: fighter.id,
+                position: fighter.pos,
+                velocity: fighter.vel
+            }, null, roomId);
+        }   
+        updateMatch(match);
     }
 }, 50);
 //match searching

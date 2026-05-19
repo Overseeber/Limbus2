@@ -27,6 +27,14 @@ class Fighter {
     this.isAI = isAI;                    // AI vs Human control flag
     this.name = name;                     // Display name for UI
     this.isPlayerControlled = isPlayerControlled; // Human control flag
+    this.clientId = null;                 // Network client id for room-player mapping
+    this.isLocalPlayer = false;           // Whether this fighter belongs to this client
+    this.remoteInput = {                  // Remote input state for non-local player control
+      left: false,
+      right: false,
+      up: false,
+      down: false
+    };
     
     // CHARACTER SELECTION WITH FALLBACK
     // Safely select character with fallback to prevent errors
@@ -1119,10 +1127,18 @@ class Fighter {
       this.setState('idle');
     }
     
+    if (keyLower === this.controls.left) {
+      this.remoteInput.left = true;
+    }
+    if (keyLower === this.controls.right) {
+      this.remoteInput.right = true;
+    }
     if (keyLower === this.controls.up) {
+      this.remoteInput.up = true;
       this.jumpRequest = true;
     }
     if (keyLower === this.controls.down) {
+      this.remoteInput.down = true;
       this.duckRequest = true;
       // Check if also attacking for slam attack
       if (this.attackRequest && !this.onGround()) {
@@ -1150,10 +1166,18 @@ class Fighter {
 
   processKeyReleased(keyValue) {
     const keyLower = keyValue.toLowerCase();
+    if (keyLower === this.controls.left) {
+      this.remoteInput.left = false;
+    }
+    if (keyLower === this.controls.right) {
+      this.remoteInput.right = false;
+    }
     if (keyLower === this.controls.down) {
+      this.remoteInput.down = false;
       this.duckRequest = false;
     }
     if (keyLower === this.controls.up) {
+      this.remoteInput.up = false;
       this.jumpRequest = false;
     }
     if (keyLower === this.controls.attack) {
@@ -1726,9 +1750,15 @@ class Fighter {
       if (this.ai.moveLeft) moveDir -= 1;
       if (this.ai.moveRight) moveDir += 1;
     } else if (this.isPlayerControlled) {
-      // For player-controlled fighter, check actual input (not AI properties)
-      if (keyIsDown(this.controls.left.toUpperCase().charCodeAt(0))) moveDir -= 1;
-      if (keyIsDown(this.controls.right.toUpperCase().charCodeAt(0))) moveDir += 1;
+      if (this.isLocalPlayer) {
+        // Local controlled fighters use actual keyboard state
+        if (keyIsDown(this.controls.left.toUpperCase().charCodeAt(0))) moveDir -= 1;
+        if (keyIsDown(this.controls.right.toUpperCase().charCodeAt(0))) moveDir += 1;
+      } else {
+        // Remote player-controlled fighters use networked input state
+        if (this.remoteInput.left) moveDir -= 1;
+        if (this.remoteInput.right) moveDir += 1;
+      }
     }
     // If not AI and not player-controlled, don't move (for second player control later)
 

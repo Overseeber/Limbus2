@@ -700,31 +700,26 @@ io.sockets.on('connection', (socket) => {
     
 
 });
-//pro game(paly) loop, runs every 50ms (20 ticks per second)
+// pro game loop, runs every 50ms (20 ticks per second)
 setInterval(() => {
-    // Game loop logic here, runs every 50ms (20 ticks per second)
-    // Process inputs, update game state, handle matches, etc.
-    if (roomList[roomId] && roomList[roomId].match) {
-        const match = roomList[roomId].match;
+    Object.values(roomList).forEach(room => {
+        if (!room.match) return;
+        const match = room.match;
         // Process match logic, e.g. update fighter positions, check for hits, apply damage, etc.
-        // Emit updated match state to clients in the room
-        //send positions
         for (const fighter of match.fighters) {
             broadcastEvent({
                 type: 'MOVE',
                 fighterId: fighter.id,
                 position: fighter.pos,
                 velocity: fighter.vel
-            }, null, roomId);
-        }   
+            }, null, room.id);
+        }
         updateMatch(match);
-    }
+    });
 }, 50);
-//match searching
-setInterval(() => {
-    // If client is searching for a room, update room list every 5 seconds
-    if (clientList[socket.id].state == "MainMenu") {
-        broadcastRoomList();
-    }
 
-}, 2000 );
+// match searching
+setInterval(() => {
+    broadcastRoomList();
+}, 2000);
+

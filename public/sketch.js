@@ -97,6 +97,9 @@ function setup() {//test
         initRoomBattle(data.slots);
       }
     });
+    Network.on('peerInput', (payload) => {
+      handleRoomPeerInput(payload);
+    });
   }
 }
 
@@ -191,13 +194,14 @@ function initRoomBattle(slots) {
   for (let i = 0; i < activePlayers.length; i++) {
     const slot = activePlayers[i];
     const characterKey = slot.character || 'JOHN';
-    const isPlayerControlled = slot.clientId === mySocketId;
-    const isAI = !isPlayerControlled;
+    const isLocalPlayer = slot.clientId === mySocketId;
     
-    const fighter = new Fighter(isAI, `P${i + 1}`, characterKey, isPlayerControlled);
+    const fighter = new Fighter(false, `P${i + 1}`, characterKey, true);
     fighter.playerId = i + 1;
-    fighter.isAI = isAI;
-    fighter.isPlayerControlled = isPlayerControlled;
+    fighter.clientId = slot.clientId;
+    fighter.isLocalPlayer = isLocalPlayer;
+    fighter.isAI = false;
+    fighter.isPlayerControlled = true;
     
     const spacing = 300;
     const centerX = width / 2;
@@ -206,7 +210,7 @@ function initRoomBattle(slots) {
     
     fighter.pos.x = startX + (i * spacing);
     fighter.pos.y = height - 100;
-    fighter.facing = isPlayerControlled ? 1 : -1;
+    fighter.facing = isLocalPlayer ? 1 : -1;
     
     fighters.push(fighter);
   }
@@ -231,6 +235,35 @@ function initRoomBattle(slots) {
   
   // Clear room state since we're now in battle
   myRoomState = null;
+}
+
+function handleRoomPeerInput(payload) {
+  if (!payload || !payload.from || !payload.data || !window.allFighters) return;
+  const remoteFighter = window.allFighters.find(f => f.clientId === payload.from);
+  if (!remoteFighter) return;
+
+  const input = payload.data;
+  if (input.type === 'keyPressed' && input.key) {
+    remoteFighter.processKeyPressed(input.key);
+  } else if (input.type === 'keyReleased' && input.key) {
+    remoteFighter.processKeyReleased(input.key);
+  } else if (input.type === 'mouse') {
+    if (input.action === 'attackPress') {
+      remoteFighter.requestAttack();
+    } else if (input.action === 'attackRelease') {
+      remoteFighter.releaseAttack(false);
+    } else if (input.action === 'guardPress') {
+      remoteFighter.requestGuard();
+    } else if (input.action === 'guardRelease') {
+      remoteFighter.releaseGuard();
+    } else if (input.action === 'evadePress') {
+      remoteFighter.requestEvade();
+    } else if (input.action === 'dash') {
+      if (typeof remoteFighter.startDash === 'function') {
+        remoteFighter.startDash();
+      }
+    }
+  }
 }
 
 function draw() {

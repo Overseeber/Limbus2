@@ -239,9 +239,66 @@ function detectcollision(fighterA, fighterB) {
     //do collision stuff here
   }
 
-  function detecthit(){
-    //check if hitbox of attack overlaps with opponent hitbox, if so, apply damage and knockback
+  function detectHit(attacker, defenders, attackData) {
+
+    const hits = [];
+
+    const attackHitbox = attackData.hitbox;
+
+    const attackPos = attacker.fighter.pos.copy().add(
+        getAttackOffset(attacker.fighter.attackdir)
+    );
+
+    // attack box edges
+    const atkLeft = attackPos.x;
+    const atkRight = attackPos.x + attackHitbox.width;
+    const atkTop = attackPos.y;
+    const atkBottom = attackPos.y + attackHitbox.height;
+
+    for (const defender of defenders) {
+
+        // don't hit self
+        if (defender.id === attacker.id) continue;
+
+        const defPos = defender.fighter.pos;
+        const defHitbox = defender.fighter.hitbox;
+
+        // defender edges
+        const defLeft = defPos.x;
+        const defRight = defPos.x + defHitbox.width;
+        const defTop = defPos.y;
+        const defBottom = defPos.y + defHitbox.height;
+
+        // overlap test
+        const overlap =
+            atkRight >= defLeft &&
+            atkLeft <= defRight &&
+            atkBottom >= defTop &&
+            atkTop <= defBottom;
+
+        if (overlap) {
+            hits.push(defender);
+        }
+    }
+
+    return hits;
+}
+
+  function getdmgandknockback(fighter){
+    //get characte specific damage buffs/debuffs here
   }
+
+  function getonhit(attacker, defender, attackData) {
+    //get unique on hit effects here for each character, type of attack as well
+  }
+
+
+  //if hit, do hit things
+  function resolveHit(attacker, defender, attackData) {
+    const damage = attacker.baseDamage
+    getonhit(attacker, defender, attackData);
+    getdmgandknockback(attacker);
+    }
 
   function applyKnockback(fighter, knockbackAmount, direction){
     //move fighter in direction of knockback by knockbackAmount, while checking for collisions and boundaries
@@ -306,12 +363,49 @@ function processDeath(fighter) { if (fighter.hp <= 0 && !fighter.isDefeated) {
   }
 }
 
+function updategravity(fighter) {
+    // Apply gravity to fighter's vertical velocity
+    fighter.vel.y += GRAVITY * deltaTime;
+}
+
+function endBattle(match, winner) {
+}
+
 class Status {
     constructor(type, potency, count) {
         this.type = type;
         this.potency = potency;
         this.count = count;
     }
+}
+
+function getStatusMods(fighter) {
+    const mods = {
+        haste: 1.1,
+        bind: 1.1,
+        proc: 1.1,
+        frag: 1.1
+    };
+
+    fighter.statuses.forEach(status => {
+        if (status.type === 'haste') {
+        //haste inc speed by 10% addiivelty
+            mods.haste += 0.1 * status.potency; //mutliply by char speed and add this val to char speed
+        } else if (status.type === 'bind') {
+        //bind dec speed by 10% addiivelty
+            mods.bind += 0.1 * status.potency; //mutliply by char speed and subtract this val from char speed
+        } else if (status.type === 'proc') {
+        //proc makes next attack do 10% more damage per stack
+            mods.proc += 0.1 * status.potency; //mutliply by char damage and add this val to char damage for next attack, then reset proc mod to 1 after attack
+        } else if (status.type === 'frag') {
+        //frag makes you take 10% more damage per stack
+            mods.frag += 0.1 * status.potency; //mutliply by char damage taken and add this val to char damage taken for next hit, then reset frag mod to 1 after hit
+        }
+    });
+
+    return mods;
+
+
 }
 
 const EVENT_TYPES = {
@@ -495,6 +589,51 @@ io.sockets.on('connection', (socket) => {
             socket.to(client.room).emit('peerInput', { from: socket.id, data });
         }
     });
+
+    //if room is in combat, process inputs and update game state accordingly, then broadcast updates to clients in room
+    if (roomList[client.room] && roomList[client.room].match) {
+        const otherFightersInRoom = roomList[client.room].match.fighters.filter(f => f.id !== client.fighter.id); //all other fighters
+        // Process combat inputs and update game state
+            // Validate and process inputData (e.g., move, attack, guard)
+            // Update fighter state based on input
+            // Broadcast resulting game state changes to all clients in the room
+        socket.on('INPUT_MOVE', (direction,magnitude) => {// left right, and jump
+            // Validate move input and update fighter position
+            detectcollision(client.fighter, otherFightersInRoom); //check for collisions with other fighters and stage boundaries, and adjust position accordingly
+            const result = validMove(client.fighter, { direction, magnitude });
+            if (result.valid) {
+                client.fighter.pos.set(result.position.x, result.position.y);
+              //broadcast new position to other clients in room in interval loop, not immediately to avoid spamming updates
+            }
+        });
+
+        socket.on('INPUT_DASH', (direction) => {
+            // Validate dash input and update fighter position and state
+            //check how dash works client side, then implement server side with same logic but also check for collisions and boundaries, and broadcast new position to other clients in room in interval loop, not immediately to avoid spamming updates
+        });
+
+
+
+         socket.on('INPUT_ATTACK', (sequence) => {//sequence canbe either withch basic attack in sequence or attack type (dash or slam)
+            // Validate attack input and update fighter state
+            const Hitplayers = detectHit(socket.client, otherFightersInRoom, attackData); //defender is everyone else in the room, attackData includes attack type, direction, range, etc.
+            //if true, continue, if false, stop, set defender to those in attack range and direction, not all fighters in room
+            
+
+            if (!attackData.valid) return;
+        for (const defenders of Hitplayers) {
+            getStatusMods(socket.client.fighter); //get status mods for damage calculation
+            getonhit(socket.client.fighter, defenders, attackData); //get unique on hit effects here for each character, type of attack as well 
+            resolveHit(socket.client.fighter, defenders, attackData);
+         }
+           //check attacker bleed status
+        });
+          socket.on('INPUT_GUARD', (inputData) => {
+            // Validate guard input and update fighter state
+           
+        });
+    }
+
 
     // Handle disconnect
     socket.on('disconnect', () => {

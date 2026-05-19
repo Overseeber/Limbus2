@@ -29,11 +29,11 @@ let introAnimationsStarted = false;
 // Character intro animation sequences
 const INTRO_ANIMATIONS = {
   VALENCINA: {
-    sprites: ['idle', 'prepat', 'd1', 's4f2', 's4f2', 's4f1', 'dist1'],
+    sprites: ['idle', 'prepat', 'd1', 's4f2', 's4f2', 's4f1'],
     duration: 0.2 // seconds per sprite
   },
   CALLISTO: {
-    sprites: ['cidle', 'cevade', 'chalt', 'cuf2', 'cuf1'],
+    sprites: ['cidle', 'chalt', 'cuf2', 'cuf1'],
     duration: 0.3 // seconds per sprite
   }
 };
@@ -212,6 +212,9 @@ function draw() {
     
     // Draw vignette effect on vertical edges
     drawVignette();
+    
+    // Draw black edge covers to mask areas where the background doesn't reach
+    //drawEdgeCovers();
     
     // Draw overhead healthbars for non-player fighters
     drawOverheadHealthbars();
@@ -412,6 +415,27 @@ function drawArena() {
   }
 }
 
+// function drawEdgeCovers() {
+//   // Draw black rectangles covering areas where the background image doesn't reach
+//   // (left and right edges if the scaled background width is less than the arena width)
+//   const bgWidth = window.bgScaledWidth || ARENA_WIDTH;
+  
+//   if (bgWidth >= ARENA_WIDTH) return; // No gaps to cover
+  
+//   const arenaCenterX = ARENA_WIDTH / 2;
+//   const bgLeftX = arenaCenterX - (bgWidth / 2);
+//   const bgRightX = arenaCenterX + (bgWidth / 2);
+  
+//   noStroke();
+//   fill(255);
+  
+//   // Left edge cover
+//   rect(0, 0, bgLeftX, ARENA_HEIGHT);
+  
+//   // Right edge cover
+//   rect(bgRightX, 0, ARENA_WIDTH - bgRightX, ARENA_HEIGHT);
+// }
+
 function drawVignette() {
   // Vignette width in pixels
   const vignetteWidth = 150;
@@ -431,6 +455,9 @@ function drawVignette() {
     noStroke();
     rect(width - vignetteWidth + x, 0, 1, height);
   }
+  fill(0);
+  rect(-500,0,500,height);
+  rect(width,0,500,height);
 }
 
 function updateBattle() {

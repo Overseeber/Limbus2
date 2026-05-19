@@ -434,21 +434,6 @@ io.sockets.on('connection', (socket) => {
     console.log(socket.id + " -> " + newState);
 
     });
-    socket.on('input', (data) => {
-        console.log('Received input from client', socket.id, data);
-        socket.broadcastEvent(data, socket.id); // Broadcast the input event to all other clients (you may want to include the sender's ID in the event data)
-        // Process input and update fighter state
-        // For example, if data is { type: 'move', direction: 'left', magnitude: 1 }, you would update fighter's position accordingly
-    });
-
-
-  socket.on('disconnect', () => {
-      
-        delete clientList[socket.id];
-        console.log(clientList.hasOwnProperty(socket.id));
-        console.log('Client has disconnected')
-        
-    });
     
 
 });

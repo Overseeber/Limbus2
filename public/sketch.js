@@ -660,10 +660,15 @@ function mousePressed() {
 
       if (mx > x && mx < x + columnWidth && my > yTop && my < yBottom) {
         const slot = slots[i];
-        if (!slot) {
-          // Claim a slot by joining the room (if not already in it)
-          if (!myRoomId) {
-            Network.joinRoom(myRoomState.id);
+        if (!slot || !slot.clientId) {
+          // Claim this slot
+          if (Network && Network.claimSlot) {
+            Network.claimSlot(i);
+          } else if (Network && Network.joinRoom) {
+            // Fallback: join room if claimSlot not available
+            if (!myRoomId) {
+              Network.joinRoom(myRoomState.id);
+            }
           }
           return;
         } else {

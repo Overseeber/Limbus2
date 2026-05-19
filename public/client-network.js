@@ -83,6 +83,9 @@ window.Network = {
   changeCharacter(characterKey) {
     if (this.socket) this.socket.emit('changeCharacter', characterKey);
   },
+  claimSlot(slotIndex) {
+    if (this.socket) this.socket.emit('claimSlot', slotIndex);
+  },
 
   sendInput(input) {
     if (this.isConnected && this.socket) {

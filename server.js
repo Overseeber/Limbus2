@@ -77,18 +77,48 @@ function createRoom(id) {//makes new room
     return r;
 }
 
-function getRoomState(room) {//checks room state
-    const slots = (room.clients || []).map(cid => {
-        const client = clientList[cid];
-        return {
-            clientId: cid,
-            character: client && client.fighter ? client.fighter.class : null,
-            ready: client ? client.ready : false
-        };
-    });
-    // Check if all ready
-    const allReady = slots.length >= 2 && slots.every(s => s.ready === true);
-    return { id: room.id, slots, allReady };
+function getRoomState(room) {
+    let slots = [];
+
+    for (let i = 0; i < room.clients.length; i++) {
+        let id = room.clients[i];
+        let client = clientList[id];
+
+        let character = null;
+        let ready = false;
+
+        if (client) {
+            ready = client.ready;
+
+            if (client.fighter) {
+                character = client.fighter.class;
+            }
+        }
+
+        slots.push({
+            clientId: id,
+            character: character,
+            ready: ready
+        });
+    }
+
+    let allReady = true;
+
+    if (slots.length < 2) {
+        allReady = false;
+    }
+
+    for (let i = 0; i < slots.length; i++) {
+        if (slots[i].ready == false) {
+            allReady = false;
+        }
+    }
+
+    return {
+        id: room.id,
+        slots: slots,
+        allReady: allReady
+    };
 }
 
 // Helper to notify all clients in a room of its state using Socket.IO rooms
@@ -97,6 +127,23 @@ function emitRoomState(roomId) {
     if (!room) return;
     const state = getRoomState(room);
     io.to(roomId).emit('roomState', state);
+}
+
+// Get room list data with occupancy info for the lobby
+function getRoomsData() {
+    return Object.keys(roomList).map(roomId => {
+        const room = roomList[roomId];
+        return {
+            id: roomId,
+            players: room.clients.length,
+            maxPlayers: 2
+        };
+    });
+}
+
+// Broadcast room list to all connected clients
+function broadcastRoomList() {
+    io.sockets.emit('roomsList', getRoomsData());
 }
 
 //get client side match with server side, then resolve any conflicts
@@ -337,13 +384,9 @@ io.sockets.on('connection', (socket) => {
     console.log('Current Rooms:', Object.keys(roomList));
     console.log('Current Clients:', Object.keys(clientList));
 
-    // Send current rooms list to the client so they can see available rooms
-    socket.emit('roomsList', Object.keys(roomList));
-
-    // Helper to broadcast room list to all connected clients
-    function broadcastRoomList() {
-        io.sockets.emit('roomsList', Object.keys(roomList));
-    }
+    // Send current rooms data to the client so they can see available rooms
+    socket.emit('roomsList', getRoomsData());
+    
 
     // Create and join a room
     socket.on('createRoom', (roomId) => {
@@ -481,10 +524,21 @@ io.sockets.on('connection', (socket) => {
     
 
 });
-
-
-
+//pro game(paly) loop, runs every 50ms (20 ticks per second)
+setInterval(() => {
+    // Game loop logic here, runs every 50ms (20 ticks per second)
+    // Process inputs, update game state, handle matches, etc.
+    if (roomList[roomId] && roomList[roomId].match) {
+        const match = roomList[roomId].match;
+        // Process match logic, e.g. update fighter positions, check for hits, apply damage, etc.
+        // Emit updated match state to clients in the room
+    }
+}, 50);
+//match searching
 setInterval(() => {
     // If client is searching for a room, update room list every 5 seconds
-    io.sockets.emit('roomsList', Object.keys(roomList));
-}, 5000 );
+    if (clientList[socket.id].state == "MainMenu") {
+        broadcastRoomList();
+    }
+
+}, 2000 );

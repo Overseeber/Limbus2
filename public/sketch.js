@@ -790,26 +790,28 @@ function mousePressed() {
     const my = mouseY;
     
     const availRooms = availableRooms || [];
-    const roomButtonWidth = 200;
-    const roomButtonHeight = 40;
+    const roomButtonWidth = 260;
+    const roomButtonHeight = 60;
+    const roomStartX = (width - roomButtonWidth) / 2;
     let roomY = 150;
     
     // Check clicks on available room buttons
-    if (availRooms.length === 0) {
-      roomY += 40;
-    } else {
+    if (availRooms.length > 0) {
       for (let i = 0; i < availRooms.length; i++) {
-        const roomId = availRooms[i];
-        if (mx > 50 && mx < 50 + roomButtonWidth && my > roomY && my < roomY + roomButtonHeight) {
+        const roomData = availRooms[i];
+        const roomId = typeof roomData === 'string' ? roomData : roomData.id;
+        if (mx > roomStartX && mx < roomStartX + roomButtonWidth && my > roomY && my < roomY + roomButtonHeight) {
           Network.joinRoom(roomId);
           return;
         }
-        roomY += roomButtonHeight + 10;
+        roomY += roomButtonHeight + 12;
       }
+    } else {
+      roomY += 40;
     }
     
     // Check click on Create New Room button
-    const createButtonX = 50;
+    const createButtonX = (width - roomButtonWidth) / 2;
     const createButtonY = roomY + 50;
     if (mx > createButtonX && mx < createButtonX + roomButtonWidth && my > createButtonY && my < createButtonY + roomButtonHeight) {
       const newRoomId = `room-${Date.now()}`;
@@ -1218,57 +1220,79 @@ function drawCharacterSelect() {
   // Available rooms
   textSize(16);
   fill(150);
-  text('Available Rooms:', 50, 120);
+  text('Available Rooms:', width / 2, 120);
   
   const availRooms = availableRooms || [];
-  const roomButtonWidth = 200;
-  const roomButtonHeight = 40;
+  const roomButtonWidth = 260;
+  const roomButtonHeight = 60; // Taller to fit name + player squares
+  const roomStartX = (width - roomButtonWidth) / 2;
   let roomY = 150;
   
   if (availRooms.length === 0) {
     fill(100);
     textSize(14);
-    text('No rooms available — create one!', 50, roomY);
+    text('No rooms available — create one!', width / 2, roomY);
     roomY += 40;
   } else {
     for (let i = 0; i < availRooms.length; i++) {
-      const roomId = availRooms[i];
+      const roomData = availRooms[i];
+      const roomId = typeof roomData === 'string' ? roomData : roomData.id;
+      const players = typeof roomData === 'string' ? 0 : (roomData.players || 0);
+      const maxPlayers = typeof roomData === 'string' ? 2 : (roomData.maxPlayers || 2);
       
       // Draw room button
       fill(60, 100, 60);
       stroke(100, 200, 100);
       strokeWeight(2);
-      rect(50, roomY, roomButtonWidth, roomButtonHeight, 6);
+      rect(roomStartX, roomY, roomButtonWidth, roomButtonHeight, 8);
       
       // Room label
       fill(100, 255, 100);
       noStroke();
       textAlign(CENTER, CENTER);
       textSize(14);
-      text(`${roomId}`, 150, roomY + roomButtonHeight / 2);
+      text(`${roomId}`, width / 2, roomY + 20);
       
-      roomY += roomButtonHeight + 10;
+      // Draw player count squares
+      const squareSize = 16;
+      const squareGap = 6;
+      const totalWidth = maxPlayers * (squareSize + squareGap) - squareGap;
+      const squaresStartX = (width - totalWidth) / 2;
+      const squaresY = roomY + 42;
+      
+      for (let j = 0; j < maxPlayers; j++) {
+        const sx = squaresStartX + j * (squareSize + squareGap);
+        if (j < players) {
+          fill(100, 255, 100); // Green = occupied
+        } else {
+          fill(40, 60, 40); // Dark = empty
+        }
+        noStroke();
+        rect(sx, squaresY, squareSize, squareSize, 3);
+      }
+      
+      roomY += roomButtonHeight + 12;
     }
   }
   
   // Create new room section
   textSize(16);
   fill(150);
-  text('Create New Room:', 50, roomY + 20);
+  text('Create New Room:', width / 2, roomY + 20);
   
-  // Create room button
+  // Create room button (centered)
   fill(100, 100, 150);
   stroke(150, 150, 255);
   strokeWeight(2);
-  const createButtonX = 50;
+  const createButtonX = (width - roomButtonWidth) / 2;
   const createButtonY = roomY + 50;
-  rect(createButtonX, createButtonY, roomButtonWidth, roomButtonHeight, 6);
+  rect(createButtonX, createButtonY, roomButtonWidth, roomButtonHeight, 8);
   
   fill(150, 150, 255);
   noStroke();
   textAlign(CENTER, CENTER);
   textSize(14);
-  text('Create New Room', createButtonX + roomButtonWidth / 2, createButtonY + roomButtonHeight / 2);
+  text('Create New Room', width / 2, createButtonY + roomButtonHeight / 2);
   
   pop();
 }

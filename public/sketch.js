@@ -2,7 +2,8 @@
 
 const BATTLE_STATES = {
   LOBBY: 'lobby',
-  CHARACTER_SELECT_SCREEN: 'characterSelectScreen',
+  CHARACTER_SELECT_MENU: 'characterSelectMenu',
+  CHARACTER_PREVIEW: 'characterPreview',
   READY: 'ready',
   OPENING: 'opening',
   BATTLE: 'battle',
@@ -63,8 +64,17 @@ let myRoomState = null;
 let myRoomId = null;
 let localSlotSelections = [];
 let roomCharacterSelectSlot = -1;
-let roomCharacterPreviewKey = null;
-let availableCharacterKeys = () => Object.keys(window.CHARACTERS || {});
+let availableCharacterKeys = () => {
+  const registry = (typeof CHARACTERS !== 'undefined') ? CHARACTERS : (window.CHARACTERS || {});
+  return Object.keys(registry || {});
+};
+// Current previewed character for the new selection flow
+let previewCharacterKey = null;
+
+// Buttons for character cards in the menu (rebuilt each frame)
+let characterCardButtons = [];
+// Buttons for the preview screen (rebuilt each frame)
+let previewButtons = [];
 
 
 // Reusable UI button class
@@ -349,8 +359,10 @@ function draw() {
     console.log('[DEBUG] battleState =', battleState);
   }
 
-  if (battleState === BATTLE_STATES.CHARACTER_SELECT_SCREEN) {
-    drawCharacterSelectScreen();
+  if (battleState === BATTLE_STATES.CHARACTER_SELECT_MENU) {
+    drawCharacterSelectMenu();
+  } else if (battleState === BATTLE_STATES.CHARACTER_PREVIEW) {
+    drawCharacterPreview();
   } else if (battleState === BATTLE_STATES.LOBBY) {
     drawLobby();
   } else if (battleState === BATTLE_STATES.READY) {
@@ -893,21 +905,23 @@ if (
 
     
       roomCharacterSelectSlot = i;
-roomCharacterPreviewKey = localSlotSelections[i] || keys[0];
+      previewCharacterKey = localSlotSelections[i] || keys[0];
 
-console.log('OPEN CHARACTER SELECT');
-
-setBattleState(BATTLE_STATES.CHARACTER_SELECT_SCREEN);
+      console.log('OPEN CHARACTER SELECT MENU');
+      setBattleState(BATTLE_STATES.CHARACTER_SELECT_MENU);
         return;
       }
     }
 
     return;
   }
-
-  // Character Select screen
-  if (battleState === BATTLE_STATES.CHARACTER_SELECT_SCREEN) {
-    handleCharacterSelectScreenClick(mouseX, mouseY);
+  // Character Select menu / preview handlers
+  if (battleState === BATTLE_STATES.CHARACTER_SELECT_MENU) {
+    handleCharacterMenuClick(mouseX, mouseY);
+    return;
+  }
+  if (battleState === BATTLE_STATES.CHARACTER_PREVIEW) {
+    handleCharacterPreviewClick(mouseX, mouseY);
     return;
   }
 
@@ -1168,50 +1182,182 @@ function mouseReleased() {
   }
 }
 
-function handleCharacterSelectScreenClick(mx, my) {
+// New Character Select: menu + preview
+
+function drawCharacterSelectMenu() {
+  background(24);
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(34);
+  fill(240);
+  stroke(0);
+  strokeWeight(3);
+  text('CHARACTER SELECT', width / 2, 48);
+  pop();
+
   const keys = availableCharacterKeys();
-  const gridCols = 3;
-  const gridSpacing = 16;
-  const cellW = 180;
-  const cellH = 60;
-  const totalWidth = gridCols * cellW + (gridCols - 1) * gridSpacing;
-  const startX = (width - totalWidth) / 2;
+  // Responsive card sizing
+  const cardW = 180;
+  const cardH = 96;
+  const spacing = 20;
+  const cols = Math.max(1, Math.floor((width - 120) / (cardW + spacing)));
+  const rows = Math.ceil(keys.length / cols);
+  const totalW = cols * cardW + (cols - 1) * spacing;
+  const startX = (width - totalW) / 2;
   const startY = 120;
 
+  characterCardButtons = [];
+
   for (let i = 0; i < keys.length; i++) {
-    const col = i % gridCols;
-    const row = Math.floor(i / gridCols);
-    const x = startX + col * (cellW + gridSpacing);
-    const y = startY + row * (cellH + gridSpacing);
-    if (mx > x && mx < x + cellW && my > y && my < y + cellH) {
-      roomCharacterPreviewKey = keys[i];
-      return;
-    }
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = startX + col * (cardW + spacing);
+    const y = startY + row * (cardH + spacing);
+    const key = keys[i];
+    const data = window.CHARACTERS && window.CHARACTERS[key] ? window.CHARACTERS[key] : { name: key, title: '' };
+
+    // Base card (drawn by UIButton to ensure exact clickable bounds)
+    const btn = new UIButton(x, y, cardW, cardH, () => {
+      previewCharacterKey = key;
+      console.log('SELECT CHARACTER', key);
+      setBattleState(BATTLE_STATES.CHARACTER_PREVIEW);
+    });
+    btn.draw('', { stroke: previewCharacterKey === key ? [120, 200, 255] : [60, 60, 80], fill: previewCharacterKey === key ? [30, 40, 60] : [20, 24, 30], text: 255 });
+    characterCardButtons.push(btn);
+
+    // Portrait box
+    push();
+    noStroke();
+    fill(40);
+    rect(x + 8, y + 8, 80, cardH - 16, 8);
+    fill(200);
+    textAlign(LEFT, TOP);
+    textSize(14);
+    text(data.name || key, x + 100, y + 12);
+    textSize(12);
+    fill(170);
+    text(data.title || 'Fighter', x + 100, y + 34);
+    pop();
   }
 
-  const cancelX = width / 2 - 220;
-  const confirmX = width / 2 + 20;
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(12);
+  fill(180);
+  text('Click a card to inspect the character. Confirm in the preview to lock selection.', width / 2, height - 30);
+  pop();
+}
+
+function drawCharacterPreview() {
+  background(18);
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(34);
+  fill(255);
+  stroke(0);
+  strokeWeight(3);
+  text('CHARACTER PREVIEW', width / 2, 48);
+  pop();
+
+  const key = previewCharacterKey || (availableCharacterKeys()[0] || null);
+  const data = key && window.CHARACTERS && window.CHARACTERS[key] ? window.CHARACTERS[key] : { name: key || '-', title: '' };
+
+  const previewX = width * 0.12;
+  const previewY = 120;
+  const previewW = width * 0.48;
+  const previewH = height - 240;
+
+  push();
+  fill(30);
+  stroke(80);
+  strokeWeight(2);
+  rect(previewX, previewY, previewW, previewH, 12);
+  pop();
+
+  // Name + subtitle
+  push();
+  textAlign(LEFT, TOP);
+  textSize(28);
+  fill(255);
+  text(data.name || key, previewX + 18, previewY + 18);
+  textSize(14);
+  fill(180);
+  text(data.title || 'Combat specialist', previewX + 18, previewY + 52);
+  pop();
+
+  // Placeholder lore/kit/moves
+  push();
+  textAlign(LEFT, TOP);
+  textSize(13);
+  fill(200);
+  text('Lore: Placeholder lore text describing the character and flavour.', previewX + 18, previewY + 90, previewW - 36, 160);
+  text('Kit: Aggressive close-range fighter. Placeholder passive. Placeholder ultimate.', previewX + 18, previewY + 160, previewW - 36, 120);
+  text('Moves:\n- Jab: Quick close-range attack\n- Dash: Fast approach\n- Ultimate: Placeholder ultimate', previewX + 18, previewY + 260, previewW - 36, 200);
+  pop();
+
+  // Large portrait area on right
+  const portX = previewX + previewW + 30;
+  const portY = previewY + 20;
+  const portW = width - portX - 40;
+  const portH = 420;
+  push();
+  fill(36);
+  stroke(90);
+  rect(portX, portY, portW, portH, 12);
+  pop();
+
+  // Buttons: Cancel / Confirm / Back
+  previewButtons = [];
+  const buttonW = 220;
+  const buttonH = 52;
   const buttonY = height - 100;
-  const buttonW = 200;
-  const buttonH = 48;
+  const cancelX = width / 2 - buttonW - 24;
+  const confirmX = width / 2 + 24;
 
-    if (mx > cancelX && mx < cancelX + buttonW && my > buttonY && my < buttonY + buttonH) {
-      setBattleState(BATTLE_STATES.LOBBY);
-      roomCharacterSelectSlot = -1;
-      roomCharacterPreviewKey = null;
-      return;
-    }
+  const cancelBtn = new UIButton(cancelX, buttonY, buttonW, buttonH, () => {
+    console.log('CANCEL PREVIEW');
+    setBattleState(BATTLE_STATES.CHARACTER_SELECT_MENU);
+  });
+  cancelBtn.draw('CANCEL', { stroke: [120, 120, 120], fill: [50, 50, 50], text: 255 });
+  previewButtons.push(cancelBtn);
 
-    if (mx > confirmX && mx < confirmX + buttonW && my > buttonY && my < buttonY + buttonH) {
-      if (roomCharacterSelectSlot >= 0 && roomCharacterPreviewKey) {
-        localSlotSelections[roomCharacterSelectSlot] = roomCharacterPreviewKey;
-        Network.changeCharacter(roomCharacterPreviewKey);
-      }
-      setBattleState(BATTLE_STATES.LOBBY);
-      roomCharacterSelectSlot = -1;
-      roomCharacterPreviewKey = null;
-      return;
+  const confirmBtn = new UIButton(confirmX, buttonY, buttonW, buttonH, () => {
+    const sel = previewCharacterKey;
+    console.log('CONFIRM CHARACTER', sel);
+    if (roomCharacterSelectSlot >= 0) {
+      localSlotSelections[roomCharacterSelectSlot] = sel;
     }
+    if (sel && typeof Network !== 'undefined' && Network.changeCharacter) {
+      Network.changeCharacter(sel);
+    }
+    // Clear preview and return to lobby
+    previewCharacterKey = null;
+    roomCharacterSelectSlot = -1;
+    setBattleState(BATTLE_STATES.LOBBY);
+    console.log('RETURN TO LOBBY');
+  });
+  confirmBtn.draw('CONFIRM', { stroke: [80, 180, 80], fill: [40, 90, 40], text: 255 });
+  previewButtons.push(confirmBtn);
+
+  // Back button (top-left)
+  const backBtn = new UIButton(18, 18, 100, 34, () => {
+    console.log('BACK TO MENU');
+    setBattleState(BATTLE_STATES.CHARACTER_SELECT_MENU);
+  });
+  backBtn.draw('BACK', { stroke: [100, 100, 100], fill: [30, 30, 30], text: 255, textSize: 12 });
+  previewButtons.push(backBtn);
+}
+
+function handleCharacterMenuClick(mx, my) {
+  for (const btn of characterCardButtons) {
+    if (btn.click(mx, my)) return;
+  }
+}
+
+function handleCharacterPreviewClick(mx, my) {
+  for (const btn of previewButtons) {
+    if (btn.click(mx, my)) return;
+  }
 }
 
 function drawLobby() {
@@ -1361,12 +1507,10 @@ pop();
   const keys = availableCharacterKeys();
   if (keys.length === 0) return;
 
-  roomCharacterSelectSlot = i;
-  roomCharacterPreviewKey = localSlotSelections[i] || keys[0];
-
-  console.log('OPEN CHARACTER SELECT');
-
-  setBattleState(BATTLE_STATES.CHARACTER_SELECT_SCREEN);
+      roomCharacterSelectSlot = i;
+      previewCharacterKey = localSlotSelections[i] || keys[0];
+      console.log('OPEN CHARACTER SELECT MENU');
+      setBattleState(BATTLE_STATES.CHARACTER_SELECT_MENU);
 });
         changeBtn.draw('CHANGE CHARACTER', { stroke: [100, 160, 255], fill: [40, 70, 120], text: 255, textSize: 12 });
         roomSlotButtons.push(changeBtn);
@@ -1520,123 +1664,7 @@ function getCharacterIdleSpriteName(characterKey) {
   return 'idle';
 }
 
-function drawCharacterSelectScreen() {
-  background(18);
-
-  push();
-  textAlign(CENTER, CENTER);
-  textSize(34);
-  fill(255);
-  stroke(0);
-  strokeWeight(3);
-  text('SELECT YOUR CHARACTER', width / 2, 50);
-  pop();
-
-  const keys = availableCharacterKeys();
-  const cols = 3;
-  const spacing = 16;
-  const cardW = 180;
-  const cardH = 80;
-  const totalW = cols * cardW + (cols - 1) * spacing;
-  const startX = (width - totalW) / 2;
-  const startY = 120;
-
-  for (let i = 0; i < keys.length; i++) {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const x = startX + col * (cardW + spacing);
-    const y = startY + row * (cardH + spacing);
-    const key = keys[i];
-    const charData = window.CHARACTERS && window.CHARACTERS[key] ? window.CHARACTERS[key] : { name: key, title: '' };
-    const isSelected = roomCharacterPreviewKey === key;
-
-    push();
-    stroke(isSelected ? 140 : 70, isSelected ? 200 : 120, isSelected ? 255 : 170);
-    strokeWeight(2);
-    fill(isSelected ? 45 : 30);
-    rect(x, y, cardW, cardH, 10);
-    fill(255);
-    noStroke();
-    textAlign(LEFT, CENTER);
-    textSize(16);
-    text(charData.name || key, x + 12, y + 24);
-    textSize(12);
-    fill(180);
-    text(charData.title || 'Fighter', x + 12, y + 45);
-    pop();
-  }
-
-  const previewKey = roomCharacterPreviewKey || keys[0] || null;
-  const previewX = width * 0.65;
-  const previewY = 120;
-  const previewW = width * 0.28;
-  const previewH = 320;
-
-  push();
-  fill(30);
-  stroke(90);
-  strokeWeight(2);
-  rect(previewX - 20, previewY - 20, previewW + 40, previewH + 40, 14);
-  pop();
-
-  if (previewKey) {
-    const data = window.CHARACTERS && window.CHARACTERS[previewKey] ? window.CHARACTERS[previewKey] : { name: previewKey, title: '' };
-    const previewTextX = previewX + 16;
-    const previewTextW = previewW - 120;
-
-    push();
-    textAlign(LEFT, TOP);
-    textSize(22);
-    fill(255);
-    text(data.name || previewKey, previewTextX, previewY);
-    textSize(14);
-    fill(200);
-    text(data.title || 'Combat specialist', previewTextX, previewY + 30);
-    textSize(13);
-    fill(180);
-    text('This is a preview of the selected fighter. For now, the idle sprite is shown on the right and playstyle info is placeholder text on the left.', previewTextX, previewY + 62, previewTextW, 150);
-    pop();
-
-    const spriteX = previewX + previewW - 60;
-    const spriteY = previewY + previewH / 2 + 10;
-    const spriteName = getCharacterIdleSpriteName(previewKey);
-    if (typeof drawSprite === 'function') {
-      drawSprite(spriteName, spriteX, spriteY);
-    }
-  }
-
-  const buttonY = height - 100;
-  const buttonW = 200;
-  const cancelX = width / 2 - buttonW - 20;
-  const confirmX = width / 2 + 20;
-
-  push();
-  stroke(120);
-  strokeWeight(2);
-  fill(70);
-  rect(cancelX, buttonY, buttonW, 48, 10);
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(16);
-  text('CANCEL', cancelX + buttonW / 2, buttonY + 24);
-
-  stroke(80, 180, 80);
-  strokeWeight(2);
-  fill(55, 140, 55);
-  rect(confirmX, buttonY, buttonW, 48, 10);
-  fill(255);
-  noStroke();
-  text('SELECT CHARACTER', confirmX + buttonW / 2, buttonY + 24);
-  pop();
-
-  push();
-  textAlign(CENTER, CENTER);
-  textSize(12);
-  fill(180);
-  text('Click a card to preview a different character.', width / 2, height - 35);
-  pop();
-}
+// (old fullscreen character select removed)
 
 function windowResized() {
   resizeCanvas(ARENA_WIDTH, ARENA_HEIGHT);

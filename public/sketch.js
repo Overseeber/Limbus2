@@ -301,8 +301,8 @@ function initRoomBattle(slots) {
   }
   
   window.allFighters = fighters;
-  player = fighters.find(f => f.isPlayerControlled);
-  enemy = fighters.find(f => !f.isPlayerControlled) || fighters.find(f => f !== player);
+  player = fighters.find(f => f.isLocalPlayer);
+  enemy = fighters.find(f => !f.isLocalPlayer) || fighters.find(f => f !== player);
   
   setBattleState(BATTLE_STATES.OPENING);
   winner = null;

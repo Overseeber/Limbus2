@@ -48,6 +48,8 @@ let availableRooms = [];
 let myRoomState = null;
 let myRoomId = null;
 let localSlotSelections = [];
+let roomCharacterSelectSlot = -1;
+let roomCharacterPreviewKey = null;
 let availableCharacterKeys = () => Object.keys(window.CHARACTERS || {});
 
 function preload() {
@@ -267,7 +269,9 @@ function handleRoomPeerInput(payload) {
 }
 
 function draw() {
-  if (battleState === 'characterSelect') {
+  if (battleState === 'roomCharacterSelect') {
+    drawRoomCharacterSelect();
+  } else if (battleState === 'characterSelect') {
     drawCharacterSelect();
   } else if (battleState === 'ready') {
     drawReadyScreen();
@@ -791,22 +795,32 @@ function mousePressed() {
         } else {
           // Check if this is our owned slot
           if (Network && Network.socket && slot.clientId === Network.socket.id) {
-            // Check if click is on the ready/unready button area
+            const changeBtnX = x + 10;
+            const changeBtnY = yTop + 170;
+            const readyBtnX = x + 10;
             const readyBtnY = yTop + 210;
-            if (my > readyBtnY && my < readyBtnY + 30) {
+            const btnW = columnWidth - 40;
+
+            if (my > readyBtnY && my < readyBtnY + 30 && mx > readyBtnX && mx < readyBtnX + btnW) {
               Network.toggleReady();
               return;
             }
-            // Otherwise, click cycles character (on the character area)
-            if (my > yTop && my < yTop + 160) {
+
+            if (my > changeBtnY && my < changeBtnY + 28 && mx > changeBtnX && mx < changeBtnX + btnW) {
               const keys = availableCharacterKeys();
               if (keys.length === 0) return;
-              const cur = localSlotSelections[i] || keys[0];
-              const idx = keys.indexOf(cur);
-              const next = (idx + 1) % keys.length;
-              const newKey = keys[next];
-              localSlotSelections[i] = newKey;
-              Network.changeCharacter(newKey);
+              roomCharacterSelectSlot = i;
+              roomCharacterPreviewKey = localSlotSelections[i] || keys[0];
+              battleState = 'roomCharacterSelect';
+              return;
+            }
+
+            if (my > yTop && my < readyBtnY && mx > x && mx < x + columnWidth) {
+              const keys = availableCharacterKeys();
+              if (keys.length === 0) return;
+              roomCharacterSelectSlot = i;
+              roomCharacterPreviewKey = localSlotSelections[i] || keys[0];
+              battleState = 'roomCharacterSelect';
               return;
             }
           }
@@ -818,6 +832,11 @@ function mousePressed() {
   }
 
   // Room selection screen (when not in a room)
+  if (battleState === 'roomCharacterSelect') {
+    handleRoomCharacterSelectClick(mouseX, mouseY);
+    return;
+  }
+
   if (battleState === 'characterSelect' && !myRoomState) {
     const mx = mouseX;
     const my = mouseY;
@@ -1075,6 +1094,58 @@ function mouseReleased() {
   }
 }
 
+function handleRoomCharacterSelectClick(mx, my) {
+  const keys = availableCharacterKeys();
+  const gridCols = 3;
+  const gridSpacing = 16;
+  const cellW = 180;
+  const cellH = 60;
+  const totalWidth = gridCols * cellW + (gridCols - 1) * gridSpacing;
+  const startX = (width - totalWidth) / 2;
+  const startY = 120;
+
+  for (let i = 0; i < keys.length; i++) {
+    const col = i % gridCols;
+    const row = Math.floor(i / gridCols);
+    const x = startX + col * (cellW + gridSpacing);
+    const y = startY + row * (cellH + gridSpacing);
+    if (mx > x && mx < x + cellW && my > y && my < y + cellH) {
+      roomCharacterPreviewKey = keys[i];
+      return;
+    }
+  }
+
+  const cancelX = width / 2 - 220;
+  const confirmX = width / 2 + 20;
+  const buttonY = height - 100;
+  const buttonW = 200;
+  const buttonH = 48;
+
+  if (mx > cancelX && mx < cancelX + buttonW && my > buttonY && my < buttonY + buttonH) {
+    battleState = 'characterSelect';
+    roomCharacterSelectSlot = -1;
+    roomCharacterPreviewKey = null;
+    return;
+  }
+
+  if (mx > confirmX && mx < confirmX + buttonW && my > buttonY && my < buttonY + buttonH) {
+    if (roomCharacterSelectSlot >= 0 && roomCharacterPreviewKey) {
+      localSlotSelections[roomCharacterSelectSlot] = roomCharacterPreviewKey;
+      Network.changeCharacter(roomCharacterPreviewKey);
+    }
+    battleState = 'characterSelect';
+    roomCharacterSelectSlot = -1;
+    roomCharacterPreviewKey = null;
+    return;
+  }
+}
+
+function mouseClicked() {
+  if (battleState === 'roomCharacterSelect') {
+    handleRoomCharacterSelectClick(mouseX, mouseY);
+  }
+}
+
 function drawCharacterSelect() {
   background(20);
 
@@ -1143,7 +1214,10 @@ function drawCharacterSelect() {
         continue;
       }
 
-      const charKey = slot.character || '—';
+      let charKey = slot.character || '—';
+      if (Network && Network.socket && slot.clientId === Network.socket.id && localSlotSelections[i]) {
+        charKey = localSlotSelections[i];
+      }
       const charName = (window.CHARACTERS && window.CHARACTERS[charKey]) ? window.CHARACTERS[charKey].name : charKey;
 
       push();
@@ -1177,9 +1251,21 @@ function drawCharacterSelect() {
         textAlign(CENTER, CENTER);
         textSize(12);
         fill(150);
-        text('Click: cycle character', x + (columnWidth - 20) / 2, y + 170);
-        text('Click READY below', x + (columnWidth - 20) / 2, y + 190);
+        text('Click the button below to change', x + (columnWidth - 20) / 2, y + 160);
+        text('your character selection', x + (columnWidth - 20) / 2, y + 176);
         pop();
+
+        const btnW = columnWidth - 40;
+        const changeBtnY = y + 170;
+        fill(80, 120, 220);
+        stroke(120, 160, 255);
+        strokeWeight(2);
+        rect(x + 10, changeBtnY, btnW, 28, 6);
+        fill(255);
+        noStroke();
+        textAlign(CENTER, CENTER);
+        textSize(14);
+        text('CHANGE CHARACTER', x + (columnWidth - 20) / 2, changeBtnY + 14);
 
         // Ready/Unready button for this player
         const readyBtnY = y + 210;
@@ -1191,7 +1277,6 @@ function drawCharacterSelect() {
           stroke(100, 255, 100);
         }
         strokeWeight(2);
-        const btnW = columnWidth - 40;
         rect(x + 10, readyBtnY, btnW, 30, 6);
         fill(255);
         noStroke();
@@ -1327,6 +1412,130 @@ function drawCharacterSelect() {
   textSize(14);
   text('Create New Room', width / 2, createButtonY + roomButtonHeight / 2);
   
+  pop();
+}
+
+function getCharacterIdleSpriteName(characterKey) {
+  if (characterKey === 'CALLISTO') return 'cidle';
+  if (characterKey === 'VALENCINA') return 'idle';
+  return 'idle';
+}
+
+function drawRoomCharacterSelect() {
+  background(18);
+
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(34);
+  fill(255);
+  stroke(0);
+  strokeWeight(3);
+  text('SELECT YOUR CHARACTER', width / 2, 50);
+  pop();
+
+  const keys = availableCharacterKeys();
+  const cols = 3;
+  const spacing = 16;
+  const cardW = 180;
+  const cardH = 80;
+  const totalW = cols * cardW + (cols - 1) * spacing;
+  const startX = (width - totalW) / 2;
+  const startY = 120;
+
+  for (let i = 0; i < keys.length; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = startX + col * (cardW + spacing);
+    const y = startY + row * (cardH + spacing);
+    const key = keys[i];
+    const charData = window.CHARACTERS && window.CHARACTERS[key] ? window.CHARACTERS[key] : { name: key, title: '' };
+    const isSelected = roomCharacterPreviewKey === key;
+
+    push();
+    stroke(isSelected ? 140 : 70, isSelected ? 200 : 120, isSelected ? 255 : 170);
+    strokeWeight(2);
+    fill(isSelected ? 45 : 30);
+    rect(x, y, cardW, cardH, 10);
+    fill(255);
+    noStroke();
+    textAlign(LEFT, CENTER);
+    textSize(16);
+    text(charData.name || key, x + 12, y + 24);
+    textSize(12);
+    fill(180);
+    text(charData.title || 'Fighter', x + 12, y + 45);
+    pop();
+  }
+
+  const previewKey = roomCharacterPreviewKey || keys[0] || null;
+  const previewX = width * 0.65;
+  const previewY = 120;
+  const previewW = width * 0.28;
+  const previewH = 320;
+
+  push();
+  fill(30);
+  stroke(90);
+  strokeWeight(2);
+  rect(previewX - 20, previewY - 20, previewW + 40, previewH + 40, 14);
+  pop();
+
+  if (previewKey) {
+    const data = window.CHARACTERS && window.CHARACTERS[previewKey] ? window.CHARACTERS[previewKey] : { name: previewKey, title: '' };
+    const previewTextX = previewX + 16;
+    const previewTextW = previewW - 120;
+
+    push();
+    textAlign(LEFT, TOP);
+    textSize(22);
+    fill(255);
+    text(data.name || previewKey, previewTextX, previewY);
+    textSize(14);
+    fill(200);
+    text(data.title || 'Combat specialist', previewTextX, previewY + 30);
+    textSize(13);
+    fill(180);
+    text('This is a preview of the selected fighter. For now, the idle sprite is shown on the right and playstyle info is placeholder text on the left.', previewTextX, previewY + 62, previewTextW, 150);
+    pop();
+
+    const spriteX = previewX + previewW - 60;
+    const spriteY = previewY + previewH / 2 + 10;
+    const spriteName = getCharacterIdleSpriteName(previewKey);
+    if (typeof drawSprite === 'function') {
+      drawSprite(spriteName, spriteX, spriteY);
+    }
+  }
+
+  const buttonY = height - 100;
+  const buttonW = 200;
+  const cancelX = width / 2 - buttonW - 20;
+  const confirmX = width / 2 + 20;
+
+  push();
+  stroke(120);
+  strokeWeight(2);
+  fill(70);
+  rect(cancelX, buttonY, buttonW, 48, 10);
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(16);
+  text('CANCEL', cancelX + buttonW / 2, buttonY + 24);
+
+  stroke(80, 180, 80);
+  strokeWeight(2);
+  fill(55, 140, 55);
+  rect(confirmX, buttonY, buttonW, 48, 10);
+  fill(255);
+  noStroke();
+  text('SELECT CHARACTER', confirmX + buttonW / 2, buttonY + 24);
+  pop();
+
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(12);
+  fill(180);
+  text('Click a card to preview a different character.', width / 2, height - 35);
   pop();
 }
 

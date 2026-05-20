@@ -52,6 +52,67 @@ let roomCharacterSelectSlot = -1;
 let roomCharacterPreviewKey = null;
 let availableCharacterKeys = () => Object.keys(window.CHARACTERS || {});
 
+// Intent flag for scene transitions (avoids same-frame UI destruction)
+let pendingCharacterSelect = null;
+
+// Reusable UI button class
+const DEBUG_UI = false;
+class UIButton {
+  constructor(x, y, w, h, onClick) {
+    this.x = x;
+    this.y = y;
+    this.w = w;
+    this.h = h;
+    this.onClick = onClick;
+    this.enabled = true;
+    this.label = "";
+    this.data = null; // optional per-button payload
+  }
+
+  draw(label, style = {}) {
+    this.label = label;
+    push();
+    stroke(style.stroke || 0);
+    strokeWeight(style.strokeWeight || 2);
+    fill(style.fill || 80);
+    rect(this.x, this.y, this.w, this.h, 6);
+    fill(style.text || 255);
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(style.textSize || 14);
+    text(label, this.x + this.w / 2, this.y + this.h / 2);
+    pop();
+  }
+
+  contains(mx, my) {
+    return this.enabled && mx >= this.x && mx <= this.x + this.w && my >= this.y && my <= this.y + this.h;
+  }
+
+  click(mx, my) {
+    if (this.contains(mx, my)) {
+      if (DEBUG_UI) console.log("UIButton clicked:", this.label);
+      this.onClick?.();
+      return true;
+    }
+    return false;
+  }
+}
+
+// Room layout constants (must match drawCharacterSelect exactly)
+const SLOT_COLUMN_W = 220;
+const SLOT_CONTENT_W = SLOT_COLUMN_W - 20; // 200
+const SLOT_Y = 130;
+const SLOT_H = 260;
+const BTN_X_OFFSET = 10;
+const BTN_W = SLOT_COLUMN_W - 40; // 180
+const BTN_CHANGE_OFFSET_Y = 170; // from slot top
+const BTN_CHANGE_H = 28;
+const BTN_READY_OFFSET_Y = 210; // from slot top
+const BTN_READY_H = 30;
+
+// Room slot buttons (rebuilt each frame)
+let roomSlotButtons = [];
+
 function preload() {
   // Load sprite atlases for character sprites
   if (typeof loadSpriteAtlases === 'function') {
@@ -269,6 +330,15 @@ function handleRoomPeerInput(payload) {
 }
 
 function draw() {
+  // Process pending scene transitions (safely delayed to next frame)
+  // This prevents same-frame UI destruction from breaking button click context
+  if (pendingCharacterSelect) {
+    roomCharacterSelectSlot = pendingCharacterSelect.slot;
+    roomCharacterPreviewKey = pendingCharacterSelect.key;
+    battleState = 'roomCharacterSelect';
+    pendingCharacterSelect = null;
+  }
+
   if (battleState === 'roomCharacterSelect') {
     drawRoomCharacterSelect();
   } else if (battleState === 'characterSelect') {
@@ -767,9 +837,6 @@ function mousePressed() {
     }
     
     const slots = myRoomState.slots || [];
-    const columnWidth = 220;
-    const count = Math.max(2, slots.length);
-    const startX = (width - (count * columnWidth)) / 2;
 
     // Check Start Battle button click
     if (myRoomState.allReady) {
@@ -782,48 +849,34 @@ function mousePressed() {
       }
     }
 
+    // Check button clicks first (UIButton system)
+    for (const btn of roomSlotButtons) {
+      if (btn.click(mx, my)) return;
+    }
+
+    // Fallback: clicking the character info area of your own slot opens character select
+    const columnWidth = SLOT_COLUMN_W;
+    const count = Math.max(2, slots.length);
+    const startX = (width - (count * columnWidth)) / 2;
+
     for (let i = 0; i < count; i++) {
       const x = startX + i * columnWidth;
-      const yTop = 120;
-      const yBottom = yTop + 260;
 
-      if (mx > x && mx < x + columnWidth && my > yTop && my < yBottom) {
+      if (mx > x && mx < x + columnWidth && my > SLOT_Y && my < SLOT_Y + SLOT_H) {
         const slot = slots[i];
-        if (!slot || !slot.clientId) {
-          // Empty slot - nothing to do here (auto-join is handled on connection)
+        if (!slot || !slot.clientId) return; // empty slot
+
+        // Only owned slots respond to fallback click
+        if (!Network || !Network.socket || slot.clientId !== Network.socket.id) return;
+
+        // Click is in the character info area (above the buttons, below the ready text)
+        if (my > SLOT_Y && my < SLOT_Y + BTN_CHANGE_OFFSET_Y - 2) {
+          const keys = availableCharacterKeys();
+          if (keys.length === 0) return;
+          roomCharacterSelectSlot = i;
+          roomCharacterPreviewKey = localSlotSelections[i] || keys[0];
+          battleState = 'roomCharacterSelect';
           return;
-        } else {
-          // Check if this is our owned slot
-          if (Network && Network.socket && slot.clientId === Network.socket.id) {
-            const changeBtnX = x + 10;
-            const changeBtnY = yTop + 170;
-            const readyBtnX = x + 10;
-            const readyBtnY = yTop + 210;
-            const btnW = columnWidth - 40;
-
-            if (my > readyBtnY && my < readyBtnY + 30 && mx > readyBtnX && mx < readyBtnX + btnW) {
-              Network.toggleReady();
-              return;
-            }
-
-            if (my > changeBtnY && my < changeBtnY + 28 && mx > changeBtnX && mx < changeBtnX + btnW) {
-              const keys = availableCharacterKeys();
-              if (keys.length === 0) return;
-              roomCharacterSelectSlot = i;
-              roomCharacterPreviewKey = localSlotSelections[i] || keys[0];
-              battleState = 'roomCharacterSelect';
-              return;
-            }
-
-            if (my > yTop && my < readyBtnY && mx > x && mx < x + columnWidth) {
-              const keys = availableCharacterKeys();
-              if (keys.length === 0) return;
-              roomCharacterSelectSlot = i;
-              roomCharacterPreviewKey = localSlotSelections[i] || keys[0];
-              battleState = 'roomCharacterSelect';
-              return;
-            }
-          }
         }
       }
     }
@@ -1140,12 +1193,6 @@ function handleRoomCharacterSelectClick(mx, my) {
   }
 }
 
-function mouseClicked() {
-  if (battleState === 'roomCharacterSelect') {
-    handleRoomCharacterSelectClick(mouseX, mouseY);
-  }
-}
-
 function drawCharacterSelect() {
   background(20);
 
@@ -1175,14 +1222,17 @@ function drawCharacterSelect() {
     textSize(14);
     text('Leave Room', width - 80, 54);
 
+    // Rebuild room slot buttons
+    roomSlotButtons = [];
+
     // Draw slots horizontally
     const slots = myRoomState.slots || [];
-    const columnWidth = 220;
+    const columnWidth = SLOT_COLUMN_W;
     const startX = (width - (Math.max(2, slots.length) * columnWidth)) / 2;
 
     for (let i = 0; i < Math.max(2, slots.length); i++) {
       const x = startX + i * columnWidth;
-      const y = 130;
+      const y = SLOT_Y;
 
       // Slot background
       push();
@@ -1255,34 +1305,36 @@ function drawCharacterSelect() {
         text('your character selection', x + (columnWidth - 20) / 2, y + 176);
         pop();
 
-        const btnW = columnWidth - 40;
-        const changeBtnY = y + 170;
-        fill(80, 120, 220);
-        stroke(120, 160, 255);
-        strokeWeight(2);
-        rect(x + 10, changeBtnY, btnW, 28, 6);
-        fill(255);
-        noStroke();
-        textAlign(CENTER, CENTER);
-        textSize(14);
-        text('CHANGE CHARACTER', x + (columnWidth - 20) / 2, changeBtnY + 14);
+        const btnX = x + BTN_X_OFFSET;
+        const changeBtnY = y + BTN_CHANGE_OFFSET_Y;
+        const readyBtnY = y + BTN_READY_OFFSET_Y;
 
-        // Ready/Unready button for this player
-        const readyBtnY = y + 210;
-        if (slot.ready) {
-          fill(100, 80, 80);
-          stroke(255, 100, 100);
-        } else {
-          fill(60, 100, 60);
-          stroke(100, 255, 100);
-        }
-        strokeWeight(2);
-        rect(x + 10, readyBtnY, btnW, 30, 6);
-        fill(255);
-        noStroke();
-        textAlign(CENTER, CENTER);
-        textSize(14);
-        text(slot.ready ? 'UNREADY' : 'TOGGLE READY', x + (columnWidth - 20) / 2, readyBtnY + 15);
+        // Create and draw CHANGE CHARACTER button
+        const changeBtn = new UIButton(btnX, changeBtnY, BTN_W, BTN_CHANGE_H, () => {
+          const keys = availableCharacterKeys();
+          if (keys.length === 0) return;
+          // Use intent flag to delay state transition to next frame
+          // This prevents the button's click context from being destroyed
+          // in the same frame by battleState switching.
+          pendingCharacterSelect = {
+            slot: i,
+            key: localSlotSelections[i] || keys[0]
+          };
+        });
+        changeBtn.draw('CHANGE CHARACTER', { stroke: [120, 160, 255], fill: [80, 120, 220], text: 255, textSize: 14 });
+        roomSlotButtons.push(changeBtn);
+
+        // Create and draw ready/unready button
+        const readyStyle = slot.ready
+          ? { stroke: [255, 100, 100], fill: [100, 80, 80], text: 255, textSize: 14 }
+          : { stroke: [100, 255, 100], fill: [60, 100, 60], text: 255, textSize: 14 };
+        const readyBtn = new UIButton(btnX, readyBtnY, BTN_W, BTN_READY_H, () => {
+          Network.toggleReady();
+        });
+        readyBtn.draw(slot.ready ? 'UNREADY' : 'TOGGLE READY', readyStyle);
+        roomSlotButtons.push(readyBtn);
+
+        // Reset stroke for p5
         stroke(0);
         strokeWeight(1);
       } else {

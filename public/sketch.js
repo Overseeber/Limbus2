@@ -1,12 +1,26 @@
 // Character roster system is globally available
 
+const BATTLE_STATES = {
+  LOBBY: 'lobby',
+  CHARACTER_SELECT_SCREEN: 'characterSelectScreen',
+  READY: 'ready',
+  OPENING: 'opening',
+  BATTLE: 'battle',
+  SUMMARY: 'summary'
+};
+
 let player;
 let enemy;
-let battleState = 'characterSelect';
+let battleState = BATTLE_STATES.LOBBY;
 let winner = null;
 let summaryText = '';
 let lastMouseDown = null;
 let battleTimer = 0;
+
+function setBattleState(newState) {
+  console.log('[STATE] ->', newState);
+  battleState = newState;
+}
 
 // Opening sequence variables
 let openingSequenceTimer = 0;
@@ -52,8 +66,6 @@ let roomCharacterSelectSlot = -1;
 let roomCharacterPreviewKey = null;
 let availableCharacterKeys = () => Object.keys(window.CHARACTERS || {});
 
-// Intent flag for scene transitions (avoids same-frame UI destruction)
-let pendingCharacterSelect = null;
 
 // Reusable UI button class
 const DEBUG_UI = false;
@@ -98,7 +110,7 @@ class UIButton {
   }
 }
 
-// Room layout constants (must match drawCharacterSelect exactly)
+// Room layout constants (must match drawLobby exactly)
 const SLOT_COLUMN_W = 220;
 const SLOT_CONTENT_W = SLOT_COLUMN_W - 20; // 200
 const SLOT_Y = 130;
@@ -224,7 +236,7 @@ function initBattle() {
   player = fighters.find(f => f.isPlayerControlled);
   enemy = fighters.find(f => !f.isPlayerControlled) || fighters.find(f => f !== player);
 
-  battleState = 'opening';
+  setBattleState(BATTLE_STATES.OPENING);
   winner = null;
   summaryText = '';
   battleTimer = 0;
@@ -282,7 +294,7 @@ function initRoomBattle(slots) {
   player = fighters.find(f => f.isPlayerControlled);
   enemy = fighters.find(f => !f.isPlayerControlled) || fighters.find(f => f !== player);
   
-  battleState = 'opening';
+  setBattleState(BATTLE_STATES.OPENING);
   winner = null;
   summaryText = '';
   battleTimer = 0;
@@ -332,22 +344,20 @@ function handleRoomPeerInput(payload) {
 function draw() {
   // Process pending scene transitions (safely delayed to next frame)
   // This prevents same-frame UI destruction from breaking button click context
-  if (pendingCharacterSelect) {
-    roomCharacterSelectSlot = pendingCharacterSelect.slot;
-    roomCharacterPreviewKey = pendingCharacterSelect.key;
-    battleState = 'roomCharacterSelect';
-    pendingCharacterSelect = null;
+
+  if (frameCount % 60 === 0) {
+    console.log('[DEBUG] battleState =', battleState);
   }
 
-  if (battleState === 'roomCharacterSelect') {
-    drawRoomCharacterSelect();
-  } else if (battleState === 'characterSelect') {
-    drawCharacterSelect();
-  } else if (battleState === 'ready') {
+  if (battleState === BATTLE_STATES.CHARACTER_SELECT_SCREEN) {
+    drawCharacterSelectScreen();
+  } else if (battleState === BATTLE_STATES.LOBBY) {
+    drawLobby();
+  } else if (battleState === BATTLE_STATES.READY) {
     drawReadyScreen();
-  } else if (battleState === 'opening') {
+  } else if (battleState === BATTLE_STATES.OPENING) {
     drawOpeningSequence();
-  } else if (battleState === 'battle') {
+  } else if (battleState === BATTLE_STATES.BATTLE) {
     // Check for ultimate background dimming across all fighters
     const ultimateFighters = window.allFighters ? window.allFighters.filter(f => f.ultimateActive) : [];
     const ultimateActive = ultimateFighters.length > 0;
@@ -393,7 +403,7 @@ function draw() {
     } else if (pauseMenuOpen) {
       drawPauseMenu();
     }
-  } else if (battleState === 'summary') {
+  } else if (battleState === BATTLE_STATES.SUMMARY) {
     beginCamera();
     drawArena();
     
@@ -410,7 +420,7 @@ function draw() {
     drawSummary();
   }
 
-  if (battleState !== 'characterSelect' && battleState !== 'opening') {
+  if (battleState !== BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.OPENING) {
     drawHud();
   }
 }
@@ -451,7 +461,7 @@ function drawOpeningSequence() {
         fighter.introAnimationIndex = 0;
       });
     }
-    battleState = 'battle';
+    setBattleState(BATTLE_STATES.BATTLE);
     return;
   }
   
@@ -667,7 +677,7 @@ function updateBattle() {
     // Check for battle end (only one fighter not defeated)
     const activeFighters = window.allFighters.filter(f => !f.isDefeated);
     if (activeFighters.length <= 1) {
-      battleState = 'summary';
+      setBattleState(BATTLE_STATES.SUMMARY);
       winner = activeFighters[0] || null;
       summaryText = winner ? `${winner.name} wins!` : 'Draw!';
     }
@@ -686,7 +696,7 @@ function getPlayerControlledFighter() {
 
 function keyPressed() {
   // Handle pause menu navigation
-  if ((pauseMenuOpen || pauseSettingsOpen) && battleState === 'battle') {
+  if ((pauseMenuOpen || pauseSettingsOpen) && battleState === BATTLE_STATES.BATTLE) {
     if (keyCode === UP_ARROW) {
       pauseMenuOption = (pauseMenuOption - 1 + 2) % 2;
       return;
@@ -718,13 +728,13 @@ function keyPressed() {
   }
   
   // Open pause menu with ESC key during battle
-  if (battleState === 'battle' && keyCode === ESCAPE) {
+  if (battleState === BATTLE_STATES.BATTLE && keyCode === ESCAPE) {
     pauseMenuOpen = true;
     pauseMenuOption = 0;
     return;
   }
   
-  if (battleState === 'characterSelect') {
+  if (battleState === BATTLE_STATES.LOBBY) {
     // Room-based keyboard controls
     if (myRoomState) {
       const slots = myRoomState.slots || [];
@@ -745,6 +755,7 @@ function keyPressed() {
         localSlotSelections[selectedPlayerSlot] = keys[next];
         const slot = slots[selectedPlayerSlot];
         if (slot && Network && Network.socket && slot.clientId === Network.socket.id) {
+          console.log('Changing character to:', keys[next]);
           Network.changeCharacter(keys[next]);
         }
         return;
@@ -775,15 +786,15 @@ function keyPressed() {
     }
   }
   
-  if (battleState === 'ready' && keyCode === ENTER) {
-    battleState = 'battle';
+  if (battleState === BATTLE_STATES.READY && keyCode === ENTER) {
+    setBattleState(BATTLE_STATES.BATTLE);
     return;
   }
-  if (battleState === 'summary' && keyCode === ENTER) {
-    battleState = 'characterSelect';
+  if (battleState === BATTLE_STATES.SUMMARY && keyCode === ENTER) {
+    setBattleState(BATTLE_STATES.LOBBY);
     return;
   }
-  if (battleState === 'battle') {
+  if (battleState === BATTLE_STATES.BATTLE) {
     const controlledFighter = getPlayerControlledFighter();
     if (controlledFighter) {
       // Send input intent to server/local simulator
@@ -800,18 +811,18 @@ function keyPressed() {
 }
 
 function forfeitMatch() {
-  // Immediately return to character select and clear fighters
+  // Immediately return to lobby and clear fighters
   pauseMenuOpen = false;
   pauseSettingsOpen = false;
   window.allFighters = null;
   player = null;
   enemy = null;
-  battleState = 'characterSelect';
-  console.log('Match forfeited - returning to character select');
+  setBattleState(BATTLE_STATES.LOBBY);
+  console.log('Match forfeited - returning to lobby');
 }
 
 function keyReleased() {
-  if (battleState === 'battle') {
+  if (battleState === BATTLE_STATES.BATTLE) {
     const controlledFighter = getPlayerControlledFighter();
     if (controlledFighter) {
       if (typeof Network !== 'undefined' && Network.sendInput) {
@@ -823,7 +834,10 @@ function keyReleased() {
 }
 
 function mousePressed() {
-  if (battleState === 'characterSelect' && myRoomState) {
+  console.log('MOUSE PRESSED FIRED');
+  console.log('battleState', battleState);
+console.log('myRoomState', myRoomState);
+  if (battleState === BATTLE_STATES.LOBBY && myRoomState) {
     const mx = mouseX;
     const my = mouseY;
     
@@ -854,7 +868,7 @@ function mousePressed() {
       if (btn.click(mx, my)) return;
     }
 
-    // Fallback: clicking the character info area of your own slot opens character select
+    // Clicking anywhere on an owned slot opens character select
     const columnWidth = SLOT_COLUMN_W;
     const count = Math.max(2, slots.length);
     const startX = (width - (count * columnWidth)) / 2;
@@ -862,35 +876,42 @@ function mousePressed() {
     for (let i = 0; i < count; i++) {
       const x = startX + i * columnWidth;
 
-      if (mx > x && mx < x + columnWidth && my > SLOT_Y && my < SLOT_Y + SLOT_H) {
+const slotWidth = columnWidth - 20;
+
+if (
+  mx >= x &&
+  mx <= x + slotWidth &&
+  my >= SLOT_Y &&
+  my <= SLOT_Y + SLOT_H
+) {
+  console.log('chgaeck', i);
         const slot = slots[i];
         if (!slot || !slot.clientId) return; // empty slot
 
-        // Only owned slots respond to fallback click
-        if (!Network || !Network.socket || slot.clientId !== Network.socket.id) return;
+        const isOwnedSlot = (Network && Network.socket && slot.clientId === Network.socket.id) || (Network && Network.isLocalAuthority && slot.clientId === 'local');
+        if (!isOwnedSlot) return;
 
-        // Click is in the character info area (above the buttons, below the ready text)
-        if (my > SLOT_Y && my < SLOT_Y + BTN_CHANGE_OFFSET_Y - 2) {
-          const keys = availableCharacterKeys();
-          if (keys.length === 0) return;
-          roomCharacterSelectSlot = i;
-          roomCharacterPreviewKey = localSlotSelections[i] || keys[0];
-          battleState = 'roomCharacterSelect';
-          return;
-        }
+    
+      roomCharacterSelectSlot = i;
+roomCharacterPreviewKey = localSlotSelections[i] || keys[0];
+
+console.log('OPEN CHARACTER SELECT');
+
+setBattleState(BATTLE_STATES.CHARACTER_SELECT_SCREEN);
+        return;
       }
     }
 
     return;
   }
 
-  // Room selection screen (when not in a room)
-  if (battleState === 'roomCharacterSelect') {
-    handleRoomCharacterSelectClick(mouseX, mouseY);
+  // Character Select screen
+  if (battleState === BATTLE_STATES.CHARACTER_SELECT_SCREEN) {
+    handleCharacterSelectScreenClick(mouseX, mouseY);
     return;
   }
 
-  if (battleState === 'characterSelect' && !myRoomState) {
+  if (battleState === BATTLE_STATES.LOBBY && !myRoomState) {
     const mx = mouseX;
     const my = mouseY;
     
@@ -925,7 +946,7 @@ function mousePressed() {
     }
   }
 
-  if (battleState === 'characterSelect') {
+  if (battleState === BATTLE_STATES.LOBBY) {
     const mx = mouseX;
     const my = mouseY;
     
@@ -1015,7 +1036,7 @@ function mousePressed() {
     return;
   }
   
-  if (battleState !== 'battle') {
+  if (battleState !== BATTLE_STATES.BATTLE) {
     return;
   }
 
@@ -1127,7 +1148,7 @@ function drawUltimateDamageCounter(fighter) {
 }
 
 function mouseReleased() {
-  if (battleState !== 'battle') {
+  if (battleState !== BATTLE_STATES.BATTLE) {
     return;
   }
 
@@ -1147,7 +1168,7 @@ function mouseReleased() {
   }
 }
 
-function handleRoomCharacterSelectClick(mx, my) {
+function handleCharacterSelectScreenClick(mx, my) {
   const keys = availableCharacterKeys();
   const gridCols = 3;
   const gridSpacing = 16;
@@ -1174,26 +1195,26 @@ function handleRoomCharacterSelectClick(mx, my) {
   const buttonW = 200;
   const buttonH = 48;
 
-  if (mx > cancelX && mx < cancelX + buttonW && my > buttonY && my < buttonY + buttonH) {
-    battleState = 'characterSelect';
-    roomCharacterSelectSlot = -1;
-    roomCharacterPreviewKey = null;
-    return;
-  }
-
-  if (mx > confirmX && mx < confirmX + buttonW && my > buttonY && my < buttonY + buttonH) {
-    if (roomCharacterSelectSlot >= 0 && roomCharacterPreviewKey) {
-      localSlotSelections[roomCharacterSelectSlot] = roomCharacterPreviewKey;
-      Network.changeCharacter(roomCharacterPreviewKey);
+    if (mx > cancelX && mx < cancelX + buttonW && my > buttonY && my < buttonY + buttonH) {
+      setBattleState(BATTLE_STATES.LOBBY);
+      roomCharacterSelectSlot = -1;
+      roomCharacterPreviewKey = null;
+      return;
     }
-    battleState = 'characterSelect';
-    roomCharacterSelectSlot = -1;
-    roomCharacterPreviewKey = null;
-    return;
-  }
+
+    if (mx > confirmX && mx < confirmX + buttonW && my > buttonY && my < buttonY + buttonH) {
+      if (roomCharacterSelectSlot >= 0 && roomCharacterPreviewKey) {
+        localSlotSelections[roomCharacterSelectSlot] = roomCharacterPreviewKey;
+        Network.changeCharacter(roomCharacterPreviewKey);
+      }
+      setBattleState(BATTLE_STATES.LOBBY);
+      roomCharacterSelectSlot = -1;
+      roomCharacterPreviewKey = null;
+      return;
+    }
 }
 
-function drawCharacterSelect() {
+function drawLobby() {
   background(20);
 
   // Title and Room Info
@@ -1203,7 +1224,7 @@ function drawCharacterSelect() {
   fill(255);
   stroke(0);
   strokeWeight(3);
-  text('CHARACTER SELECT', width / 2, 40);
+  text('LOBBY', width / 2, 40);
   pop();
 
   // If we have an active room state, render the room and its slots
@@ -1251,7 +1272,7 @@ function drawCharacterSelect() {
 
       const slot = slots[i];
 
-      if (!slot || !slot.character) {
+      if (!slot || !slot.clientId) {
         push();
         textAlign(CENTER, CENTER);
         textSize(14);
@@ -1264,16 +1285,37 @@ function drawCharacterSelect() {
         continue;
       }
 
+      const isOwnedSlot = (Network && Network.socket && slot.clientId === Network.socket.id) || (Network && Network.isLocalAuthority && slot.clientId === 'local');
+      const isHoveredSlot = isOwnedSlot && mouseX > x && mouseX < x + columnWidth && mouseY > y && mouseY < y + SLOT_H;
       let charKey = slot.character || '—';
-      if (Network && Network.socket && slot.clientId === Network.socket.id && localSlotSelections[i]) {
+      if (localSlotSelections[i]) {
         charKey = localSlotSelections[i];
       }
       const charName = (window.CHARACTERS && window.CHARACTERS[charKey]) ? window.CHARACTERS[charKey].name : charKey;
 
+      if (!slot.character) {
+        push();
+        textAlign(CENTER, CENTER);
+        textSize(14);
+        fill(180);
+        text('No character selected', x + (columnWidth - 20) / 2, y + 70);
+        pop();
+      }
+
+      // Slot highlight for owned hover state
+      if (isHoveredSlot) {
+        push();
+        noFill();
+        stroke(100, 180, 255);
+        strokeWeight(4);
+        rect(x + 2, y + 2, columnWidth - 24, SLOT_H - 4, 8);
+        pop();
+      }
+
       push();
       textAlign(CENTER, CENTER);
       textSize(16);
-      if (slot.clientId === (Network && Network.socket && Network.socket.id)) {
+      if (isOwnedSlot) {
         fill(100, 255, 100);
         text('(YOU)', x + (columnWidth - 20) / 2, y + 52);
       } else {
@@ -1281,7 +1323,12 @@ function drawCharacterSelect() {
       }
       text(charName, x + (columnWidth - 20) / 2, y + 80);
       pop();
-
+push();
+noFill();
+stroke(255,0,0);
+strokeWeight(3);
+rect(x, SLOT_Y, columnWidth - 20, SLOT_H);
+pop();
       // Show ready state
       push();
       textAlign(CENTER, CENTER);
@@ -1295,33 +1342,33 @@ function drawCharacterSelect() {
       }
       pop();
 
-      // Show click hints for the current player's slot
-      if (slot.clientId === (Network && Network.socket && Network.socket.id)) {
+      // Show instructions for the current player's slot
+      if (isOwnedSlot) {
         push();
         textAlign(CENTER, CENTER);
         textSize(12);
         fill(150);
-        text('Click the button below to change', x + (columnWidth - 20) / 2, y + 160);
-        text('your character selection', x + (columnWidth - 20) / 2, y + 176);
+        text('Open the character browser to change', x + (columnWidth - 20) / 2, y + 160);
+        text('your selection, then confirm in the preview screen.', x + (columnWidth - 20) / 2, y + 176);
         pop();
 
         const btnX = x + BTN_X_OFFSET;
         const changeBtnY = y + BTN_CHANGE_OFFSET_Y;
         const readyBtnY = y + BTN_READY_OFFSET_Y;
 
-        // Create and draw CHANGE CHARACTER button
-        const changeBtn = new UIButton(btnX, changeBtnY, BTN_W, BTN_CHANGE_H, () => {
-          const keys = availableCharacterKeys();
-          if (keys.length === 0) return;
-          // Use intent flag to delay state transition to next frame
-          // This prevents the button's click context from being destroyed
-          // in the same frame by battleState switching.
-          pendingCharacterSelect = {
-            slot: i,
-            key: localSlotSelections[i] || keys[0]
-          };
-        });
-        changeBtn.draw('CHANGE CHARACTER', { stroke: [120, 160, 255], fill: [80, 120, 220], text: 255, textSize: 14 });
+        // Create and draw Change Character button
+     const changeBtn = new UIButton(btnX, changeBtnY, BTN_W, BTN_CHANGE_H, () => {
+  const keys = availableCharacterKeys();
+  if (keys.length === 0) return;
+
+  roomCharacterSelectSlot = i;
+  roomCharacterPreviewKey = localSlotSelections[i] || keys[0];
+
+  console.log('OPEN CHARACTER SELECT');
+
+  setBattleState(BATTLE_STATES.CHARACTER_SELECT_SCREEN);
+});
+        changeBtn.draw('CHANGE CHARACTER', { stroke: [100, 160, 255], fill: [40, 70, 120], text: 255, textSize: 12 });
         roomSlotButtons.push(changeBtn);
 
         // Create and draw ready/unready button
@@ -1473,7 +1520,7 @@ function getCharacterIdleSpriteName(characterKey) {
   return 'idle';
 }
 
-function drawRoomCharacterSelect() {
+function drawCharacterSelectScreen() {
   background(18);
 
   push();

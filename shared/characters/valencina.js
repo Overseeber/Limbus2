@@ -1,0 +1,110 @@
+/**
+ * VALENCINA - SHARED CHARACTER CONFIG
+ * This file contains ONLY character stats, constants, and ability configurations.
+ * NO gameplay logic, NO rendering code, NO p5.js dependencies.
+ * 
+ * Server and client both load this file to access shared character data.
+ */
+
+const VALENCINA_CONFIG = {
+  // IDENTITY
+  id: 'VALENCINA',
+  name: 'Valencina',
+  title: 'The Accelerating Future',
+  
+  // COMBAT STATS
+  hp: 3204,
+  maxHp: 3204,
+  speed: 9,
+  attackInterval: 1.0,
+  baseDamage: 21,
+  knockbackMultiplier: 1.0,
+  staggerThreshold: 1300,
+  staggerLength: 5,
+  
+  // VISUAL CONFIG (client-only)
+  color: '#ff6b9d',
+  weapon: 'La Spada di Palermo',
+  spriteType: 'atlas',
+  defaultSprite: 'idle',
+  
+  // UNIQUE ABILITY CONFIGS
+  abilities: {
+    timeToHunt: {
+      cooldown: 8,
+      range: 150,
+      baseDamage: 1.2,
+      knockback: 100,
+      statusEffects: [
+        { type: 'Burn', count: 4, potency: 4 },
+        { type: 'Tremor', count: 4, potency: 4 }
+      ]
+    },
+    disposial: {
+      cooldown: 12,
+      range: 200,
+      baseDamage: 1.5,
+      statusEffects: [
+        { type: 'Tremor', count: 6, potency: 6 },
+        { type: 'Burn', count: 6, potency: 6 }
+      ]
+    }
+  },
+  
+  // RESOURCE SYSTEMS
+  accelerationRounds: {
+    max: 10,
+    gainPerReload: 10,
+    consumePerAbility: 1
+  },
+  
+  precognition: {
+    max: 30,
+    startingValue: 30,
+    gainPerHit: 1,
+    gainPerEvade: 1,
+    gainPerBlock: 1,
+    consumePerAbility: 1
+  },
+  
+  overheat: {
+    max: 30,
+    losePerHit: 1,
+    losePerBlock: 1,
+    burnDamageScaling: 0.5 // Overheat increases burn damage
+  },
+  
+  shin: {
+    activationThreshold: 0.5, // Activate at <50% HP
+    damageBonus: 0.2, // +20% damage
+    speedBonus: 1.5, // 1.5x speed
+    burnBonusPotency: 2 // +2 potency per burn
+  },
+  
+  // STATUS EFFECT MODIFIERS
+  statusModifiers: {
+    Burn: {
+      potencyBonus: 1 // +1 potency per Overheat stack
+    }
+  },
+  
+  // ULTIMATE ABILITY CONFIG
+  ultimate: {
+    name: 'Disposal',
+    cooldown: 0, // Filled by server
+    range: 250,
+    baseDamage: 2.0,
+    statusEffects: [
+      { type: 'Burn', count: 8, potency: 8 },
+      { type: 'Tremor', count: 8, potency: 8 },
+      { type: 'Fragile', count: 1, potency: 1 }
+    ],
+    duration: 2.5,
+    phases: 5
+  }
+};
+
+// Export for server/client usage
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = VALENCINA_CONFIG;
+}

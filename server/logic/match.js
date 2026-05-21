@@ -2,6 +2,25 @@
  * MATCH CLASS - Server-side authoritative game simulation
  * Owns fighters, ticking, attacks, match state, and broadcasting
  * No external dependencies on global io, gameplayEngine, or room.matchFighters
+ *
+ * SERVER RESPONSIBILITIES:
+ * - Movement (velocity, position, gravity)
+ * - Combat (hit detection, damage calculation, attack resolution)
+ * - Collisions (player-to-player, wall boundaries)
+ * - State machines (idle, attack, guard, dash, staggered, defeated)
+ * - Abilities (validation, execution, cooldowns)
+ * - Knockback and stun
+ * - Status effects (burn, bleed, rupture, etc.)
+ * - Match rules (win conditions, match end)
+ *
+ * CLIENT RESPONSIBILITIES:
+ * - Rendering (sprites, animations, particles)
+ * - UI (health bars, cooldown indicators, menus)
+ * - Camera (positioning, zoom, shake effects)
+ * - Input collection (sending input intent to server)
+ * - Snapshot application (applying server state to local fighters)
+ * - Interpolation (smoothing movement between snapshots)
+ * - Audio (sound effects, music)
  */
 
 const GameplayEngine = require('./gameplayEngine');
@@ -53,7 +72,16 @@ class Match {
                 clientId: config.clientId,
                 characterKey: charKey,
                 gameState: gameState,
-                config: charConfig
+                config: charConfig,
+                input: {
+                    left: false,
+                    right: false,
+                    up: false,
+                    down: false,
+                    attack: false,
+                    guard: false,
+                    dash: false
+                }
             };
         });
     }
@@ -90,30 +118,158 @@ class Match {
      */
     tick() {
         if (!this.running) return;
-        
+
         const dt = this.tickRate / 1000; // Convert to seconds
-        
+
         // Update each player's authoritative state
         Object.values(this.players).forEach(player => {
             if (!player.gameState.isDefeated) {
+                // Process input
+                this.processInput(player, dt);
+
+                // Update physics
+                this.updatePhysics(player, dt);
+
+                // Resolve collisions
+                this.resolveCollisions(player);
+
+                // Update gameplay state through GameplayEngine
                 const config = {
                     staggerThreshold: player.config.staggerThreshold,
                     staggerLength: player.config.staggerLength
                 };
-                
-                // Let GameplayEngine process tick updates
+
                 const events = this.engine.updateFighter(player.gameState, dt, config);
-                
+
                 // Handle events from GameplayEngine
                 this.handleEvents(player, events);
             }
         });
-        
+
         // Check win condition
         this.checkWinCondition();
-        
-        // Broadcast state to all clients
-        this.broadcastState();
+
+        // Broadcast snapshot to all clients
+        this.broadcastSnapshot();
+    }
+
+    /**
+     * Process player input
+     */
+    processInput(player, dt) {
+        const input = player.input;
+        const state = player.gameState;
+
+        // Apply input to velocity based on character config
+        if (input.left) {
+            state.velocity.x = -player.config.speed;
+            state.facing = -1;
+        } else if (input.right) {
+            state.velocity.x = player.config.speed;
+            state.facing = 1;
+        } else {
+            state.velocity.x = 0;
+        }
+
+        // Jump input
+        if (input.up && state.onGround) {
+            state.velocity.y = -player.config.jumpHeight;
+            state.onGround = false;
+        }
+
+        // Attack input
+        if (input.attack) {
+            // Attack handling will be done through GameplayEngine
+            // For now, just set attack flag
+            state.isAttacking = true;
+        }
+
+        // Guard input
+        if (input.guard) {
+            state.isGuarding = true;
+        } else {
+            state.isGuarding = false;
+        }
+
+        // Dash input
+        if (input.dash && state.canDash) {
+            state.isDashing = true;
+            state.dashTimer = 0.3; // 300ms dash duration
+            state.canDash = false;
+            state.dashCooldown = 1.0; // 1 second cooldown
+        }
+    }
+
+    /**
+     * Update physics for a player
+     */
+    updatePhysics(player, dt) {
+        const state = player.gameState;
+
+        // Apply gravity
+        if (!state.onGround) {
+            state.velocity.y += 980 * dt; // Gravity
+        }
+
+        // Apply velocity to position
+        state.position.x += state.velocity.x * dt;
+        state.position.y += state.velocity.y * dt;
+
+        // Ground collision
+        if (state.position.y >= 600) {
+            state.position.y = 600;
+            state.velocity.y = 0;
+            state.onGround = true;
+        }
+
+        // Wall boundaries
+        if (state.position.x < 50) state.position.x = 50;
+        if (state.position.x > 1350) state.position.x = 1350;
+
+        // Update dash timer
+        if (state.isDashing) {
+            state.dashTimer -= dt;
+            if (state.dashTimer <= 0) {
+                state.isDashing = false;
+            }
+        }
+
+        // Update dash cooldown
+        if (state.dashCooldown > 0) {
+            state.dashCooldown -= dt;
+            if (state.dashCooldown <= 0) {
+                state.canDash = true;
+                state.dashCooldown = 0;
+            }
+        }
+    }
+
+    /**
+     * Resolve collisions between players
+     */
+    resolveCollisions(player) {
+        // Simple circle collision detection
+        Object.values(this.players).forEach(other => {
+            if (other.clientId === player.clientId) return;
+            if (other.gameState.isDefeated) return;
+
+            const dx = player.gameState.position.x - other.gameState.position.x;
+            const dy = player.gameState.position.y - other.gameState.position.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const minDistance = 50; // Sum of radii
+
+            if (distance < minDistance) {
+                // Push players apart
+                const overlap = minDistance - distance;
+                const pushX = (dx / distance) * overlap / 2;
+                const pushY = (dy / distance) * overlap / 2;
+
+                player.gameState.position.x += pushX;
+                player.gameState.position.y += pushY;
+                other.gameState.position.x -= pushX;
+                other.gameState.position.y -= pushY;
+            }
+        });
     }
 
     /**
@@ -178,13 +334,12 @@ class Match {
      */
     handleInput(playerId, input) {
         if (!this.running) return;
-        
+
         const player = this.players[playerId];
         if (!player || player.gameState.isDefeated) return;
-        
-        // Process input through GameplayEngine
-        // This would need to be implemented in GameplayEngine
-        // For now, this is a placeholder
+
+        // Store input state
+        player.input = input;
     }
 
     /**
@@ -283,19 +438,29 @@ class Match {
     }
 
     /**
-     * Broadcast state to all clients in room
+     * Broadcast snapshot to all clients in room
      */
-    broadcastState() {
+    broadcastSnapshot() {
         const snapshot = {
-            type: 'GAME_STATE_UPDATE',
-            fighters: {}
+            players: Array.from(this.players.values()).map(player => ({
+                id: player.clientId,
+                x: player.gameState.position.x,
+                y: player.gameState.position.y,
+                vx: player.gameState.velocity.x,
+                vy: player.gameState.velocity.y,
+                hp: player.gameState.hp,
+                maxHp: player.gameState.maxHp,
+                state: player.gameState.state,
+                facing: player.gameState.facing,
+                statuses: player.gameState.statuses,
+                isDefeated: player.gameState.isDefeated,
+                isAttacking: player.gameState.isAttacking || false,
+                isGuarding: player.gameState.isGuarding || false,
+                isDashing: player.gameState.isDashing || false
+            }))
         };
-        
-        Object.values(this.players).forEach(player => {
-            snapshot.fighters[player.clientId] = this.engine.getStateSnapshot(player.gameState);
-        });
-        
-        this.io.to(this.room.id).emit('gameState', snapshot);
+
+        this.io.to(this.room.id).emit('snapshot', snapshot);
     }
 
     /**

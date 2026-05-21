@@ -195,13 +195,65 @@ function setup() {//test
         initRoomBattle(data.slots);
       }
     });
-    Network.on('peerInput', (payload) => {
-      handleRoomPeerInput(payload);
-    });
     Network.on('abilityResult', (result) => {
       handleAbilityResult(result);
     });
+    Network.on('snapshot', snapshot => {
+    applySnapshot(snapshot);
+});
   }
+}
+
+function applySnapshot(snapshot) {
+    for (const state of snapshot.players) {
+
+        const fighter = allFighters.find(
+            f => f.clientId === state.id
+        );
+
+        if (!fighter) continue;
+
+        // Apply authoritative state from server
+        fighter.pos.x = state.x;
+        fighter.pos.y = state.y;
+
+        fighter.vel.x = state.vx;
+        fighter.vel.y = state.vy;
+
+        fighter.hp = state.hp;
+        fighter.maxHp = state.maxHp;
+        fighter.state = state.state;
+        fighter.facing = state.facing;
+
+        // Apply statuses
+        fighter.statuses = state.statuses || [];
+
+        // Apply defeat state
+        fighter.isDefeated = state.isDefeated || false;
+
+        // Apply action states
+        fighter.isAttacking = state.isAttacking || false;
+        fighter.isGuarding = state.isGuarding || false;
+        fighter.isDashing = state.isDashing || false;
+    }
+}
+
+function sendInputState() {
+    const controlledFighter = getPlayerControlledFighter();
+    if (!controlledFighter) return;
+
+    // Collect current input state
+    const input = {
+        left: keyIsDown(65) || keyIsDown(LEFT_ARROW), // A or Left
+        right: keyIsDown(68) || keyIsDown(RIGHT_ARROW), // D or Right
+        up: keyIsDown(87) || keyIsDown(UP_ARROW), // W or Up
+        down: keyIsDown(83) || keyIsDown(DOWN_ARROW), // S or Down
+        attack: mouseIsPressed && mouseButton === LEFT,
+        guard: mouseIsPressed && mouseButton === RIGHT,
+        dash: keyIsDown(32) // Space
+    };
+
+    Network.sendInput(input);
 }
 
 function initBattle() {
@@ -213,13 +265,13 @@ function initBattle() {
     return;
   }
   
-  // Find the player-controlled fighter
-  let playerControlledFighter = activePlayers.find(p => p.controlled);
-  if (!playerControlledFighter) {
-    // If no player is controlled, make the first active player controlled
-    activePlayers[0].controlled = true;
-    playerControlledFighter = activePlayers[0];
-  }
+  // // Find the player-controlled fighter
+  // let playerControlledFighter = activePlayers.find(p => p.controlled);
+  // if (!playerControlledFighter) {
+  //   // If no player is controlled, make the first active player controlled
+  //   activePlayers[0].controlled = true;
+  //   playerControlledFighter = activePlayers[0];
+  // }
   
   // Create fighters for all active players
   const fighters = [];
@@ -242,14 +294,14 @@ function initBattle() {
     fighter.isAI = isAI;
     fighter.isPlayerControlled = isPlayerControlled;
     
-    // Set proper positioning for multi-player battles
+    // Set proper positioning for multi-player battles < move to server
     const spacing = 300; // Horizontal spacing between players
     const centerX = width / 2;
     const totalWidth = (activePlayers.length - 1) * spacing;
     const startX = centerX - totalWidth / 2;
     
-    fighter.pos.x = startX + (i * spacing);
-    fighter.pos.y = height - 100;
+    // fighter.pos.x = startX + (i * spacing);
+    // fighter.pos.y = height - 100;
     fighter.facing = isPlayerControlled ? 1 : -1; // Player-controlled face right, AI face left
     
     fighters.push(fighter);
@@ -303,14 +355,14 @@ function initRoomBattle(slots) {
     fighter.isLocalPlayer = isLocalPlayer;
     fighter.isAI = false;
     fighter.isPlayerControlled = true;
-    
-    const spacing = 300;
-    const centerX = width / 2;
-    const totalWidth = (activePlayers.length - 1) * spacing;
-    const startX = centerX - totalWidth / 2;
-    
-    fighter.pos.x = startX + (i * spacing);
-    fighter.pos.y = height - 100;
+      //move to server
+    // const spacing = 300;
+    // const centerX = width / 2;
+    // const totalWidth = (activePlayers.length - 1) * spacing;
+    // const startX = centerX - totalWidth / 2;
+  
+    // fighter.pos.x = startX + (i * spacing);
+    // fighter.pos.y = height - 100;
     fighter.facing = isLocalPlayer ? 1 : -1;
     
     fighters.push(fighter);
@@ -385,38 +437,6 @@ function initCPUBattle() {
   
   fighters.forEach(f => f.reset());
   damageNumbers = [];
-}
-
-function handleRoomPeerInput(payload) {
-  // Only handle in multiplayer mode
-  if (gameMode !== 'multiplayer') return;
-  
-  if (!payload || !payload.from || !payload.data || !window.allFighters) return;
-  const remoteFighter = window.allFighters.find(f => f.clientId === payload.from);
-  if (!remoteFighter) return;
-
-  const input = payload.data;
-  if (input.type === 'keyPressed' && input.key) {
-    remoteFighter.processKeyPressed(input.key);
-  } else if (input.type === 'keyReleased' && input.key) {
-    remoteFighter.processKeyReleased(input.key);
-  } else if (input.type === 'mouse') {
-    if (input.action === 'attackPress') {
-      remoteFighter.requestAttack();
-    } else if (input.action === 'attackRelease') {
-      remoteFighter.releaseAttack(false);
-    } else if (input.action === 'guardPress') {
-      remoteFighter.requestGuard();
-    } else if (input.action === 'guardRelease') {
-      remoteFighter.releaseGuard();
-    } else if (input.action === 'evadePress') {
-      remoteFighter.requestEvade();
-    } else if (input.action === 'dash') {
-      if (typeof remoteFighter.startDash === 'function') {
-        remoteFighter.startDash();
-      }
-    }
-  }
 }
 
 function handleAbilityResult(result) {
@@ -844,6 +864,22 @@ function drawVignette() {
     noStroke();
     rect(width - vignetteWidth + x, 0, 1, height);
   }
+  //add bottom and top vignette
+
+  for (let y = 0; y < vignetteWidth; y++) {
+    const alpha = map(y, 0, vignetteWidth, 255, 0);
+    fill(0, 0, 0, alpha);
+    noStroke();
+    rect(0, y, width, 1);
+  }
+
+  for (let y = 0; y < vignetteWidth; y++) {
+    const alpha = map(y, 0, vignetteWidth, 0, 255);
+    fill(0, 0, 0, alpha);
+    noStroke();
+    rect(0, height - vignetteWidth + y, width, 1);
+  }
+
   fill(0);
   rect(-500,0,500,height);
   rect(width,0,500,height);
@@ -852,7 +888,12 @@ function drawVignette() {
 function updateBattle() {
   const dt = deltaTime / 1000;
   battleTimer += dt;
-  
+
+  // Send input state to server in multiplayer mode
+  if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
+    sendInputState();
+  }
+
   // Update all fighters
   if (window.allFighters) {
     for (let i = 0; i < window.allFighters.length; i++) {
@@ -860,7 +901,7 @@ function updateBattle() {
       
       // Disable player movement when pause menu or settings are open
       if (!pauseMenuOpen && !pauseSettingsOpen && !fighter.ultimateActive && fighter.isPlayerControlled) {
-        fighter.handleInput();
+       // fighter.handleInput(); handeled by server
       }
       
       // Update AI for non-player-controlled fighters with AI enabled
@@ -874,7 +915,7 @@ function updateBattle() {
       
       // Update fighter physics and state
       const targets = window.allFighters.filter(f => f !== fighter);
-      fighter.update(dt, targets); // Pass all available targets for multi-player combat
+    //  fighter.update(dt, targets); // Pass all available targets for multi-player combat server job
     }
     
     // Handle collisions between all non-defeated fighters
@@ -1021,14 +1062,12 @@ function keyPressed() {
   if (battleState === BATTLE_STATES.BATTLE) {
     const controlledFighter = getPlayerControlledFighter();
     if (controlledFighter) {
-      // Send input intent to server/local simulator (only for multiplayer)
-      if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
-        Network.sendInput({ type: 'keyPressed', key, playerId: controlledFighter.playerId });
-      }
-      // Local fallback for single-player responsiveness
-      controlledFighter.processKeyPressed(key);
-      if (key === ' ' || keyCode === 32) {
-        controlledFighter.startDash();
+      // Local fallback for single-player responsiveness only
+      if (gameMode !== 'multiplayer') {
+        controlledFighter.processKeyPressed(key);
+        if (key === ' ' || keyCode === 32) {
+          controlledFighter.startDash();
+        }
       }
     }
   }
@@ -1049,10 +1088,10 @@ function keyReleased() {
   if (battleState === BATTLE_STATES.BATTLE) {
     const controlledFighter = getPlayerControlledFighter();
     if (controlledFighter) {
-      if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
-        Network.sendInput({ type: 'keyReleased', key, playerId: controlledFighter.playerId });
+      // Local fallback for single-player responsiveness only
+      if (gameMode !== 'multiplayer') {
+        controlledFighter.processKeyReleased(key);
       }
-      controlledFighter.processKeyReleased(key);
     }
   }
 }
@@ -1355,16 +1394,16 @@ if (
 
   const controlledFighter = getPlayerControlledFighter();
   if (mouseButton === LEFT) {
-    if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
-      Network.sendInput({ type: 'mouse', action: 'attackPress', playerId: controlledFighter.playerId });
+    // Local fallback for single-player responsiveness only
+    if (gameMode !== 'multiplayer') {
+      controlledFighter.requestAttack();
+      lastMouseDown = millis();
     }
-    controlledFighter.requestAttack();
-    lastMouseDown = millis();
   } else if (mouseButton === RIGHT) {
-    if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
-      Network.sendInput({ type: 'mouse', action: 'guardPress', playerId: controlledFighter.playerId });
+    // Local fallback for single-player responsiveness only
+    if (gameMode !== 'multiplayer') {
+      controlledFighter.requestGuard(enemy);
     }
-    controlledFighter.requestGuard(enemy);
   }
 }
 
@@ -1420,17 +1459,17 @@ function mouseReleased() {
 
   const controlledFighter = getPlayerControlledFighter();
   if (mouseButton === LEFT) {
-    const held = millis() - (lastMouseDown || 0);
-    if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
-      Network.sendInput({ type: 'mouse', action: 'attackRelease', held, playerId: controlledFighter.playerId });
+    // Local fallback for single-player responsiveness only
+    if (gameMode !== 'multiplayer') {
+      const held = millis() - (lastMouseDown || 0);
+      controlledFighter.releaseAttack(held > 300);
+      lastMouseDown = null;
     }
-    controlledFighter.releaseAttack(held > 300);
-    lastMouseDown = null;
   } else if (mouseButton === RIGHT) {
-    if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
-      Network.sendInput({ type: 'mouse', action: 'guardRelease', playerId: controlledFighter.playerId });
+    // Local fallback for single-player responsiveness only
+    if (gameMode !== 'multiplayer') {
+      controlledFighter.releaseGuard();
     }
-    controlledFighter.releaseGuard();
   }
 }
 

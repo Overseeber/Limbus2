@@ -95,9 +95,6 @@ window.Network = {
       window.myRoomId = roomId;
       this._emit('joinedRoom', roomId);
     });
-    socket.on('peerInput', (data) => {
-      this._emit('peerInput', data);
-    });
     socket.on('battleStart', (data) => {
       this._emit('battleStart', data);
     });

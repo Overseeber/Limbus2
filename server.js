@@ -316,11 +316,18 @@ io.sockets.on('connection', (socket) => {
     });
 
     // Toggle ready state
-    socket.on('toggleReady', () => {
-        client.ready = !client.ready;
-        if (client.room) emitRoomState(client.room);
-    });
+    // socket.on('toggleReady', () => {
+    //     client.ready = !client.ready;
+    //     if (client.room) emitRoomState(client.room);
+    // });
+socket.on('toggleReady', () => {
+    client.ready = !client.ready;
 
+    const room = roomList[client.room];
+    if (!room) return;
+
+    emitRoomState(client.room);
+});
     // Start the battle with full server authority
     socket.on('startBattle', () => {
         const room = roomList[client.room];
@@ -349,7 +356,18 @@ io.sockets.on('connection', (socket) => {
             console.log('Battle started in room ' + client.room);
         }
     });
+    socket.on('input', (input) => {
 
+    const room = roomList[client.room];
+
+    if (!room || !room.match) return;
+
+    const player = room.match.getPlayer(socket.id);
+
+    if (!player) return;
+
+    player.input = input;
+});
     // Handle ability requests with full server authority
     socket.on('ability', (data) => {
         const room = roomList[client.room];
@@ -379,12 +397,8 @@ io.sockets.on('connection', (socket) => {
         room.match.resolveAttack(socket.id, attackData);
     });
 
-    // Broadcast inputs to room peers
-    socket.on('input', (data) => {
-        if (client.room) {
-            socket.to(client.room).emit('peerInput', { from: socket.id, data });
-        }
-    });
+    // no peer input, server only
+   
 
     // Handle disconnect
     socket.on('disconnect', () => {

@@ -5,6 +5,7 @@ const BATTLE_STATES = {
   LOBBY: 'lobby',
   CHARACTER_SELECT_MENU: 'characterSelectMenu',
   CHARACTER_PREVIEW: 'characterPreview',
+  CPU_OPPONENT_CONFIG: 'cpuOpponentConfig',
   READY: 'ready',
   OPENING: 'opening',
   BATTLE: 'battle',
@@ -82,6 +83,11 @@ let modeSelectButtons = [];
 
 // CPU mode variables
 let cpuOpponentCharacter = null;
+let cpuOpponentAIEnabled = true; // Whether AI opponent has behavior enabled
+let cpuModeStep = 'playerSelect'; // 'playerSelect', 'opponentSelect', 'opponentConfig'
+
+// CPU opponent config screen buttons
+let cpuConfigButtons = [];
 
 
 // Reusable UI button class
@@ -499,6 +505,8 @@ function draw() {
     drawCharacterSelectMenu();
   } else if (battleState === BATTLE_STATES.CHARACTER_PREVIEW) {
     drawCharacterPreview();
+  } else if (battleState === BATTLE_STATES.CPU_OPPONENT_CONFIG) {
+    drawCPUOpponentConfig();
   } else if (battleState === BATTLE_STATES.LOBBY) {
     drawLobby();
   } else if (battleState === BATTLE_STATES.READY) {
@@ -1075,14 +1083,15 @@ console.log('myRoomState', myRoomState);
     
     if (mx > cpuBtnX && mx < cpuBtnX + btnW && my > cpuBtnY && my < cpuBtnY + btnH) {
       gameMode = 'cpu';
-      // For CPU mode, go straight to character select for the player
-      const cpuCharacters = availableCharacterKeys();
-      cpuOpponentCharacter = cpuCharacters[Math.floor(Math.random() * cpuCharacters.length)];
+      // For CPU mode, go to character select for the player
       // Reset player slot for local play
       players[0].character = 'VALENCINA';
       players[0].ai = false;
       players[0].controlled = true;
       players[0].ready = false;
+      // Set opponent defaults
+      cpuOpponentCharacter = 'CALLISTO';
+      cpuOpponentAIEnabled = true;
       setBattleState(BATTLE_STATES.CHARACTER_SELECT_MENU);
       return;
     }
@@ -1161,6 +1170,10 @@ if (
   }
   if (battleState === BATTLE_STATES.CHARACTER_PREVIEW) {
     handleCharacterPreviewClick(mouseX, mouseY);
+    return;
+  }
+  if (battleState === BATTLE_STATES.CPU_OPPONENT_CONFIG) {
+    handleCPUConfigClick(mouseX, mouseY);
     return;
   }
 
@@ -1574,8 +1587,8 @@ function drawCharacterPreview() {
     roomCharacterSelectSlot = -1;
     
     if (gameMode === 'cpu') {
-      // For CPU mode, go straight to ready screen
-      setBattleState(BATTLE_STATES.READY);
+      // For CPU mode, go to opponent config screen
+      setBattleState(BATTLE_STATES.CPU_OPPONENT_CONFIG);
     } else {
       // For multiplayer, return to lobby
       setBattleState(BATTLE_STATES.LOBBY);
@@ -1602,6 +1615,134 @@ function handleCharacterMenuClick(mx, my) {
 
 function handleCharacterPreviewClick(mx, my) {
   for (const btn of previewButtons) {
+    if (btn.click(mx, my)) return;
+  }
+}
+
+/**
+ * CPU OPPONENT CONFIGURATION SCREEN
+ * Allows choosing opponent character and AI behavior on/off
+ */
+function drawCPUOpponentConfig() {
+  background(24);
+  
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(34);
+  fill(240);
+  stroke(0);
+  strokeWeight(3);
+  text('CPU OPPONENT CONFIG', width / 2, 48);
+  pop();
+  
+  cpuConfigButtons = [];
+  const keys = availableCharacterKeys();
+  const cardW = 220;
+  const cardH = 80;
+  const spacing = 20;
+  const cols = Math.min(keys.length, 3);
+  const startX = (width - (cols * cardW + (cols - 1) * spacing)) / 2;
+  const startY = 130;
+  
+  // Title for opponent character selection
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(18);
+  fill(200);
+  text('Select Opponent Character:', width / 2, 100);
+  pop();
+  
+  // Character selection cards
+  for (let i = 0; i < keys.length; i++) {
+    const col = i % cols;
+    const row = Math.floor(i / cols);
+    const x = startX + col * (cardW + spacing);
+    const y = startY + row * (cardH + spacing);
+    const key = keys[i];
+    const data = window.CHARACTERS && window.CHARACTERS[key] ? window.CHARACTERS[key] : { name: key };
+    const isSelected = key === cpuOpponentCharacter;
+    
+    const btn = new UIButton(x, y, cardW, cardH, () => {
+      cpuOpponentCharacter = key;
+    });
+    btn.draw(data.name || key, { 
+      stroke: isSelected ? [80, 200, 80] : [60, 60, 80], 
+      fill: isSelected ? [30, 60, 30] : [20, 24, 30], 
+      text: isSelected ? [100, 255, 100] : 255,
+      textSize: 16 
+    });
+    cpuConfigButtons.push(btn);
+    
+    if (isSelected) {
+      push();
+      noFill();
+      stroke(80, 200, 80);
+      strokeWeight(3);
+      rect(x, y, cardW, cardH, 6);
+      pop();
+    }
+  }
+  
+  // AI toggle section
+  const toggleY = startY + (Math.ceil(keys.length / cols)) * (cardH + spacing) + 40;
+  
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(18);
+  fill(200);
+  text('AI Behavior:', width / 2, toggleY - 10);
+  pop();
+  
+  // AI On button
+  const btnW = 200;
+  const btnH = 50;
+  const btnGap = 20;
+  const aiOnX = width / 2 - btnW - btnGap / 2;
+  
+  const aiOnBtn = new UIButton(aiOnX, toggleY + 20, btnW, btnH, () => {
+    cpuOpponentAIEnabled = true;
+  });
+  aiOnBtn.draw('AI ON (Reactive)', { 
+    stroke: cpuOpponentAIEnabled ? [80, 200, 80] : [60, 60, 80], 
+    fill: cpuOpponentAIEnabled ? [30, 60, 30] : [30, 30, 30], 
+    text: cpuOpponentAIEnabled ? [100, 255, 100] : 200 
+  });
+  cpuConfigButtons.push(aiOnBtn);
+  
+  // AI Off button
+  const aiOffX = width / 2 + btnGap / 2;
+  
+  const aiOffBtn = new UIButton(aiOffX, toggleY + 20, btnW, btnH, () => {
+    cpuOpponentAIEnabled = false;
+  });
+  aiOffBtn.draw('AI OFF (Passive)', { 
+    stroke: !cpuOpponentAIEnabled ? [200, 80, 80] : [60, 60, 80], 
+    fill: !cpuOpponentAIEnabled ? [60, 30, 30] : [30, 30, 30], 
+    text: !cpuOpponentAIEnabled ? [255, 100, 100] : 200 
+  });
+  cpuConfigButtons.push(aiOffBtn);
+  
+  // Start Battle button
+  const startBtnY = toggleY + 100;
+  const startBtn = new UIButton(width / 2 - 120, startBtnY, 240, 55, () => {
+    // Apply AI setting to the opponent fighter
+    players[0].ready = true;
+    setBattleState(BATTLE_STATES.READY);
+  });
+  startBtn.draw('START BATTLE!', { stroke: [80, 200, 80], fill: [40, 90, 40], text: 255, textSize: 20 });
+  cpuConfigButtons.push(startBtn);
+  
+  // Back button
+  const backBtn = new UIButton(18, 18, 100, 34, () => {
+    setBattleState(BATTLE_STATES.CHARACTER_PREVIEW);
+  });
+  backBtn.draw('BACK', { stroke: [100, 100, 100], fill: [30, 30, 30], text: 255, textSize: 12 });
+  cpuConfigButtons.push(backBtn);
+}
+
+/** Handle CPU config click */
+function handleCPUConfigClick(mx, my) {
+  for (const btn of cpuConfigButtons) {
     if (btn.click(mx, my)) return;
   }
 }

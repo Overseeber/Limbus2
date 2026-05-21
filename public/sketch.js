@@ -1908,6 +1908,7 @@ pop();
           : { stroke: [100, 255, 100], fill: [60, 100, 60], text: 255, textSize: 14 };
         const readyBtn = new UIButton(btnX, readyBtnY, BTN_W, BTN_READY_H, () => {
           Network.toggleReady();
+          console.log('toggleready');
         });
         readyBtn.draw(slot.ready ? 'UNREADY' : 'TOGGLE READY', readyStyle);
         roomSlotButtons.push(readyBtn);

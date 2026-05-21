@@ -216,22 +216,22 @@ io.sockets.on('connection', (socket) => {
     console.log(socket.id + ' ' + 'is connected');
 
     const client = new Client(socket.id);
-   // const fighter = new ServerFighter({ class: 'JOHN', hp: null, maxHp: null, speed: null, jumpHeight: null, baseDamage: null, staggerThreshold: null, staggerLength: null, weapon: 'Sword', knockbackMultiplier: 1 }, socket.id, null);
-   // client.fighter = fighter;
+//    const fighter = new ServerFighter({ class: 'JOHN', hp: null, maxHp: null, speed: null, jumpHeight: null, baseDamage: null, staggerThreshold: null, staggerLength: null, weapon: 'Sword', knockbackMultiplier: 1 }, socket.id, null);
+//    client.fighter = fighter;
 
-    clientList[socket.id] = client;
+//     clientList[socket.id] = client;
 
-    // Initialize character config for the default class
-    const defaultConfig = gameplayEngine.getCharacterConfig('JOHN');
-    if (defaultConfig) {
-        fighter.hp = defaultConfig.maxHp;
-        fighter.maxHp = defaultConfig.maxHp;
-        fighter.speed = defaultConfig.speed;
-        fighter.baseDamage = defaultConfig.baseDamage;
-        fighter.staggerThreshold = defaultConfig.staggerThreshold;
-        fighter.staggerLength = defaultConfig.staggerLength;
-    }
-    fighter._initializeGameState();
+//     // Initialize character config for the default class
+//     const defaultConfig = gameplayEngine.getCharacterConfig('JOHN');
+//     if (defaultConfig) {
+//         fighter.hp = defaultConfig.maxHp;
+//         fighter.maxHp = defaultConfig.maxHp;
+//         fighter.speed = defaultConfig.speed;
+//         fighter.baseDamage = defaultConfig.baseDamage;
+//         fighter.staggerThreshold = defaultConfig.staggerThreshold;
+//         fighter.staggerLength = defaultConfig.staggerLength;
+//     }
+//     fighter._initializeGameState();
 
     console.log(socket.id + ' connected (no room assigned)');
 

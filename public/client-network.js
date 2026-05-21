@@ -101,6 +101,15 @@ window.Network = {
     socket.on('battleStart', (data) => {
       this._emit('battleStart', data);
     });
+    socket.on('abilityResult', (result) => {
+      this._emit('abilityResult', result);
+    });
+    socket.on('gameState', (state) => {
+      this._emit('gameState', state);
+    });
+    socket.on('attackResult', (result) => {
+      this._emit('attackResult', result);
+    });
   },
 
   // Room API helpers
@@ -124,6 +133,23 @@ window.Network = {
   },
   claimSlot(slotIndex) {
     if (this.socket) this.socket.emit('claimSlot', slotIndex);
+  },
+
+  // Ability request with server authority
+  requestAbility(abilityId, targetId = null) {
+    if (this.isConnected && this.socket) {
+      this.socket.emit('ability', {
+        abilityId: abilityId,
+        targetId: targetId,
+        timestamp: Date.now()
+      });
+    } else if (this.isLocalAuthority && window.LocalSimulator) {
+      // Fallback to local execution for development
+      window.LocalSimulator.enqueue({
+        type: 'ABILITY_REQUEST',
+        data: { abilityId, targetId }
+      });
+    }
   },
 
   sendInput(input) {

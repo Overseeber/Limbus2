@@ -192,6 +192,9 @@ function setup() {//test
     Network.on('peerInput', (payload) => {
       handleRoomPeerInput(payload);
     });
+    Network.on('abilityResult', (result) => {
+      handleAbilityResult(result);
+    });
   }
 }
 
@@ -406,6 +409,78 @@ function handleRoomPeerInput(payload) {
       if (typeof remoteFighter.startDash === 'function') {
         remoteFighter.startDash();
       }
+    }
+  }
+}
+
+function handleAbilityResult(result) {
+  // Handle server-authorized ability results
+  if (!result || !window.allFighters) return;
+  
+  console.log('[Ability Result]', result);
+  
+  // Find the fighter that executed the ability
+  const fighter = window.allFighters.find(f => f.clientId === result.fighterId);
+  if (!fighter) return;
+  
+  // Apply server-authorized results
+  if (result.success) {
+    // Update HP if damage was dealt to a target
+    if (result.targetHp !== undefined && result.targetId) {
+      const target = window.allFighters.find(f => f.clientId === result.targetId);
+      if (target) {
+        target.hp = result.targetHp;
+        // Spawn damage number
+        if (result.damage && typeof spawnDamageNumber === 'function') {
+          spawnDamageNumber(result.damage, target.pos.copy(), fighter.facing, false, 'normal', false, 'normal');
+        }
+        // Apply screen shake
+        if (typeof addScreenShake === 'function') {
+          addScreenShake(result.damage);
+        }
+      }
+    }
+    
+    // Apply statuses
+    if (result.statuses && Array.isArray(result.statuses)) {
+      const target = result.targetId ? window.allFighters.find(f => f.clientId === result.targetId) : fighter;
+      if (target && target.addStatus) {
+        result.statuses.forEach(statusType => {
+          target.addStatus(statusType, 1, 1);
+        });
+      }
+    }
+    
+    // Handle defeat
+    if (result.defeated && result.targetId) {
+      const target = window.allFighters.find(f => f.clientId === result.targetId);
+      if (target && !target.isDefeated) {
+        target.isDefeated = true;
+        target.hp = 0;
+      }
+    }
+    
+    // Trigger visual effects based on ability type
+    if (result.abilityId) {
+      triggerAbilityVisuals(fighter, result.abilityId, result);
+    }
+  } else {
+    // Ability failed - show feedback
+    console.log('[Ability Failed]', result.reason);
+  }
+}
+
+function triggerAbilityVisuals(fighter, abilityId, result) {
+  // Trigger character-specific visual effects
+  const characterKey = fighter.characterKey;
+  
+  if (characterKey === 'VALENCINA') {
+    if (typeof ValencinaRenderer !== 'undefined') {
+      ValencinaRenderer.spawnSlashEffect(fighter, abilityId);
+    }
+  } else if (characterKey === 'CALLISTO') {
+    if (typeof CallistoRenderer !== 'undefined') {
+      CallistoRenderer.spawnSlashEffect(fighter, abilityId);
     }
   }
 }

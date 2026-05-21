@@ -844,12 +844,24 @@ CALLISTO: {
     processKeyPressed: function(key, fighter) {
       // Slam attack on Space key (when not on ground)
       if (key === ' ' && !fighter.onGround() && fighter.slamCooldown <= 0) {
-        this.useSlamAttack(fighter);
+        // Emit ability request to server instead of executing locally
+        if (typeof Network !== 'undefined' && Network.requestAbility) {
+          Network.requestAbility('slamAttack', fighter.lastHitOpponent ? fighter.lastHitOpponent.id : null);
+        } else {
+          // Fallback to local execution for development
+          this.useSlamAttack(fighter);
+        }
       }
       
       // Installation Art ability on Q key
       if (key === 'q' && !fighter.installationArtActive) {
-        this.useInstallationArt(fighter);
+        // Emit ability request to server instead of executing locally
+        if (typeof Network !== 'undefined' && Network.requestAbility) {
+          Network.requestAbility('installationArt');
+        } else {
+          // Fallback to local execution for development
+          this.useInstallationArt(fighter);
+        }
       }
     },
     
@@ -1729,8 +1741,13 @@ CALLISTO: {
         
         if (fighter.timeToHuntCooldown <= 0) {
           console.log('[DEBUG] Time to Hunt - Activating!');
-          this.useTimeToHunt(fighter);
-
+          // Emit ability request to server instead of executing locally
+          if (typeof Network !== 'undefined' && Network.requestAbility) {
+            Network.requestAbility('timeToHunt', fighter.lastHitOpponent ? fighter.lastHitOpponent.id : null);
+          } else {
+            // Fallback to local execution for development
+            this.useTimeToHunt(fighter);
+          }
         } else {
           console.log(`[DEBUG] Time to Hunt - On cooldown: ${fighter.timeToHuntCooldown.toFixed(1)}s`);
         }
@@ -1738,7 +1755,13 @@ CALLISTO: {
       
       // 🚀 Acceleration Round activation (manual evade reload)
       if (key === 'e' && fighter.accelerationRounds > 0 && fighter.precognition > 0) {
-        this.useAccelerationRound(fighter);
+        // Emit ability request to server instead of executing locally
+        if (typeof Network !== 'undefined' && Network.requestAbility) {
+          Network.requestAbility('accelerationRound');
+        } else {
+          // Fallback to local execution for development
+          this.useAccelerationRound(fighter);
+        }
       }
     },
     

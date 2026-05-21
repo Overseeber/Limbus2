@@ -144,20 +144,67 @@ class Fighter {
     return this.introAnimationData.sprites[this.introAnimationIndex];
   }
 
+  /**
+   * Apply state from server (authoritative update)
+   * Called when server broadcasts game state or ability results
+   */
+  applyServerState(stateUpdate) {
+    // Update authoritative gameplay state from server
+    if (stateUpdate.hp !== undefined) this.hp = stateUpdate.hp;
+    if (stateUpdate.position) {
+      this.pos.x = stateUpdate.position.x;
+      this.pos.y = stateUpdate.position.y;
+    }
+    if (stateUpdate.velocity) {
+      this.vel.x = stateUpdate.velocity.x;
+      this.vel.y = stateUpdate.velocity.y;
+    }
+    if (stateUpdate.facing !== undefined) this.facing = stateUpdate.facing;
+    if (stateUpdate.state) this.state = stateUpdate.state;
+    if (stateUpdate.stagger !== undefined) this.stagger = stateUpdate.stagger;
+    if (stateUpdate.isDefeated !== undefined) {
+      this.isDefeated = stateUpdate.isDefeated;
+      if (stateUpdate.isDefeated && this.hp <= 0) this.defeat();
+    }
+    if (stateUpdate.statuses) {
+      this.statuses = stateUpdate.statuses;
+    }
+    if (stateUpdate.attackCounter !== undefined) this.attackCounter = stateUpdate.attackCounter;
+  }
+
+  /**
+   * Called by server or local simulator to apply authoritative damage with visual effects
+   */
+  applyAuthoritativeDamage(amount, attacker, knockback = 0, ev = {}) {
+    // Apply damage - this is AUTHORITATIVE from the server
+    this.hp = Math.max(0, (this.hp || 0) - amount);
+    
+    // Visual effects only (no gameplay impact)
+    if (typeof spawnDamageNumber === 'function') {
+      spawnDamageNumber(amount, { x: this.pos.x, y: this.pos.y }, attacker ? attacker.facing : 1, false, 'normal', false, 'normal');
+    }
+    if (typeof addScreenShake === 'function') addScreenShake(amount);
+    this.addSpriteShake && this.addSpriteShake(amount, false);
+    
+    if (this.hp <= 0 && !this.isDefeated) {
+      this.defeat();
+    }
+  }
+
   // Networking / event helpers (client-side only)
   requestDamageTo(target, amount, knockback = 0, meta = {}) {
-    const ev = {
-      type: 'REQUEST_HIT',
-      attackerId: this.playerId || this.characterKey,
-      targetId: target.playerId || target.characterKey,
-      damage: amount,
-      knockback: knockback,
-      meta
-    };
-    if (typeof Network !== 'undefined' && Network.sendEvent) {
-      Network.sendEvent(ev);
+    // Client sends intent to server - server decides outcome
+    if (typeof Network !== 'undefined' && Network.requestAbility) {
+      Network.requestAbility('basicAttack', target ? target.id || target.playerId : null);
     } else if (window.LocalSimulator) {
-      window.LocalSimulator.enqueue(ev);
+      window.LocalSimulator.enqueue({
+        type: 'REQUEST_HIT',
+        attackerId: this.playerId || this.characterKey,
+        targetId: target.playerId || target.characterKey,
+        damage: amount,
+        knockback: knockback,
+        meta
+      });
     }
   }
 
@@ -188,19 +235,6 @@ class Fighter {
     } else if (window.LocalSimulator) {
       window.LocalSimulator.enqueue(ev);
     }
-  }
-
-  // Called by server or LocalSimulator to apply authoritative damage
-  applyAuthoritativeDamage(amount, attacker, knockback = 0, ev = {}) {
-    // Apply damage and visuals locally when authoritative update arrives
-    this.hp = max(0, (this.hp || 0) - amount);
-    spawnDamageNumber(amount, this.pos.copy(), attacker ? attacker.facing : 1, false, 'normal', false, 'normal');
-    if (typeof addScreenShake === 'function') addScreenShake(amount);
-    this.addSpriteShake && this.addSpriteShake(amount, false);
-    if (this.hp <= 0 && !this.isDefeated) {
-      this.defeat();
-    }
-    this.events.emit('damageDealt', { attacker: attacker ? attacker.characterKey : null, target: this.characterKey, damage: amount, knockback });
   }
 
   /**
@@ -1341,7 +1375,13 @@ class Fighter {
   updateUltimateSystem(dt, opponent) {
     // Handle ultimate activation request
     if (this.ultimateActivationRequested && !this.ultimateActive) {
-      this.activateUltimate(opponent);
+      // Emit ability request to server instead of executing locally
+      if (typeof Network !== 'undefined' && Network.requestAbility) {
+        Network.requestAbility('ultimate', opponent ? opponent.id : null);
+      } else {
+        // Fallback to local execution for development
+        this.activateUltimate(opponent);
+      }
       this.ultimateActivationRequested = false;
     }
     

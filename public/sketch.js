@@ -1,6 +1,7 @@
 // Character roster system is globally available
 
 const BATTLE_STATES = {
+  MODE_SELECT: 'modeSelect',
   LOBBY: 'lobby',
   CHARACTER_SELECT_MENU: 'characterSelectMenu',
   CHARACTER_PREVIEW: 'characterPreview',
@@ -10,9 +11,10 @@ const BATTLE_STATES = {
   SUMMARY: 'summary'
 };
 
+let gameMode = null; // 'multiplayer' or 'cpu'
 let player;
 let enemy;
-let battleState = BATTLE_STATES.LOBBY;
+let battleState = BATTLE_STATES.MODE_SELECT;
 let winner = null;
 let summaryText = '';
 let lastMouseDown = null;
@@ -75,6 +77,11 @@ let previewCharacterKey = null;
 let characterCardButtons = [];
 // Buttons for the preview screen (rebuilt each frame)
 let previewButtons = [];
+// Mode select buttons
+let modeSelectButtons = [];
+
+// CPU mode variables
+let cpuOpponentCharacter = null;
 
 
 // Reusable UI button class
@@ -322,7 +329,59 @@ function initRoomBattle(slots) {
   myRoomState = null;
 }
 
+function initCPUBattle() {
+  // Initialize local offline battle against AI
+  // Player uses players[0] with selected character
+  // AI opponent uses cpuOpponentCharacter
+  
+  const playerCharacter = players[0].character || 'VALENCINA';
+  const aiCharacter = cpuOpponentCharacter || 'CALLISTO';
+  
+  const fighters = [];
+  
+  // Player fighter (player-controlled)
+  const playerFighter = new Fighter(false, 'P1', playerCharacter, true);
+  playerFighter.playerId = 1;
+  playerFighter.isAI = false;
+  playerFighter.isPlayerControlled = true;
+  playerFighter.pos.x = width / 2 - 150;
+  playerFighter.pos.y = height - 100;
+  playerFighter.facing = 1;
+  fighters.push(playerFighter);
+  
+  // AI opponent
+  const aiFighter = new Fighter(true, 'P2', aiCharacter, false);
+  aiFighter.playerId = 2;
+  aiFighter.isAI = true;
+  aiFighter.isPlayerControlled = false;
+  aiFighter.pos.x = width / 2 + 150;
+  aiFighter.pos.y = height - 100;
+  aiFighter.facing = -1;
+  fighters.push(aiFighter);
+  
+  window.allFighters = fighters;
+  player = playerFighter;
+  enemy = aiFighter;
+  
+  setBattleState(BATTLE_STATES.OPENING);
+  winner = null;
+  summaryText = '';
+  battleTimer = 0;
+  
+  openingSequenceTimer = 0;
+  openingFadeAlpha = 255;
+  openingZoom = 5;
+  openingTextAlpha = 0;
+  introAnimationsStarted = false;
+  
+  fighters.forEach(f => f.reset());
+  damageNumbers = [];
+}
+
 function handleRoomPeerInput(payload) {
+  // Only handle in multiplayer mode
+  if (gameMode !== 'multiplayer') return;
+  
   if (!payload || !payload.from || !payload.data || !window.allFighters) return;
   const remoteFighter = window.allFighters.find(f => f.clientId === payload.from);
   if (!remoteFighter) return;
@@ -356,10 +415,12 @@ function draw() {
   // This prevents same-frame UI destruction from breaking button click context
 
   if (frameCount % 60 === 0) {
-    console.log('[DEBUG] battleState =', battleState);
+    console.log('[DEBUG] battleState =', battleState, 'gameMode =', gameMode);
   }
 
-  if (battleState === BATTLE_STATES.CHARACTER_SELECT_MENU) {
+  if (battleState === BATTLE_STATES.MODE_SELECT) {
+    drawModeSelectScreen();
+  } else if (battleState === BATTLE_STATES.CHARACTER_SELECT_MENU) {
     drawCharacterSelectMenu();
   } else if (battleState === BATTLE_STATES.CHARACTER_PREVIEW) {
     drawCharacterPreview();
@@ -435,6 +496,68 @@ function draw() {
   if (battleState !== BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.OPENING) {
     drawHud();
   }
+}
+
+function drawModeSelectScreen() {
+  background(20);
+  
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(52);
+  fill(255);
+  stroke(0);
+  strokeWeight(3);
+  text('GAME MODE', width / 2, 80);
+  pop();
+  
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(18);
+  fill(200);
+  text('Choose your preferred game mode', width / 2, 150);
+  pop();
+  
+  // Multiplayer button
+  const multiplayerBtnX = width / 2 - 220;
+  const multiplayerBtnY = height / 2 + 60;
+  const btnW = 200;
+  const btnH = 60;
+  
+  push();
+  stroke(80, 150, 200);
+  strokeWeight(3);
+  fill(50, 100, 150);
+  rect(multiplayerBtnX, multiplayerBtnY, btnW, btnH, 12);
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  text('Multiplayer', multiplayerBtnX + btnW / 2, multiplayerBtnY + btnH / 2);
+  pop();
+  
+  // CPU button
+  const cpuBtnX = width / 2 + 20;
+  const cpuBtnY = multiplayerBtnY;
+  
+  push();
+  stroke(150, 80, 200);
+  strokeWeight(3);
+  fill(100, 50, 150);
+  rect(cpuBtnX, cpuBtnY, btnW, btnH, 12);
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  text('Against CPU', cpuBtnX + btnW / 2, cpuBtnY + btnH / 2);
+  pop();
+  
+  push();
+  textAlign(CENTER, CENTER);
+  textSize(14);
+  fill(150);
+  text('Play online with other players', multiplayerBtnX + btnW / 2, multiplayerBtnY + btnH + 30);
+  text('Practice against AI opponent', cpuBtnX + btnW / 2, cpuBtnY + btnH + 30);
+  pop();
 }
 
 function drawOpeningSequence() {
@@ -799,18 +922,24 @@ function keyPressed() {
   }
   
   if (battleState === BATTLE_STATES.READY && keyCode === ENTER) {
-    setBattleState(BATTLE_STATES.BATTLE);
+    if (gameMode === 'cpu') {
+      initCPUBattle();
+    } else {
+      setBattleState(BATTLE_STATES.BATTLE);
+    }
     return;
   }
   if (battleState === BATTLE_STATES.SUMMARY && keyCode === ENTER) {
-    setBattleState(BATTLE_STATES.LOBBY);
+    // Return to mode select to allow changing game mode
+    gameMode = null;
+    setBattleState(BATTLE_STATES.MODE_SELECT);
     return;
   }
   if (battleState === BATTLE_STATES.BATTLE) {
     const controlledFighter = getPlayerControlledFighter();
     if (controlledFighter) {
-      // Send input intent to server/local simulator
-      if (typeof Network !== 'undefined' && Network.sendInput) {
+      // Send input intent to server/local simulator (only for multiplayer)
+      if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
         Network.sendInput({ type: 'keyPressed', key, playerId: controlledFighter.playerId });
       }
       // Local fallback for single-player responsiveness
@@ -837,7 +966,7 @@ function keyReleased() {
   if (battleState === BATTLE_STATES.BATTLE) {
     const controlledFighter = getPlayerControlledFighter();
     if (controlledFighter) {
-      if (typeof Network !== 'undefined' && Network.sendInput) {
+      if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
         Network.sendInput({ type: 'keyReleased', key, playerId: controlledFighter.playerId });
       }
       controlledFighter.processKeyReleased(key);
@@ -849,6 +978,41 @@ function mousePressed() {
   console.log('MOUSE PRESSED FIRED');
   console.log('battleState', battleState);
 console.log('myRoomState', myRoomState);
+  if (battleState === BATTLE_STATES.MODE_SELECT) {
+    const mx = mouseX;
+    const my = mouseY;
+    
+    // Multiplayer button
+    const multiplayerBtnX = width / 2 - 220;
+    const multiplayerBtnY = height / 2 + 60;
+    const btnW = 200;
+    const btnH = 60;
+    
+    if (mx > multiplayerBtnX && mx < multiplayerBtnX + btnW && my > multiplayerBtnY && my < multiplayerBtnY + btnH) {
+      gameMode = 'multiplayer';
+      setBattleState(BATTLE_STATES.LOBBY);
+      return;
+    }
+    
+    // CPU button
+    const cpuBtnX = width / 2 + 20;
+    const cpuBtnY = height / 2 + 60;
+    
+    if (mx > cpuBtnX && mx < cpuBtnX + btnW && my > cpuBtnY && my < cpuBtnY + btnH) {
+      gameMode = 'cpu';
+      // For CPU mode, go straight to character select for the player
+      const cpuCharacters = availableCharacterKeys();
+      cpuOpponentCharacter = cpuCharacters[Math.floor(Math.random() * cpuCharacters.length)];
+      // Reset player slot for local play
+      players[0].character = 'VALENCINA';
+      players[0].ai = false;
+      players[0].controlled = true;
+      players[0].ready = false;
+      setBattleState(BATTLE_STATES.CHARACTER_SELECT_MENU);
+      return;
+    }
+  }
+  
   if (battleState === BATTLE_STATES.LOBBY && myRoomState) {
     const mx = mouseX;
     const my = mouseY;
@@ -1103,13 +1267,13 @@ if (
 
   const controlledFighter = getPlayerControlledFighter();
   if (mouseButton === LEFT) {
-    if (typeof Network !== 'undefined' && Network.sendInput) {
+    if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
       Network.sendInput({ type: 'mouse', action: 'attackPress', playerId: controlledFighter.playerId });
     }
     controlledFighter.requestAttack();
     lastMouseDown = millis();
   } else if (mouseButton === RIGHT) {
-    if (typeof Network !== 'undefined' && Network.sendInput) {
+    if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
       Network.sendInput({ type: 'mouse', action: 'guardPress', playerId: controlledFighter.playerId });
     }
     controlledFighter.requestGuard(enemy);
@@ -1169,13 +1333,13 @@ function mouseReleased() {
   const controlledFighter = getPlayerControlledFighter();
   if (mouseButton === LEFT) {
     const held = millis() - (lastMouseDown || 0);
-    if (typeof Network !== 'undefined' && Network.sendInput) {
+    if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
       Network.sendInput({ type: 'mouse', action: 'attackRelease', held, playerId: controlledFighter.playerId });
     }
     controlledFighter.releaseAttack(held > 300);
     lastMouseDown = null;
   } else if (mouseButton === RIGHT) {
-    if (typeof Network !== 'undefined' && Network.sendInput) {
+    if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
       Network.sendInput({ type: 'mouse', action: 'guardRelease', playerId: controlledFighter.playerId });
     }
     controlledFighter.releaseGuard();
@@ -1327,14 +1491,21 @@ function drawCharacterPreview() {
     if (roomCharacterSelectSlot >= 0) {
       localSlotSelections[roomCharacterSelectSlot] = sel;
     }
-    if (sel && typeof Network !== 'undefined' && Network.changeCharacter) {
+    if (gameMode === 'multiplayer' && sel && typeof Network !== 'undefined' && Network.changeCharacter) {
       Network.changeCharacter(sel);
     }
-    // Clear preview and return to lobby
+    // Clear preview
     previewCharacterKey = null;
     roomCharacterSelectSlot = -1;
-    setBattleState(BATTLE_STATES.LOBBY);
-    console.log('RETURN TO LOBBY');
+    
+    if (gameMode === 'cpu') {
+      // For CPU mode, go straight to ready screen
+      setBattleState(BATTLE_STATES.READY);
+    } else {
+      // For multiplayer, return to lobby
+      setBattleState(BATTLE_STATES.LOBBY);
+    }
+    console.log('TRANSITION TO', gameMode === 'cpu' ? 'READY' : 'LOBBY');
   });
   confirmBtn.draw('CONFIRM', { stroke: [80, 180, 80], fill: [40, 90, 40], text: 255 });
   previewButtons.push(confirmBtn);

@@ -22,13 +22,56 @@ const CALLISTO_CONFIG = {
   staggerThreshold: 1409,
   staggerLength: 6,
   
+  // MOVEMENT PHYSICS
+  acceleration: 1800,     // Acceleration rate (pixels/s²)
+  friction: 0.85,         // Friction multiplier (0-1)
+  jumpHeight: 300,        // Jump initial velocity
+  gravity: 980,           // Gravity acceleration
+  dashSpeed: 800,         // Dash movement speed
+  dashDuration: 0.16,     // Dash duration in seconds
+  dashCooldown: 1.0,      // Cooldown between dashes
+  airControl: 0.6,        // Air movement responsiveness (0-1)
+  
   // VISUAL CONFIG (client-only)
   color: '#8b4513',
   weapon: 'Magnum Opus: Tibia',
   spriteType: 'atlas',
   defaultSprite: 'cidle',
   
-  // UNIQUE ABILITY CONFIGS
+  // ATTACK SEQUENCES - Frame-based timing for responsive combat
+  attacks: {
+    light: {
+      startup: 0.06,        // Faster startup for aggressive feel
+      active: 0.12,
+      recovery: 0.28,       // Shorter recovery for combos
+      range: 120,           // Longer reach
+      damage: 1.0,
+      knockback: 40,        // More knockback
+      staggerDamage: 60,
+      combo: 1
+    },
+    medium: {
+      startup: 0.10,
+      active: 0.16,
+      recovery: 0.36,
+      range: 140,           // Extended reach
+      damage: 1.25,
+      knockback: 65,        // Higher knockback
+      staggerDamage: 90,
+      combo: 2
+    },
+    heavy: {
+      startup: 0.18,
+      active: 0.18,
+      recovery: 0.45,
+      range: 180,           // Long range heavy
+      damage: 1.8,          // High damage
+      knockback: 100,       // Significant knockback
+      staggerDamage: 150,   // Heavy stagger damage
+      combo: 3
+    }
+  },
+  
   abilities: {
     slam: {
       cooldown: 5,

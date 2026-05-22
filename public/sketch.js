@@ -262,6 +262,9 @@ function processSnapshot(snapshot) {
         fighter.state = state.state;
         fighter.facing = state.facing;
 
+        // Apply movement states
+        fighter.onGround = state.onGround || false;
+
         // Apply statuses
         fighter.statuses = state.statuses || [];
 
@@ -272,6 +275,18 @@ function processSnapshot(snapshot) {
         fighter.isAttacking = state.isAttacking || false;
         fighter.isGuarding = state.isGuarding || false;
         fighter.isDashing = state.isDashing || false;
+
+        // Apply attack sequence state for animation control
+        fighter.attackSequence = state.attackSequence || 0;
+        fighter.attackPhase = state.attackPhase || 'none';
+        fighter.strikeActive = state.strikeActive || false;
+        
+        // Trigger attack animation if attack sequence changed
+        if (state.attackSequence && state.attackSequence > 0) {
+            if (fighter.attackSequence !== state.attackSequence || fighter.attackPhase !== state.attackPhase) {
+                console.log(`[Snapshot] ${fighter.characterKey} attack ${state.attackSequence} (${state.attackPhase})`);
+            }
+        }
     }
 
     console.log('[Snapshot] Snapshot applied successfully');

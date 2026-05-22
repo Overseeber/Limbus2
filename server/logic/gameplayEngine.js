@@ -51,6 +51,16 @@ class GameplayEngine {
       velocity: { x: 0, y: 0 },
       facing: 1, // 1 = right, -1 = left
       
+      // PHYSICS STATE
+      onGround: true,
+      canDash: true,
+      dashCooldown: 0,
+      
+      // ACTION FLAGS
+      isAttacking: false,
+      isGuarding: false,
+      isDashing: false,
+      
       // COMBAT STATE
       state: 'idle', // idle, attacking, staggered, recovering, defeated
       stagger: 0,

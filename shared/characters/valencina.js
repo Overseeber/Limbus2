@@ -22,13 +22,56 @@ const VALENCINA_CONFIG = {
   staggerThreshold: 1300,
   staggerLength: 5,
   
+  // MOVEMENT PHYSICS
+  acceleration: 1800,     // Acceleration rate (pixels/s²)
+  friction: 0.85,         // Friction multiplier (0-1)
+  jumpHeight: 300,        // Jump initial velocity
+  gravity: 980,           // Gravity acceleration
+  dashSpeed: 800,         // Dash movement speed
+  dashDuration: 0.16,     // Dash duration in seconds
+  dashCooldown: 1.0,      // Cooldown between dashes
+  airControl: 0.6,        // Air movement responsiveness (0-1)
+  
   // VISUAL CONFIG (client-only)
   color: '#ff6b9d',
   weapon: 'La Spada di Palermo',
   spriteType: 'atlas',
   defaultSprite: 'idle',
   
-  // UNIQUE ABILITY CONFIGS
+  // ATTACK SEQUENCES - Frame-based timing for responsive combat
+  attacks: {
+    light: {
+      startup: 0.08,        // Time before hitbox activates
+      active: 0.12,         // Hitbox active duration
+      recovery: 0.32,       // Recovery time after attack
+      range: 100,           // Attack range in pixels
+      damage: 1.0,          // Damage multiplier
+      knockback: 30,        // Knockback amount
+      staggerDamage: 50,    // Stagger damage
+      combo: 1              // Combo sequence position
+    },
+    medium: {
+      startup: 0.12,
+      active: 0.16,
+      recovery: 0.40,
+      range: 120,
+      damage: 1.2,
+      knockback: 50,
+      staggerDamage: 75,
+      combo: 2
+    },
+    heavy: {
+      startup: 0.20,
+      active: 0.20,
+      recovery: 0.50,
+      range: 150,
+      damage: 1.6,
+      knockback: 80,
+      staggerDamage: 120,
+      combo: 3
+    }
+  },
+  
   abilities: {
     timeToHunt: {
       cooldown: 8,

@@ -151,6 +151,7 @@ class Match {
 
         // Broadcast snapshot to all clients
         this.broadcastSnapshot();
+        console.log("tick running");
     }
 
     /**
@@ -442,7 +443,7 @@ class Match {
      */
     broadcastSnapshot() {
         const snapshot = {
-            players: Array.from(this.players.values()).map(player => ({
+            players: Object.values(this.players).map(player => ({
                 id: player.clientId,
                 x: player.gameState.position.x,
                 y: player.gameState.position.y,
@@ -459,8 +460,11 @@ class Match {
                 isDashing: player.gameState.isDashing || false
             }))
         };
-
-        this.io.to(this.room.id).emit('snapshot', snapshot);
+        console.log("snapshot sent");
+       // this.io.to(this.room.id).emit('snapshot', snapshot);
+       this.io.emit('snapshot', snapshot);
+       console.log("EMITTING TO ROOM:", this.room.id);
+      
     }
 
     /**

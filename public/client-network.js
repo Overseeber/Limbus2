@@ -6,19 +6,7 @@ window.Network = {
   eventHandlers: {},
 
   init() {
-    // Prefer an externally-created socket (index.html) via window._externalSocket
-    if (window._externalSocket) {
-      this.socket = window._externalSocket;
-      this.isConnected = true;
-      this.isLocalAuthority = false;
-      this.socket.on('connect', () => { this.isConnected = true; this.isLocalAuthority = false; console.log('[Network] connected (external)', this.socket.id); });
-      this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
-      this.socket.on('event', (ev) => this._emit('event', ev));
-      this._setupSocketHandlers(this.socket);
-      return;
-    }
-
-    // Try to connect if socket.io is available and no external socket provided
+    // Try to connect if socket.io is available
     if (typeof io !== 'undefined') {
       // Try each server address in order until one connects
       const serverAddresses = [
@@ -47,9 +35,12 @@ window.Network = {
           this.isConnected = true;
           this.isLocalAuthority = false;
           console.log('[Network] connected', sock.id, 'to', address);
+console.log("Network socket id:", this.socket?.id);
+console.log("SAME SOCKET?", this.socket === window._externalSocket);
           this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
           this.socket.on('event', (ev) => this._emit('event', ev));
           this._setupSocketHandlers(this.socket);
+
         });
 
         sock.on('connect_error', () => {
@@ -88,6 +79,7 @@ window.Network = {
     });
     socket.on('roomState', (state) => {
       // state: { id, slots: [{clientId, character}] }
+      console.log('roomState received:', state);
       window.myRoomState = state;
       this._emit('roomState', state);
     });
@@ -123,6 +115,7 @@ window.Network = {
     if (this.socket) this.socket.emit('changeCharacter', characterKey);
   },
   toggleReady() {
+    console.log('Network.toggleReady called, socket:', this.socket?.id, 'isConnected:', this.isConnected);
     if (this.socket) this.socket.emit('toggleReady');
   },
   startBattle() {

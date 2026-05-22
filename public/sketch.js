@@ -200,6 +200,8 @@ function setup() {//test
     });
     Network.on('snapshot', snapshot => {
     applySnapshot(snapshot);
+    console.log('snapshot received', snapshot);
+    
 });
   }
 }
@@ -236,6 +238,7 @@ function applySnapshot(snapshot) {
         fighter.isGuarding = state.isGuarding || false;
         fighter.isDashing = state.isDashing || false;
     }
+    console.log('snapshot applied', snapshot);
 }
 
 function sendInputState() {
@@ -955,6 +958,7 @@ function getPlayerControlledFighter() {
 
 function keyPressed() {
   // Handle pause menu navigation
+   console.log("LISTENING SOCKET ID:", Network.id);
   if ((pauseMenuOpen || pauseSettingsOpen) && battleState === BATTLE_STATES.BATTLE) {
     if (keyCode === UP_ARROW) {
       pauseMenuOption = (pauseMenuOption - 1 + 2) % 2;
@@ -1946,8 +1950,8 @@ pop();
           ? { stroke: [255, 100, 100], fill: [100, 80, 80], text: 255, textSize: 14 }
           : { stroke: [100, 255, 100], fill: [60, 100, 60], text: 255, textSize: 14 };
         const readyBtn = new UIButton(btnX, readyBtnY, BTN_W, BTN_READY_H, () => {
+          console.log('toggleReady button clicked, socket id:', Network.socket?.id);
           Network.toggleReady();
-          console.log('toggleready');
         });
         readyBtn.draw(slot.ready ? 'UNREADY' : 'TOGGLE READY', readyStyle);
         roomSlotButtons.push(readyBtn);

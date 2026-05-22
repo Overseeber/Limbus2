@@ -206,14 +206,49 @@ function setup() {//test
   }
 }
 
-function applySnapshot(snapshot) {
-    for (const state of snapshot.players) {
 
+
+// Snapshot buffer for handling race conditions during initialization
+let snapshotBuffer = [];
+let snapshotsEnabled = false;
+
+function applySnapshot(snapshot) {
+    // If fighters not initialized yet, buffer the snapshot
+    if (!window.allFighters || window.allFighters.length === 0) {
+        console.log('[Snapshot] Fighters not ready, buffering snapshot');
+        snapshotBuffer.push(snapshot);
+        return;
+    }
+
+    // Enable snapshot processing once fighters are ready
+    snapshotsEnabled = true;
+
+    // Process any buffered snapshots
+    while (snapshotBuffer.length > 0) {
+        const buffered = snapshotBuffer.shift();
+        processSnapshot(buffered);
+    }
+
+    // Process current snapshot
+    processSnapshot(snapshot);
+}
+
+function processSnapshot(snapshot) {
+    console.log('[Snapshot] Processing snapshot with', snapshot.players.length, 'players');
+    console.log('[Snapshot] My client ID:', Network.myClientId);
+    console.log('[Snapshot] Available fighter IDs:', allFighters.map(f => f.clientId));
+
+    for (const state of snapshot.players) {
         const fighter = allFighters.find(
             f => f.clientId === state.id
         );
 
-        if (!fighter) continue;
+        if (!fighter) {
+            console.warn('[Snapshot] Fighter not found for clientId:', state.id, 'Available fighters:', allFighters.map(f => f.clientId));
+            continue;
+        }
+
+        console.log('[Snapshot] Updating fighter', fighter.clientId, 'at position', state.x, state.y);
 
         // Apply authoritative state from server
         fighter.pos.x = state.x;
@@ -238,7 +273,8 @@ function applySnapshot(snapshot) {
         fighter.isGuarding = state.isGuarding || false;
         fighter.isDashing = state.isDashing || false;
     }
-    console.log('snapshot applied', snapshot);
+
+    console.log('[Snapshot] Snapshot applied successfully');
 }
 
 function sendInputState() {
@@ -343,10 +379,10 @@ function initRoomBattle(slots) {
     console.log('Need at least 2 players for battle!');
     return;
   }
-  
+
   const fighters = [];
-  const mySocketId = Network && Network.socket ? Network.socket.id : null;
-  
+  const mySocketId = Network && Network.myClientId ? Network.myClientId : null;
+
   for (let i = 0; i < activePlayers.length; i++) {
     const slot = activePlayers[i];
     const characterKey = slot.character || 'JOHN';
@@ -958,7 +994,7 @@ function getPlayerControlledFighter() {
 
 function keyPressed() {
   // Handle pause menu navigation
-   console.log("LISTENING SOCKET ID:", Network.id);
+
   if ((pauseMenuOpen || pauseSettingsOpen) && battleState === BATTLE_STATES.BATTLE) {
     if (keyCode === UP_ARROW) {
       pauseMenuOption = (pauseMenuOption - 1 + 2) % 2;
@@ -1017,7 +1053,7 @@ function keyPressed() {
         const next = keyCode === LEFT_ARROW ? ((idx - 1 + keys.length) % keys.length) : ((idx + 1) % keys.length);
         localSlotSelections[selectedPlayerSlot] = keys[next];
         const slot = slots[selectedPlayerSlot];
-        if (slot && Network && Network.socket && slot.clientId === Network.socket.id) {
+        if (slot && Network && Network.myClientId && slot.clientId === Network.myClientId) {
           console.log('Changing character to:', keys[next]);
           Network.changeCharacter(keys[next]);
         }
@@ -1191,7 +1227,7 @@ if (
         const slot = slots[i];
         if (!slot || !slot.clientId) return; // empty slot
 
-        const isOwnedSlot = (Network && Network.socket && slot.clientId === Network.socket.id) || (Network && Network.isLocalAuthority && slot.clientId === 'local');
+        const isOwnedSlot = (Network && Network.myClientId && slot.clientId === Network.myClientId) || (Network && Network.isLocalAuthority && slot.clientId === 'local');
         if (!isOwnedSlot) return;
 
     
@@ -1861,7 +1897,7 @@ function drawLobby() {
         continue;
       }
 
-      const isOwnedSlot = (Network && Network.socket && slot.clientId === Network.socket.id) || (Network && Network.isLocalAuthority && slot.clientId === 'local');
+      const isOwnedSlot = (Network && Network.myClientId && slot.clientId === Network.myClientId) || (Network && Network.isLocalAuthority && slot.clientId === 'local');
       const isHoveredSlot = isOwnedSlot && mouseX > x && mouseX < x + columnWidth && mouseY > y && mouseY < y + SLOT_H;
       let charKey = slot.character || '—';
       if (localSlotSelections[i]) {
@@ -1950,8 +1986,8 @@ pop();
           ? { stroke: [255, 100, 100], fill: [100, 80, 80], text: 255, textSize: 14 }
           : { stroke: [100, 255, 100], fill: [60, 100, 60], text: 255, textSize: 14 };
         const readyBtn = new UIButton(btnX, readyBtnY, BTN_W, BTN_READY_H, () => {
-          console.log('toggleReady button clicked, socket id:', Network.socket?.id);
           Network.toggleReady();
+          console.log('toggleready');
         });
         readyBtn.draw(slot.ready ? 'UNREADY' : 'TOGGLE READY', readyStyle);
         roomSlotButtons.push(readyBtn);
@@ -2100,3 +2136,6 @@ function getCharacterIdleSpriteName(characterKey) {
 function windowResized() {
   resizeCanvas(ARENA_WIDTH, ARENA_HEIGHT);
 }
+
+console.log("SKETCH SOCKET EXISTS:", typeof socket !== "undefined");
+console.log("SKETCH SOCKET ID:", socket?.id);

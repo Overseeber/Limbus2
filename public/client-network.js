@@ -1,6 +1,7 @@
 // Client networking abstraction and local simulator fallback
 window.Network = {
   socket: null,
+  myClientId: null, // Stable client ID set once on connection
   isConnected: false,
   isLocalAuthority: true, // fallback until server authoritative mode available
   eventHandlers: {},
@@ -32,11 +33,12 @@ window.Network = {
         sock.on('connect', () => {
           connected = true;
           this.socket = sock;
+          this.myClientId = sock.id; // Set stable client ID once
           this.isConnected = true;
           this.isLocalAuthority = false;
           console.log('[Network] connected', sock.id, 'to', address);
-console.log("Network socket id:", this.socket?.id);
-console.log("SAME SOCKET?", this.socket === window._externalSocket);
+          console.log('[Network] myClientId set to:', this.myClientId);
+
           this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
           this.socket.on('event', (ev) => this._emit('event', ev));
           this._setupSocketHandlers(this.socket);

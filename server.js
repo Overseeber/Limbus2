@@ -122,7 +122,6 @@ function emitRoomState(roomId) {
     const room = roomList[roomId];
     if (!room) return;
     const state = getRoomState(room);
-    console.log('emitRoomState for room', roomId, 'state:', state);
     io.to(roomId).emit('roomState', state);
 }
 
@@ -322,9 +321,7 @@ io.sockets.on('connection', (socket) => {
     //     if (client.room) emitRoomState(client.room);
     // });
 socket.on('toggleReady', () => {
-    console.log('toggleReady received from socket:', socket.id, 'client.ready before:', client.ready);
     client.ready = !client.ready;
-    console.log('client.ready after:', client.ready);
 
     const room = roomList[client.room];
     if (!room) return;
@@ -371,7 +368,8 @@ socket.on('toggleReady', () => {
     if (!player) return;
 
     player.input = input;
-    console.log("ROOM MEMBERS:", io.in(client.room).allSockets());
+  //  console.log("ROOM MEMBERS:", io.in(client.room).allSockets());
+    
    // console.log(player.clientId, player.input);
 });
     // Handle ability requests with full server authority
@@ -439,3 +437,6 @@ socket.on('toggleReady', () => {
 setInterval(() => {
     broadcastRoomList();
 }, 2000);
+
+
+

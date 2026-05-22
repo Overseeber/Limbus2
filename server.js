@@ -154,11 +154,7 @@ function broadcastEvent(event, excludeSocketId = null, roomId = null) {
     if (!room) return;
 
     if (excludeSocketId) {
-        room.clients.forEach(cid => {
-            if (cid === excludeSocketId) return;
-            const s = io.sockets.sockets.get(cid);
-            if (s) s.emit('event', event);
-        });
+        io.to(roomId).except(excludeSocketId).emit('event', event);
     } else {
         io.to(roomId).emit('event', event);
     }
@@ -259,6 +255,10 @@ io.sockets.on('connection', (socket) => {
             room.clients.push(socket.id);
             client.room = room.id;
             socket.join(room.id);
+            console.log('JOIN ROOM:', socket.id, '->', room.id);
+            io.in(room.id).allSockets().then(sockets => {
+                console.log('room sockets after join:', room.id, sockets);
+            });
         }
         socket.emit('joinedRoom', room.id);
         emitRoomState(room.id);
@@ -287,6 +287,10 @@ io.sockets.on('connection', (socket) => {
             room.clients.push(socket.id);
             client.room = room.id;
             socket.join(room.id);
+            console.log('JOIN ROOM:', socket.id, '->', room.id);
+            io.in(room.id).allSockets().then(sockets => {
+                console.log('room sockets after join:', room.id, sockets);
+            });
         }
         socket.emit('joinedRoom', room.id);
         emitRoomState(room.id);
@@ -354,7 +358,11 @@ socket.on('toggleReady', () => {
                 slots: state.slots
             });
             console.log('Battle started in room ' + client.room);
-            console.log("room sockets:", io.in(client.room).allSockets());
+            io.in(client.room).allSockets().then(sockets => {
+                console.log('room sockets:', sockets);
+            }).catch(err => {
+                console.error('Failed to read room sockets for', client.room, err);
+            });
         }
     });
     socket.on('input', (input) => {

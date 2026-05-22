@@ -494,13 +494,15 @@ broadcastSnapshot() {
     };
 
     console.log("snapshot sent");
+    console.log("EMIT snapshot to room:", this.room.id);
+    this.io.to(this.room.id).emit('snapshot', snapshot);
 
- this.io.to(this.room.id).emit('snapshot', snapshot);
-
-    // DEBUG ONLY (remove later)
     this.io.in(this.room.id).allSockets()
         .then(sockets => {
-            console.log("SOCKETS IN ROOM:", sockets);
+            console.log("room sockets:", sockets);
+        })
+        .catch(err => {
+            console.error("Failed to inspect room sockets:", err);
         });
 }
 

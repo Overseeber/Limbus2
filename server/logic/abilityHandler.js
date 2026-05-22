@@ -79,7 +79,7 @@ function handleAbilityRequest(socket, client, data, ROOMS, clientList) {
   applyAbilityResults(fighterState, result, characterConfig);
   
   // Broadcast result to all clients in room
-  broadcastAbilityResult(room, result);
+  broadcastAbilityResult(room, result, socket.server);
   
   // Emit room state update
   emitRoomState(room.id);
@@ -320,16 +320,9 @@ function applyAbilityResults(fighterState, result, characterConfig) {
  * @param {Object} room - Room object
  * @param {Object} result - Ability result
  */
-function broadcastAbilityResult(room, result) {
-  // Send to all clients in room
-  room.clients.forEach(clientId => {
-    if (!clientId) return;
-    
-    const socket = require('socket.io').sockets.sockets.get(clientId);
-    if (socket) {
-      socket.emit('abilityResult', result);
-    }
-  });
+function broadcastAbilityResult(room, result, io) {
+  if (!io || !room || !room.id) return;
+  io.to(room.id).emit('abilityResult', result);
 }
 
 /**

@@ -37,6 +37,7 @@ window.Network = {
           this.isConnected = true;
           this.isLocalAuthority = false;
           console.log('[Network] connected', sock.id, 'to', address);
+          console.log('CLIENT SOCKET ID:', sock.id);
           console.log('[Network] myClientId set to:', this.myClientId);
 
           this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
@@ -85,10 +86,6 @@ window.Network = {
       window.myRoomState = state;
       this._emit('roomState', state);
     });
-    socket.on('joinedRoom', (roomId) => {
-      window.myRoomId = roomId;
-      this._emit('joinedRoom', roomId);
-    });
     socket.on('battleStart', (data) => {
       this._emit('battleStart', data);
     });
@@ -100,6 +97,17 @@ window.Network = {
     });
     socket.on('attackResult', (result) => {
       this._emit('attackResult', result);
+    });
+    socket.on('snapshot', (snapshot) => {
+      console.log('SNAPSHOT RECEIVED');
+      this._emit('snapshot', snapshot);
+    });
+    socket.on('disconnect', (reason) => {
+      console.warn('[Network] disconnected:', reason);
+      this.isConnected = false;
+    });
+    socket.on('connect_error', (error) => {
+      console.warn('[Network] connect_error:', error);
     });
   },
 

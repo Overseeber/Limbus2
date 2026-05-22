@@ -441,31 +441,68 @@ class Match {
     /**
      * Broadcast snapshot to all clients in room
      */
-    broadcastSnapshot() {
-        const snapshot = {
-            players: Object.values(this.players).map(player => ({
-                id: player.clientId,
-                x: player.gameState.position.x,
-                y: player.gameState.position.y,
-                vx: player.gameState.velocity.x,
-                vy: player.gameState.velocity.y,
-                hp: player.gameState.hp,
-                maxHp: player.gameState.maxHp,
-                state: player.gameState.state,
-                facing: player.gameState.facing,
-                statuses: player.gameState.statuses,
-                isDefeated: player.gameState.isDefeated,
-                isAttacking: player.gameState.isAttacking || false,
-                isGuarding: player.gameState.isGuarding || false,
-                isDashing: player.gameState.isDashing || false
-            }))
-        };
-        console.log("snapshot sent");
-       // this.io.to(this.room.id).emit('snapshot', snapshot);
-       this.io.emit('snapshot', snapshot);
-       console.log("EMITTING TO ROOM:", this.room.id);
+//     async broadcastSnapshot() {
+//         const snapshot = {
+//             players: Object.values(this.players).map(player => ({
+//                 id: player.clientId,
+//                 x: player.gameState.position.x,
+//                 y: player.gameState.position.y,
+//                 vx: player.gameState.velocity.x,
+//                 vy: player.gameState.velocity.y,
+//                 hp: player.gameState.hp,
+//                 maxHp: player.gameState.maxHp,
+//                 state: player.gameState.state,
+//                 facing: player.gameState.facing,
+//                 statuses: player.gameState.statuses,
+//                 isDefeated: player.gameState.isDefeated,
+//                 isAttacking: player.gameState.isAttacking || false,
+//                 isGuarding: player.gameState.isGuarding || false,
+//                 isDashing: player.gameState.isDashing || false
+//             }))
+//         };
+//         console.log("snapshot sent");
+//        // this.io.to(this.room.id).emit('snapshot', snapshot);
+//        //this.io.emit('snapshot', snapshot);
+//        this.room.clients.forEach(id => {
+//     const socket = this.io.sockets.sockets.get(id);
+//     if (socket) socket.emit('snapshot', snapshot);
+// });
+// console.log("ROOM CLIENT IDS:", this.room.clients);
+// console.log("SOCKET IDS IN ROOM:", await this.io.in(this.room.id).allSockets());
+//     //    console.log("EMITTING TO ROOM:", this.room.id);
+//     //    console.log("ROOM SOCKETS:", await this.io.in(this.room.id).allSockets());
       
-    }
+//     }
+broadcastSnapshot() {
+    const snapshot = {
+        players: Object.values(this.players).map(player => ({
+            id: player.clientId,
+            x: player.gameState.position.x,
+            y: player.gameState.position.y,
+            vx: player.gameState.velocity.x,
+            vy: player.gameState.velocity.y,
+            hp: player.gameState.hp,
+            maxHp: player.gameState.maxHp,
+            state: player.gameState.state,
+            facing: player.gameState.facing,
+            statuses: player.gameState.statuses,
+            isDefeated: player.gameState.isDefeated,
+            isAttacking: player.gameState.isAttacking || false,
+            isGuarding: player.gameState.isGuarding || false,
+            isDashing: player.gameState.isDashing || false
+        }))
+    };
+
+    console.log("snapshot sent");
+
+ this.io.to(this.room.id).emit('snapshot', snapshot);
+
+    // DEBUG ONLY (remove later)
+    this.io.in(this.room.id).allSockets()
+        .then(sockets => {
+            console.log("SOCKETS IN ROOM:", sockets);
+        });
+}
 
     /**
      * Broadcast event to all clients in room

@@ -1,0 +1,3334 @@
+/**
+ * ============================================================================
+ * FIGHTER CLASS - Core combat entity for the fighting game
+ * ============================================================================
+ * 
+ * The Fighter class represents a combat character in the game. Each fighter can
+ * be controlled by AI or a human player, has unique stats based on their character
+ * type, and handles all combat mechanics including movement, attacks, damage,
+ * status effects, and defeat conditions.
+ * 
+ * Key Features:
+ * - Multi-player support (2-4 fighters in battle)
+ * - AI and human player control
+ * - Character-specific stats and abilities
+ * - Comprehensive combat system (attacks, guards, evades, ultimates)
+ * - Status effects and damage system
+ * - Defeat and respawn mechanics
+ * 
+ * @param {boolean} isAI - Whether this fighter is AI-controlled (default: false)
+ * @param {string} name - Display name for this fighter (default: 'Enemy')
+ * @param {string} characterKey - Character type from CHARACTERS roster (default: null)
+ * @param {boolean} isPlayerControlled - Whether this fighter is human-controlled (default: false)
+ */
+class Fighter {
+  constructor(isAI = false, name = 'Enemy', characterKey = null, isPlayerControlled = false) {
+    // CORE IDENTITY PROPERTIES
+    this.isAI = isAI;                    // AI vs Human control flag
+    this.name = name;                     // Display name for UI
+    this.isPlayerControlled = isPlayerControlled; // Human control flag
+    
+    // CHARACTER SELECTION WITH FALLBACK
+    // Safely select character with fallback to prevent errors
+    const fallbackCharacter = (typeof currentCharacter !== 'undefined' ? currentCharacter : 'VALENCINA');
+    this.characterKey = characterKey || (isAI ? 'VALENCINA' : fallbackCharacter);
+    
+    // CHARACTER DATA RETRIEVAL
+    // Get character stats from the global CHARACTERS roster
+    let character = CHARACTERS[this.characterKey];
+    
+    // SAFETY CHECK: Ensure character exists
+    // Prevents crashes if invalid characterKey is provided
+    if (!character) {
+      console.error("Invalid characterKey:", this.characterKey);
+      this.characterKey = 'VALENCINA'; // Fallback to default character
+      character = CHARACTERS[this.characterKey];
+    }
+    
+    // POSITION AND MOVEMENT PROPERTIES
+    this.pos = createVector(width / 2 + (isAI ? 200 : -200), height - 100); // Initial spawn position
+    this.vel = createVector(0, 0);      // Velocity vector for physics
+    this.facing = isAI ? -1 : 1;       // Facing direction: 1 = right, -1 = left
+    this.spawnY = height - 100;        // Y-coordinate for spawning/resetting
+
+    // COMBAT STATS (from character roster)
+    this.hp = character.hp;                    // Current health points
+    this.maxHp = character.hp;                 // Maximum health points
+    this.speed = character.speed;              // Movement speed multiplier
+    this.baseDamage = character.baseDamage;    // Base attack damage
+    this.attackInterval = character.attackInterval; // Attack cooldown time
+    this.staggerThreshold = character.staggerThreshold; // Stagger resistance
+    this.staggerLength = character.staggerLength;     // Stagger duration
+    
+    // STAGGER SYSTEM PROPERTIES
+    this.staggerRecoveryTimer = 0;       // Timer for stagger recovery
+    this.stagger = 0;                    // Current stagger amount
+    this.staggerTimer = 0;                // Timer for active stagger
+    this.staggeredDisplay = 0;            // Visual stagger display value
+    this.staggeredDisplayTimer = 0;       // Timer for visual stagger effects
+    
+    // VISUAL PROPERTIES
+    this.color = isAI ? '#e74c3c' : character.color; // Fighter color (AI gets red)
+    
+    // DASH ATTACK PROPERTIES
+    this.dashTimer = 0;                  // Cooldown timer for dash attacks
+    this.isDashing = false;              // Flag for active dash state
+    this.dashDuration = 0.16;            // Duration of dash attack in seconds
+    this.dashCooldown = 3;               // Cooldown time between dash attacks
+    
+    // SPRITE EFFECTS PROPERTIES
+    this.spriteShakeX = 0;               // Horizontal sprite shake amount
+    this.spriteShakeY = 0;               // Vertical sprite shake amount
+    this.spriteShakeIntensity = 0;       // Intensity of sprite shake effect
+    this.isUltimateSpriteShake = false;  // Flag for ultimate attack shake effect
+    
+    // DEFEAT STATE PROPERTIES
+    this.isDefeated = false;             // Flag for defeated state
+    // INPUT CONTROLS SYSTEM
+    this.controls = {};                 // Object to store input mappings
+    this.reset();                        // Initialize all combat systems
+  }
+
+  /**
+   * RESET METHOD: Initialize or reset all fighter properties to default state
+   * Called during construction and when respawning after defeat
+   * Ensures fighter starts with clean state for combat
+   */
+  reset() {
+    // STATE MANAGEMENT
+    this.setState('idle');               // Set to idle state for combat readiness
+    
+    // ATTACK SYSTEM RESET
+    this.attackTimer = 0;                // Reset attack cooldown timer
+    this.attackDamage = 0;               // Clear current attack damage
+    this.attackKnockback = 0;            // Clear current knockback value
+    this.attackRange = 0;                // Reset attack range to default
+    this.attackHitResolved = false;      // Reset damage resolution flag
+    this.statusEffectsApplied = false;   // Reset status effect application flag
+    this.slashEffectsSpawned = false;    // Reset visual effect spawning flag
+    
+    // ULTIMATE ATTACK SYSTEM RESET
+    this.ultimateActive = false;         // Clear ultimate activation state
+    this.ultimatePhase = 0;              // Reset ultimate phase counter
+    this.ultimateTimer = 0;              // Reset ultimate duration timer
+    this.ultimateDamageDealt = 0;       // Clear damage dealt this ultimate
+    this.ultimateTotalDamage = 0;       // Clear total ultimate damage
+    this.ultimateCameraZoom = 1;         // Reset camera zoom effect
+    this.ultimateBackgroundDim = 0;     // Reset background dimming effect
+    this.ultimateName = "";              // Clear ultimate name display
+    this.ultimateDialogue = "";         // Clear ultimate dialogue text
+    this.ultimateCanActivate = true;     // Allow ultimate activation (testing flag)
+    
+    // VISUAL EFFECTS RESET
+    this.spriteShakeX = 0;               // Clear horizontal sprite shake
+    this.spriteShakeY = 0;               // Clear vertical sprite shake
+    this.spriteShakeIntensity = 0;       // Clear shake intensity
+    this.isUltimateSpriteShake = false;  // Clear ultimate shake flag
+    this.ultimateActivationRequested = false; // Clear ultimate request flag
+    
+    // STEP 1: STATE MACHINE ISOLATION
+    // Create dedicated stateMachine object for cleaner state management
+    this.stateMachine = {
+      state: 'idle',                     // Current animation state
+      attackTimer: 0,                   // Attack sequence timer
+      attackSequence: 0,                // Current attack combo sequence
+      attackFrame: 0,                   // Current attack animation frame
+      attackFrameTimer: 0,               // Timer for attack frame progression
+      staggerTimer: 0,                  // Stagger duration timer
+      staggerRecoveryTimer: 0,          // Stagger recovery cooldown
+      evadeTimer: 0                     // Evade action duration timer
+    };
+    
+    // COMPATIBILITY PROPERTIES
+    // Maintain these properties for backward compatibility with existing code
+    this.attackSequence = 0;             // Attack combo counter (legacy)
+    this.attackFrame = 0;                // Animation frame counter (legacy)
+    this.attackFrameTimer = 0;           // Frame timing counter (legacy)
+    
+    // COMBAT MECHANICS PROPERTIES
+    this.kbResist = 0.08;                // Knockback resistance multiplier
+    this.dashCharges = 3;               // Number of available dash charges
+    
+    // STAGGER SYSTEM PROPERTIES (continued)
+    this.staggerRecovery = 0;            // Stagger recovery rate (disabled)
+    this.staggerRecoveryTimer = 0;       // Stagger recovery cooldown timer
+    this.staggerTimer = 0;               // Current stagger duration timer
+    this.staggerLength = 5;              // Maximum stagger duration
+    
+    // COMBO SYSTEM PROPERTIES (continued)
+    this.combo = 0;                     // Current combo counter
+    this.comboTimer = 0;                // Combo timeout timer
+    this.comboTimeout = 1.4;             // Time before combo resets
+    this.attackCounter = 0;              // Total attacks landed counter
+    this.attackCounterDisplay = 0;       // Visual display counter for attacks
+    this.attackCounterTimer = 0;         // Timer for attack counter display
+    
+    // VISUAL AND STATUS PROPERTIES
+    this.staggeredDisplay = 0;           // Visual stagger display value
+    this.staggeredDisplayTimer = 0;      // Timer for visual stagger effects
+    this.statuses = [];                  // Array of active status effects
+    this.remainingSlide = 0;             // Remaining slide distance from knockback
+    
+    // ACTION STATE FLAGS (continued)
+    this.isDucking = false;             // Duck/crouch state flag
+    this.isGuarding = false;             // Guard/block state flag
+    this.isCountering = false;           // Counter-attack state flag
+    this.isEvading = false;              // Evade/dodge state flag
+    
+    // COMBAT TIMERS AND REQUESTS
+    this.evadeTimer = 0;                 // Evade action duration timer
+    this.chargeMeter = 0;                // Charge attack meter (0-100)
+    this.attackRequest = false;          // Flag for pending attack request
+    this.attackRelease = false;           // Flag for attack release timing
+    this.guardRequest = false;           // Flag for guard request
+    
+    // COMBAT STATE FLAGS (continued)
+    this.strikeActive = false;           // Flag for active damage-dealing state
+    this.pendingCounter = false;         // Flag for pending counter-attack
+    this.lastAttackHit = false;          // Flag indicating if last attack connected
+    this.hitCooldown = 0;                // Cooldown timer between taking hits
+    this.dashAttacked = false;           // Flag for dash attack execution in current dash
+    
+    // SPECIAL ATTACK REQUEST FLAGS
+    this.evadeRequested = false;         // Flag for evade action request
+    this.slamAttackRequested = false;    // Flag for slam attack request
+    
+    // SLAM ATTACK SYSTEM
+    this.isSlamAttacking = false;        // Flag for active slam attack state
+    this.slamLandingHitbox = null;       // Hitbox for slam landing damage
+    this.pendingSlamDamage = null;       // Pending damage to apply on slam landing
+    
+    // AI CONTROL SYSTEM (continued)
+    // Object to store AI action flags and decision-making state
+    this.ai = {
+      moveLeft: false,                   // AI movement request: left
+      moveRight: false,                  // AI movement request: right
+      moveUp: false,                     // AI movement request: up (jump)
+      moveDown: false,                   // AI movement request: down (duck)
+      attack: false,                     // AI combat request: attack
+      defend: false,                     // AI combat request: defend/guard
+      evade: false,                      // AI combat request: evade/dodge
+    };
+    
+    // STEP 3: ATTACK SYSTEM SUBSYSTEM (continued)
+    // Encapsulates all attack-related functionality for cleaner code organization
+    this.attackSystem = {
+      executeAttack: (opponent, ignoreParry = false) => this.executeAttack(opponent, ignoreParry),
+      resolveAttack: (opponent) => this.resolveAttack(opponent),
+      updateAttackSequence: () => this.updateAttackSequence(),
+      resetAttack: () => this.resetAttack()
+    };
+    
+    // STEP 4: STATUS SYSTEM SUBSYSTEM (continued)
+    // Manages all status effects, buffs, and debuffs on the fighter
+    this.statusSystem = {
+      addStatus: (type, count, potency) => this.addStatus(type, count, potency),
+      removeStatus: (type) => this.removeStatus(type),
+      consumeOnHit: () => this.consumeStatusOnHit(),
+      consumeOnAttack: () => this.consumeStatusOnAttack(),
+      consumeOnAbility: () => this.consumeStatusOnAbility(),
+      applyStatuses: (dt) => this.applyStatuses(dt)
+    };
+    
+    // STEP 5: EVENT EMISSION LAYER (SERVER PREPARATION) (continued)
+    // Provides event-driven communication for game systems and UI updates
+    this.events = {
+      emit: (eventName, data) => {
+        // Local logging for now - future server sync capability
+        console.log(`[EVENT] ${eventName}:`, data);
+      }
+    };
+    
+    // STEP 6: MOVEMENT SYSTEM SUBSYSTEM (SEPARATE PHYSICS) (continued)
+    // Handles all movement physics and collision detection separately from combat
+    this.movementSystem = {
+      applyMovement: (dt, opponent) => this.applyMovement(dt, opponent),
+      applyGravity: (dt, opponent) => this.applyGravity(dt, opponent),
+      cleanupPosition: (opponent) => this.cleanupPosition(opponent)
+    };
+    
+    // FINAL INITIALIZATION
+    // Call syncState to initialize stateMachine values with current properties
+    this.syncState();
+    
+    // Initialize character-specific properties including controls
+    // This loads character-specific abilities, stats, and control mappings
+    this.initializeCharacter();
+  }
+
+  /**
+   * ============================================================================
+   * STATE MANAGEMENT SYSTEM
+   * ============================================================================
+   * 
+   * Centralized state management for the Fighter class. All state changes should
+   * go through these methods to ensure consistency and proper synchronization
+   * between the main properties and the stateMachine subsystem.
+   */
+  
+  /**
+   * SET STATE METHOD: Centralized state change management
+   * Updates both the main state property and the stateMachine subsystem
+   * Ensures consistency across all state tracking systems
+   * @param {string} newState - The new state to set (e.g., 'idle', 'attack', 'guard')
+   */
+  setState(newState) {
+    this.state = newState;                 // Update main state property
+    if (this.stateMachine) {               // Sync with stateMachine subsystem
+      this.stateMachine.state = newState;
+    }
+  }
+
+  /**
+   * SET ATTACK STATE METHOD: Initialize attack-specific state properties
+   * Called when starting an attack to set up proper attack state tracking
+   * @param {number} sequence - Attack sequence number (for combo tracking)
+   * @param {number} frame - Attack animation frame number
+   */
+  setAttackState(sequence, frame) {
+    this.state = 'attack';                // Set to attack state
+    this.attackSequence = sequence;         // Set attack combo sequence
+    this.attackFrame = frame;              // Set current animation frame
+    this.attackFrameTimer = 0;             // Reset frame progression timer
+    
+    // Update stateMachine
+    if (this.stateMachine) {
+      this.stateMachine.state = 'attack';
+      this.stateMachine.attackSequence = sequence;
+      this.stateMachine.attackFrame = frame;
+      this.stateMachine.attackFrameTimer = 0;
+    }
+  }
+
+  setStaggerState(duration) {
+    this.state = 'staggered';
+    this.staggerTimer = duration;
+    this.staggerRecoveryTimer = 0;
+    this.stagger = this.staggerThreshold;
+    this.staggeredDisplay = 1;
+    this.staggeredDisplayTimer = 2.0;
+    
+    // Emit staggerStarted event
+    this.events.emit('staggerStarted', {
+      target: this.characterKey,
+      duration: duration,
+      threshold: this.staggerThreshold
+    });
+    
+    // Update stateMachine
+    if (this.stateMachine) {
+      this.stateMachine.state = 'staggered';
+      this.stateMachine.staggerTimer = duration;
+      this.stateMachine.staggerRecoveryTimer = 0;
+    }
+  }
+
+  setEvadeState(duration) {
+    this.state = 'evade';
+    this.evadeTimer = duration;
+    this.isEvading = true;
+    
+    // Update stateMachine
+    if (this.stateMachine) {
+      this.stateMachine.state = 'evade';
+      this.stateMachine.evadeTimer = duration;
+    }
+  }
+
+  // STEP 3: Attack system helper methods
+  resetAttack() {
+    this.attackTimer = 0;
+    this.attackDamage = 0;
+    this.attackKnockback = 0;
+    this.attackRange = 0;
+    this.attackHitResolved = false;
+    this.statusEffectsApplied = false;
+    this.slashEffectsSpawned = false;
+    this.attackSequence = 0;
+    this.attackFrame = 0;
+    this.attackFrameTimer = 0;
+    this.attackDamageDealt = false;
+    this.strikeActive = false;
+    this.lastAttackHit = false;
+  }
+
+  // STEP 1: Sync state between original variables and stateMachine (two-way binding)
+  syncState() {
+    // Sync from original to stateMachine
+    this.stateMachine.state = this.state;
+    this.stateMachine.attackTimer = this.attackTimer;
+    this.stateMachine.attackSequence = this.attackSequence;
+    this.stateMachine.attackFrame = this.attackFrame;
+    this.stateMachine.attackFrameTimer = this.attackFrameTimer;
+    this.stateMachine.staggerTimer = this.staggerTimer;
+    this.stateMachine.staggerRecoveryTimer = this.staggerRecoveryTimer;
+    this.stateMachine.evadeTimer = this.evadeTimer;
+    
+    // Sync from stateMachine to original (for safety)
+    this.state = this.stateMachine.state;
+    this.attackTimer = this.stateMachine.attackTimer;
+    this.attackSequence = this.stateMachine.attackSequence;
+    this.attackFrame = this.stateMachine.attackFrame;
+    this.attackFrameTimer = this.stateMachine.attackFrameTimer;
+    this.staggerTimer = this.stateMachine.staggerTimer;
+    this.staggerRecoveryTimer = this.stateMachine.staggerRecoveryTimer;
+    this.evadeTimer = this.stateMachine.evadeTimer;
+  }
+
+  // Character-specific properties initialization
+  initializeCharacter() {
+    // Character-specific properties will be initialized by character profile
+    this.dialogueTimer = 0;
+    this.currentDialogue = '';
+    this.damageResistance = 1.0;
+    
+    // Set character-specific properties
+    const character = CHARACTERS[this.characterKey];
+    this.name = character.name;
+    this.title = character.title;
+    this.baseDamage = character.baseDamage;
+    
+    // Set knockback multiplier from character (if available)
+    this.knockbackMultiplier = character.knockbackMultiplier || 1.0;
+    
+    // Set controls for player-controlled fighter
+    if (this.isPlayerControlled) {
+      this.controls = {
+        left: 'a',
+        right: 'd',
+        up: 'w',
+        down: 's',
+        attack: 'f',
+        evade: 'e',
+      };
+    } else {
+      this.controls = null;
+    }
+    
+    // Set jump strength
+    this.jumpStrength = -20;
+    
+    // Initialize character-specific properties
+    if (character.initializeCharacter) {
+      character.initializeCharacter(this);
+    }
+    
+    // Load character sprite if available
+    this.sprite = null;
+    this.spriteType = character.spriteType || null;
+    
+    // Safe default for currentSprite
+    if (!this.currentSprite) {
+      this.currentSprite = character.defaultSprite || 'idle';
+    }
+    
+    // Initialize dash sprite properties
+    this.usePostDashSprite = false;
+    
+    // Initialize slam attack properties
+    this.slamHoldPosition = false;
+    
+    // Initialize slash effects management
+    this.slashEffects = [];
+    
+    // Initialize attack sequence properties
+    this.attackSequence = 0; // 0=none, 1=attack1, 2=attack2, 3=attack3
+    this.attackFrame = 0; // Current frame in attack sequence
+    this.attackFrameTimer = 0; // Timer for frame transitions
+    this.attackFrameDuration = 0.2; // 0.2s between frames
+    this.attackDamageDealt = false; // Track if damage was dealt for current frame
+    
+    // Initialize halt sequence properties
+    this.haltSequence = false; // Track if in halt sequence
+    this.haltFrame = 0; // Current frame in halt sequence
+    this.haltFrameTimer = 0; // Timer for halt frame transitions
+    this.haltFrameDuration = 0.1; // Rapid succession timing
+    
+    if (character.sprite && this.spriteType !== 'atlas') {
+      // Regular sprite loading
+      this.sprite = loadImage(character.sprite);
+    }
+  }
+
+  updateSprite() {
+    // Skip sprite updates during ultimate - ultimate controls its own sprites
+    if (this.ultimateActive) {
+      return;
+    }
+    
+    // State to sprite mapping for Callisto
+    if (this.characterKey === 'CALLISTO') {
+      const callistoStateMap = {
+        idle: 'cidle',
+        run: 'cmove',
+        jump: 'cs1f1',
+        attack: 'cs1f2',
+        guard: 'cguard',
+        dash: 'cmove',
+        evade: 'cevade',
+        hit: 'churt',
+        staggered: 'churt',
+        duck: 'cidle',
+        ultimate: 'cuend' // Use cuend sprite for ultimate state
+      };
+
+      // Handle special states for Callisto
+      if (this.isSlamAttacking) {
+        this.currentSprite = 'cs1f2'; // Slam sprite with cs1s1
+        // Spawn slam slash effect
+        if (!this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
+      } else if (this.isDashing) {
+        if (this.state === 'attack') {
+          this.currentSprite = 'cjoust'; // Dash attack sprite with cjs1
+          // Spawn dash attack slash effect
+          if (!this.slashEffectsSpawned) {
+            this.spawnSlashEffect('cjs1', { x: 0, y: -10 });
+            this.slashEffectsSpawned = true;
+          }
+        } else if (this.usePostDashSprite) {
+          this.currentSprite = 'chalt'; // Dash end sprite
+        } else {
+          this.currentSprite = 'cmove'; // Regular dash movement sprite
+        }
+      } else if (this.state === 'attack' && this.attackSequence > 0) {
+        // Handle attack sequences for Callisto
+        this.updateCallistoAttackSequence();
+      } else if (this.haltSequence) {
+        // Handle halt sequence for Callisto
+        this.updateCallistoHaltSequence();
+      } else if (this.usePostDashSprite && !this.isDashing) {
+        // Reset post-dash sprite when dash ends
+        this.usePostDashSprite = false;
+        this.currentSprite = callistoStateMap[this.state] || 'cidle';
+      } else {
+        // For Callisto, respect currentSprite during Installation Art
+        if (this.characterKey === 'CALLISTO' && this.installationArtActive) {
+          // Don't override sprite during Installation Art - use currentSprite
+          // this.currentSprite is already set by Installation Art logic
+        } else {
+          this.currentSprite = callistoStateMap[this.state] || 'cidle';
+        }
+      }
+      return;
+    }
+    
+    // State to sprite mapping for Valencina (original)
+    const stateMap = {
+      idle: 'idle',
+      run: 'moving',
+      jump: 's4f3',
+      attack: 'prepat',
+      guard: 'guard',
+      dash: 'joust',
+      evade: 'evade',
+      hit: 'hurt',
+      staggered: 'hurt',
+      duck: 'idle',
+      ultimate: 'dist1' // Use dist1 sprite for ultimate state
+    };
+
+    // For Valencina, respect currentSprite during Time to Hunt casting
+    if (this.characterKey === 'VALENCINA' && this.timeToHuntCasting) {
+      // Don't override sprite during Time to Hunt casting - use currentSprite
+      // this.currentSprite is already set by Time to Hunt logic
+      return;
+    }
+
+    // Handle special states
+    if (this.isSlamAttacking) {
+      // Character-specific slam sprites
+      if (this.characterKey === 'CALLISTO') {
+        this.currentSprite = 'cs1f2'; // Callisto slam sprite
+      } else {
+        this.currentSprite = 's4f4'; // Valencina slam sprite
+      }
+    } else if (this.isDashing) {
+      if (this.state === 'attack') {
+        this.currentSprite = 'joust'; // Dash attack sprite
+      } else if (this.usePostDashSprite) {
+        this.currentSprite = 's2f1'; // Post-dash attack sprite
+      } else {
+        this.currentSprite = 'moving'; // Regular dash movement sprite
+      }
+    } else if (this.state === 'attack' && this.attackSequence > 0) {
+      // Handle attack sequences
+      this.updateAttackSequence();
+    } else if (this.haltSequence) {
+      // Handle halt sequence
+      this.updateHaltSequence();
+    } else if (this.usePostDashSprite && !this.isDashing) {
+      // Reset post-dash sprite when dash ends
+      this.usePostDashSprite = false;
+      this.currentSprite = stateMap[this.state] || 'idle';
+    } else {
+      this.currentSprite = stateMap[this.state] || 'idle';
+    }
+  }
+
+  updateAttackSequence() {
+    // Attack 1 sequence: prepat > s1f1 > s1f2 > s1f3
+    if (this.attackSequence === 1) {
+      const sequence = ['prepat', 's1f1', 's1f2', 's1f3'];
+      const damageFrames = [false, true, true, false]; // s1f1 and s1f2 deal damage
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('s1s1', { x: 0, y: -10 });
+          this.spawnSlashEffect('s1s2', { x: 15, y: -5 });
+          this.slashEffectsSpawned = true;
+        }
+        
+        // Deal damage on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+        }
+      }
+    }
+    // Attack 2 sequence: s2f1 > halt1 > halt2 > s3f1
+    else if (this.attackSequence === 2) {
+      const sequence = ['s2f1', 'halt1', 'halt2', 's3f1'];
+      const damageFrames = [true, false, false, false]; // s2f1 deals damage
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 0 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('s1s3', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
+        
+        // Deal damage on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+        }
+      }
+    }
+    // Attack 3 sequence: s3f1 > s3f2 > s3f3 (0.5s hold)
+    else if (this.attackSequence === 3) {
+      const sequence = ['s3f1', 's3f2', 's3f3'];
+      const damageFrames = [false, true, false]; // s3f2 deals damage
+      const holdTimes = [0.2, 0.2, 0.5]; // s3f3 holds for 0.5s
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('s1s4', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
+        
+        // Use custom frame duration for s3f3
+        if (this.attackFrame === 2) {
+          this.attackFrameDuration = 0.5;
+        } else {
+          this.attackFrameDuration = 0.2;
+        }
+        
+        // Deal damage on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+        }
+      }
+    }
+  }
+
+  updateHaltSequence() {
+    // Halt sequence: halt1 > halt2 > idle
+    const sequence = ['halt1', 'halt2', 'idle'];
+    
+    if (this.haltFrame < sequence.length) {
+      this.currentSprite = sequence[this.haltFrame];
+    }
+  }
+
+  updateCallistoAttackSequence() {
+    // Attack 1: cs1f1 (windup when receiving attack and before hitting), (when hitting) switch to cs1f2 with cs1s1 (deal an instance of damage) (inflict 1 bind, gain 1 haste) > cs1f3
+    if (this.attackSequence === 1) {
+      const sequence = ['cs1f1', 'cs1f2', 'cs1f3'];
+      const damageFrames = [false, true, false]; // cs1f2 deals damage
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
+        
+        // Deal damage and apply effects on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+          
+          // Apply Attack 1 effects: inflict 1 bind on enemy, gain 1 haste
+          if (this.target) {
+            this.target.addStatus('Bind', 1, 1);
+            console.log('🔗 Callisto inflicted Bind on enemy!');
+          }
+          this.addStatus('Haste', 1, 1);
+          console.log('⚡ Callisto gained Haste!');
+        }
+      }
+    }
+    // Attack 2: cs1f3 (windup) > s2f1 with s2s1 (deal an instance of damage) (inflict 1 fragile (max stack 5), gain 1 protection (max stack 5))
+    else if (this.attackSequence === 2) {
+      const sequence = ['cs1f3', 'cs2f1'];
+      const damageFrames = [false, true]; // s2f1 deals damage
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs2s1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
+        
+        // Deal damage and apply effects on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          this.dealAttackDamage();
+          this.attackDamageDealt = true;
+          
+          // Apply Attack 2 effects: inflict 1 fragile (max stack 5), gain 1 protection (max stack 5)
+          if (this.target) {
+            const fragileStatus = this.target.statuses.find(s => s.type === 'Fragile');
+            const currentFragileStacks = fragileStatus ? fragileStatus.potency : 0;
+            if (currentFragileStacks < 5) {
+              this.target.addStatus('Fragile', 1, 1);
+              console.log('💔 Callisto inflicted Fragile on enemy!');
+            }
+          }
+          
+          const protectionStatus = this.statuses.find(s => s.type === 'Protection');
+          const currentProtectionStacks = protectionStatus ? protectionStatus.potency : 0;
+          if (currentProtectionStacks < 5) {
+            this.addStatus('Protection', 1, 1);
+            console.log('🛡️ Callisto gained Protection!');
+          }
+        }
+      }
+    }
+    // Attack 3: cs3f1 > cs3f2 with cs3s1 (deal an instance of damage) hold for 0.5 seconds, switch to cs3f3 with cs3s2 (deal +5% more damage for every negative effect on enemy (max 25%)) switch to cs3s4
+    else if (this.attackSequence === 3) {
+      const sequence = ['cs3f1', 'cs3f2', 'cs3f3', 'cs3f4'];
+      const damageFrames = [false, true, true, false]; // cs3f2 and cs3f3 deal damage
+      const holdTimes = [0.2, 0.5, 0.2, 0.5]; 
+      
+      if (this.attackFrame < sequence.length) {
+        this.currentSprite = sequence[this.attackFrame];
+        
+   
+        
+        // Spawn slash effects on specific frames (only once per frame)
+        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs3s1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        } else if (this.attackFrame === 2 && !this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cs3s2', { x: 0, y: -10 });
+        }
+        
+        // Deal damage and apply effects on damage frames
+        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
+          // Calculate damage with negative effect bonus for cs3f3
+          let damageMultiplier = 1.0;
+          if (this.attackFrame === 2 && this.target) {
+            // Count negative effects on enemy
+            const negativeEffects = ['Bind', 'Fragile', 'Burn', 'Bleed', 'Tremor', 'Sinking'];
+            const negativeCount = negativeEffects.filter(effect => this.target.hasStatus(effect)).length;
+            const bonusDamage = Math.min(negativeCount * 0.05, 0.25); // Max 25% bonus
+            damageMultiplier = 1.0 + bonusDamage;
+            
+            if (bonusDamage > 0) {
+              console.log(`⚡ Callisto gained ${Math.round(bonusDamage * 100)}% damage bonus from ${negativeCount} negative effects!`);
+            }
+          }
+          
+          // Deal damage with multiplier
+          this.dealAttackDamage(damageMultiplier);
+          this.attackDamageDealt = true;
+        }
+      }
+    }
+  }
+
+  updateCallistoHaltSequence() {
+    // Halt sequence: chalt > cmove > cidle
+    const sequence = ['chalt', 'cmove', 'cidle'];
+    
+    if (this.haltFrame < sequence.length) {
+      this.currentSprite = sequence[this.haltFrame];
+    }
+  }
+
+  spawnSlashEffect(slashType, targetOffset = null) {
+    // Cap slash effects to prevent performance issues
+    if (this.slashEffects.length >= 6) {
+      return; // Don't spawn more than 6 effects
+    }
+    
+    // Check if this is a cbsk effect (Installation Art slash entities)
+    const isCbskEffect = ['cbsk1', 'cbsk2', 'cbsk3'].includes(slashType);
+    
+    // Spawn slash effect that shares character position and fades out
+    const effect = {
+      type: slashType,
+      pos: { x: this.pos.x, y: this.pos.y }, // Avoid .copy() to reduce GC
+      facing: this.facing,
+      timer: isCbskEffect ? 5.0 : 0.4, // 5 seconds for cbsk effects, 0.4 for normal slashes
+      targetOffset: targetOffset,
+      owner: this,
+      rotation: null // Will be set randomly for cbsk effects
+    };
+    
+    this.slashEffects.push(effect);
+  }
+
+  dealAttackDamage() {
+    // This method will be called to deal damage during attack sequences
+    // The actual damage dealing will be handled in the update method
+    this.strikeActive = true;
+    this.attackHitResolved = false;
+  }
+
+  isDead() {
+    return this.hp <= 0;
+  }
+
+  drawSlashEffects(dt) {
+    // Draw all active slash effects
+    for (let i = this.slashEffects.length - 1; i >= 0; i--) {
+      const effect = this.slashEffects[i];
+
+      // Safety removal of invalid effects
+      if (!effect || !effect.owner) {
+        this.slashEffects.splice(i, 1);
+        continue;
+      }
+
+      effect.timer -= dt; // Use actual dt for consistent timing
+      if (effect.timer <= 0) {
+        this.slashEffects.splice(i, 1);
+        continue;
+      }
+
+      const owner = effect.owner;
+      const offsetX = effect.targetOffset?.x || 0;
+      const offsetY = effect.targetOffset?.y || 0;
+      
+      // Pre-calculate positions to avoid push/pop
+      const baseX = owner.pos.x;
+      const baseY = owner.pos.y;
+      const facing = owner.facing === 1 ? -1 : 1;
+      
+      // Apply same scaling as character sprites
+      if (owner.spriteType === 'atlas') {
+        // Use same scale factor as character (144/512)
+        const scaleFactor = 144 / 512;
+        
+        // Simplified alpha calculation (no map)
+        const alpha = effect.timer * 637.5; // 0.4 * 637.5 = 255
+        
+        // Try to draw sprite with proper scaling and alpha fade
+        const spriteInfo = SPRITES?.[effect.type];
+        if (spriteInfo) {
+          // Check for special Installation Art slash entities (cbsk1, cbsk2, cbsk3)
+          if (['cbsk1', 'cbsk2', 'cbsk3'].includes(effect.type)) {
+            // Draw ground-based slash entities with random rotation
+            console.log(`[DEBUG] Drawing cbsk effect: ${effect.type} at pos (${effect.pos.x.toFixed(1)}, ${owner.spawnY.toFixed(1)}) with rotation: ${(effect.rotation * 180/PI).toFixed(1)}°`);
+            push();
+            
+            // Apply alpha fade (5 second duration - no fade until last second)
+            let alpha = 255;
+            if (effect.timer <= 1.0) {
+              // Only fade in the last second
+              alpha = effect.timer * 255; // 1.0 * 255 = 255
+            }
+            tint(255, 255, 255, alpha);
+            
+            // Position at ground level (0 pixels from ground) with only horizontal inheritance
+            // Use the effect owner's spawnY for ground level
+            const groundY = effect.owner.spawnY;
+            translate(effect.pos.x + offsetX * facing, groundY);
+            
+            // Random rotation between -45 to 45 degrees
+            if (!effect.rotation) {
+              effect.rotation = random(-PI/4, PI/4); // Random -45 to 45 degrees
+            }
+            rotate(effect.rotation);
+            
+            // Apply same scaling as character sprites
+            const scaleFactor = 144 / 512;
+            scale(scaleFactor * facing, 1);
+            
+            // Draw the sprite
+            drawSpriteScaled(effect.type, 0, 0, scaleFactor);
+            
+            pop();
+          } else {
+            // Regular slash effects
+            console.log(`[DEBUG] Drawing regular slash effect: ${effect.type} (should not be cbsk)`);
+            push();
+            // Apply alpha fade only and facing transformation
+            tint(255, 255, 255, alpha);
+            translate(baseX + offsetX * facing, baseY + offsetY + 50);
+            if (facing === -1) {
+              scale(-1, 1); // Flip horizontally when facing right
+            }
+            drawSpriteScaled(effect.type, 0, 0, scaleFactor); 
+            pop();
+          }
+        } else {
+          // Fallback: draw scaled slash effect
+          push();
+          scale(scaleFactor * facing, 1);
+          noStroke();
+          ellipse(baseX + offsetX, baseY + offsetY + 50, 15, 15);
+          pop();
+        }
+      } else {
+        // Regular sprite scaling
+        const targetHeight = 144;
+        const scaleFactor = targetHeight / (owner.sprite?.height || 512);
+        
+        // Simplified alpha calculation
+        const alpha = effect.timer * 637.5;
+        
+        // Try to draw sprite with proper scaling and alpha fade
+        const spriteInfo = SPRITES?.[effect.type];
+        if (spriteInfo) {
+          push();
+          // Apply alpha fade only and facing transformation
+          tint(255, 255, 255, alpha);
+          translate(baseX + offsetX * facing, baseY + offsetY - 30);
+          if (facing === -1) {
+            scale(-1, 1); // Flip horizontally when facing right
+          }
+          drawSpriteScaled(effect.type, 0, 0, scaleFactor);
+          pop();
+        } else {
+          // Fallback: draw scaled slash effect
+          push();
+          scale(scaleFactor * facing, 1);
+          noStroke();
+          ellipse(baseX + offsetX, baseY + offsetY, 15, 15);
+          pop();
+        }
+      }
+    }
+
+    // Draw ultimate-specific effects (red lines and skulls)
+    if (this.ultimateActive && this.characterKey === 'CALLISTO') {
+      this.drawUltimateEffects(dt);
+    }
+  }
+
+  drawUltimateEffects(dt) {
+    // Draw red lines from Attack 5
+    if (this.ultimateRedLines && this.ultimateRedLines.length > 0) {
+      push();
+      stroke(255, 0, 0);
+      strokeWeight(3);
+      this.ultimateRedLines.forEach(redLine => {
+        if (redLine.opacity < redLine.maxOpacity) {
+          redLine.opacity += redLine.fadeSpeed * dt;
+        }
+        const alpha = constrain(redLine.opacity * 255, 0, 255);
+        stroke(255, 0, 0, alpha);
+        line(redLine.topX, redLine.topY, redLine.bottomX, redLine.bottomY);
+      });
+      pop();
+    }
+
+    // Draw skull instances from Attack 5
+    if (this.ultimateSkulls && this.ultimateSkulls.length > 0) {
+      this.ultimateSkulls.forEach(skull => {
+        if (skull.timer > 0) {
+          skull.timer -= dt;
+          push();
+          translate(skull.x, skull.y);
+          rotate(skull.rotation);
+          scale(skull.scale);
+          drawSprite(skull.type, 0, 0);
+          pop();
+        }
+      });
+    }
+  }
+
+  handleInput() {
+    // Completely disable input if defeated
+    if (this.isDefeated) {
+      return;
+    }
+    
+    if (this.isAI || !this.controls || !this.isPlayerControlled) {
+      return;
+    }
+    
+    // Disable player movement during ultimate
+    if (this.ultimateActive) {
+      return;
+    }
+    
+    // AI properties should only be set in AI functions
+    // this.ai.moveLeft = keyIsDown(this.controls.left.toUpperCase().charCodeAt(0));
+    // this.ai.moveRight = keyIsDown(this.controls.right.toUpperCase().charCodeAt(0));
+    // this.ai.moveUp = keyIsDown(this.controls.up.toUpperCase().charCodeAt(0));
+    // this.ai.moveDown = keyIsDown(this.controls.down.toUpperCase().charCodeAt(0));
+  }
+
+  processKeyPressed(keyValue) {
+    const keyLower = keyValue.toLowerCase();
+    
+    // Release slam hold position on any input
+    if (this.slamHoldPosition) {
+      this.slamHoldPosition = false;
+      this.isSlamAttacking = false;
+      this.setState('idle');
+    }
+    
+    if (keyLower === this.controls.up) {
+      this.jumpRequest = true;
+    }
+    if (keyLower === this.controls.down) {
+      this.duckRequest = true;
+      // Check if also attacking for slam attack
+      if (this.attackRequest && !this.onGround()) {
+        this.slamAttackRequested = true;
+      }
+    }
+    if (keyLower === this.controls.attack) {
+      this.requestAttack();
+    }
+    if (keyLower === this.controls.evade) {
+      this.requestEvade();
+    }
+    
+    // Ultimate activation with X key (always available for testing)
+    if (keyLower === 'x' && this.ultimateCanActivate && !this.ultimateActive) {
+      this.ultimateActivationRequested = true;
+    }
+    
+    // Call character-specific processKeyPressed method
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.processKeyPressed) {
+      character.processKeyPressed(keyValue, this);
+    }
+  }
+
+  processKeyReleased(keyValue) {
+    const keyLower = keyValue.toLowerCase();
+    if (keyLower === this.controls.down) {
+      this.duckRequest = false;
+    }
+    if (keyLower === this.controls.up) {
+      this.jumpRequest = false;
+    }
+    if (keyLower === this.controls.attack) {
+      this.releaseAttack(this.chargeAttack);
+    }
+  }
+
+  requestAttack() {
+    // Release slam hold position on any input
+    if (this.slamHoldPosition) {
+      this.slamHoldPosition = false;
+      this.isSlamAttacking = false;
+      this.setState('idle');
+    }
+    this.attackRequest = true;
+  }
+
+  releaseAttack(isCharged) {
+    if (this.attackRequest) {
+      this.attackRelease = true;
+      this.chargeAttack = isCharged;
+    }
+  }
+
+  requestGuard(opponent = null) {
+    // Release slam hold position on any input
+    if (this.slamHoldPosition) {
+      this.slamHoldPosition = false;
+      this.isSlamAttacking = false;
+      this.setState('idle');
+    }
+    
+    this.guardRequest = true;
+    this.isGuarding = true;
+    
+    // AUTO-FACE DIRECTION: Face towards closest opponent when guarding
+    // This ensures the guard animation faces the nearest threat
+    const closestOpponent = this.getClosestOpponent();
+    if (closestOpponent) {
+      this.faceTowards(closestOpponent);
+    }
+  }
+
+  releaseGuard() {
+    this.guardRequest = false;
+    this.isGuarding = false;
+    this.isCountering = false;
+  }
+
+  requestEvade() {
+    this.evadeRequested = true;
+  }
+
+  startEvade(opponent) {
+    if (this.isEvading || this.evadeCooldown > 0) {
+      return;
+    }
+    this.setEvadeState(0.22);
+    // FACE TOWARDS SPECIFIC OPPONENT: Face the specific opponent being evaded from
+    // This ensures the evade animation faces the correct direction
+    if (opponent) {
+      this.faceTowards(opponent);
+    }
+    this.vel.x = -this.facing * 18;
+    this.vel.y = -3;
+  }
+
+  useTimeToHunt() {
+    // This method is now handled by character profiles
+    // Keeping for backward compatibility - but no longer calling processKeyPressed to avoid recursion
+    // The actual Time to Hunt logic is in the character profile's processKeyPressed method
+    // This method is kept for compatibility but should not be called directly
+  }
+
+  
+  useDisposial() {
+    // This method is now handled by character profiles
+    // Keeping for backward compatibility - but no longer calling processKeyPressed to avoid recursion
+    // The actual Disposial logic is in the character profile's processKeyPressed method
+    // This method is kept for compatibility but should not be called directly
+  }
+
+  update(dt, opponents = null) {
+    // Handle both single opponent (backward compatibility) and array of opponents
+    const opponent = Array.isArray(opponents) ? (opponents.length > 0 ? opponents[0] : null) : opponents;
+    
+    // If defeated, keep in hurt state and skip all other updates
+    if (this.isDefeated) {
+      this.setState('hurt'); // Force hurt state
+      this.vel.x = 0; // Prevent movement
+      this.vel.y = 0;
+      return; // Skip all other updates
+    }
+    
+    // STEP 7: Unified update pipeline
+    
+    // 1. State synchronization
+    this.syncState();
+    
+    // 2. Timer updates
+    this.updateTimers(dt);
+    
+    // 3. Input handling
+    this.handleInput();
+    
+    // 4. Movement system
+    this.movementSystem.applyMovement(dt, opponent);
+    this.movementSystem.applyGravity(dt, opponent);
+    this.movementSystem.cleanupPosition(opponent);
+    
+    // 5. Attack system - handle multiple opponents
+    this.updateAttackSystem(dt, opponents);
+    
+    // 6. Ultimate system
+    this.updateUltimateSystem(dt, opponent);
+    
+    // 7. Status system
+    this.statusSystem.applyStatuses(dt);
+    
+    // 7. Character-specific onUpdate
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.onUpdate) {
+      character.onUpdate(dt, opponent, this);
+    }
+    
+    // Update Installation Art for Callisto
+    if (this.characterKey === 'CALLISTO' && this.installationArtActive) {
+      const callistoCharacter = CHARACTERS['CALLISTO'];
+      if (callistoCharacter && callistoCharacter.updateInstallationArt) {
+        callistoCharacter.updateInstallationArt(this, dt);
+      }
+    }
+    
+    // 9. Sprite shake update
+    this.updateSpriteShake(dt);
+    
+    // 10. Dash recharge
+    this.applyDashRecharge(dt);
+    
+    // 11. State transitions
+    this.updateStateTransitions();
+    
+    // 12. Visual updates
+    this.updateVisuals(dt);
+    
+    // 13. AI controls
+    if (this.isAI) {
+      this.updateAIControls(opponent);
+    }
+    
+    // 14. Process actions
+    this.processActions(opponent, dt);
+  }
+
+  /**
+   * ULTIMATE SYSTEM UPDATE: Handle ultimate activation and execution
+   * Modified to target all enemies instead of just one opponent
+   * @param {number} dt - Delta time for frame-independent updates
+   * @param {Fighter} opponent - Primary opponent (for backward compatibility)
+   */
+  updateUltimateSystem(dt, opponent) {
+    // Handle ultimate activation request
+    if (this.ultimateActivationRequested && !this.ultimateActive) {
+      this.activateUltimate(opponent);
+      this.ultimateActivationRequested = false;
+    }
+    
+    // Update active ultimate
+    if (this.ultimateActive) {
+      // Get all enemies for multi-target ultimate attacks
+      const allFighters = window.allFighters || [];
+      const allEnemies = allFighters.filter(f => f !== this && !f.isDefeated);
+      
+      // Execute character-specific ultimate logic with all enemies
+      const character = CHARACTERS[this.characterKey];
+      if (character && character.updateUltimate) {
+        // Pass all enemies instead of single opponent for multi-target support
+        character.updateUltimate(this, allEnemies, dt);
+      }
+      
+      // End ultimate when timer reaches 0 and we're not in attack sequences
+      if (this.ultimateTimer <= 0 && this.ultimatePhase !== 2 && this.ultimatePhase !== 4 && 
+          this.ultimatePhase !== 6 && this.ultimatePhase !== 8 && this.ultimatePhase !== 10) {
+        console.log('[ULTIMATE DEBUG] Ultimate ending, timer:', this.ultimateTimer, 'phase:', this.ultimatePhase);
+        this.endUltimate();
+      }
+    }
+  }
+
+  /**
+   * ACTIVATE ULTIMATE: Start ultimate attack targeting all enemies
+   * Modified to affect all enemies in battle instead of just one opponent
+   * @param {Fighter} opponent - Primary opponent (for backward compatibility)
+   */
+  activateUltimate(opponent) {
+    if (this.ultimateActive) return;
+    
+    // Get all enemies for multi-target ultimate effects
+    const allFighters = window.allFighters || [];
+    const allEnemies = allFighters.filter(f => f !== this && !f.isDefeated);
+    
+    // Initialize ultimate state
+    this.ultimateActive = true;
+    this.ultimatePhase = 0;
+    this.ultimateTimer = 999; // Will be set by character-specific logic
+    this.ultimateDamageDealt = 0;
+    this.ultimateTotalDamage = 0;
+    this.ultimateCameraZoom = 1;
+    this.ultimateBackgroundDim = 0;
+    
+    // Store all enemies reference for character-specific logic
+    this.allEnemies = allEnemies;
+    this.opponent = opponent; // Keep for backward compatibility
+    
+    // Set ultimate to cutscene state
+    this.setState('ultimate');
+    
+    // Stagger all enemies during ultimate activation
+    allEnemies.forEach(enemy => {
+      enemy.setState('stagger'); // Enemy can't act during ultimate
+      enemy.ultimateActive = false; // Ensure enemy isn't also in ultimate
+    });
+    
+    console.log('[ULTIMATE DEBUG] Ultimate activated against', allEnemies.length, 'enemies, phase:', this.ultimatePhase, 'timer:', this.ultimateTimer);
+    
+    // Execute character-specific ultimate activation with all enemies
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.activateUltimate) {
+      character.activateUltimate(this, allEnemies);
+    }
+    
+    // Emit ultimate activation event
+    this.events.emit('ultimateActivated', {
+      character: this.characterKey,
+      targets: allEnemies.map(e => e.characterKey),
+      targetCount: allEnemies.length
+    });
+  }
+
+  endUltimate() {
+    this.ultimateActive = false;
+    this.ultimatePhase = 0;
+    this.ultimateTimer = 0;
+    this.ultimateCameraZoom = 1;
+    this.ultimateBackgroundDim = 0;
+    
+    // Resume normal combat
+    this.setState('idle');
+    
+    // Execute character-specific ultimate cleanup
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.endUltimate) {
+      character.endUltimate(this);
+    }
+    
+    // Emit ultimate end event
+    this.events.emit('ultimateEnded', {
+      character: this.characterKey,
+      totalDamage: this.ultimateTotalDamage
+    });
+  }
+
+  // STEP 7: Unified update pipeline helper methods
+  updateTimers(dt) {
+    this.attackTimer = max(0, this.attackTimer - dt);
+    this.evadeTimer = max(0, this.evadeTimer - dt);
+    this.staggerTimer = max(0, this.staggerTimer - dt);
+    this.staggerRecoveryTimer = max(0, this.staggerRecoveryTimer - dt);
+    this.comboTimer = max(0, this.comboTimer - dt);
+    this.hitCooldown = max(0, this.hitCooldown - dt);
+    this.attackCounterTimer = max(0, this.attackCounterTimer - dt);
+    this.staggeredDisplayTimer = max(0, this.staggeredDisplayTimer - dt);
+    this.dialogueTimer = max(0, this.dialogueTimer - dt);
+    
+    // Reset dialogue when timer reaches 0
+    if (this.dialogueTimer <= 0) {
+      this.currentDialogue = '';
+    }
+
+    // Combo system - reset when timer runs out
+    if (this.comboTimer <= 0) {
+      this.combo = 0;
+    }
+
+    // Attack sequence system - reset after 3 hits to create 1-3 rotation
+    if (this.attackCounter >= 3) {
+      this.attackCounter = 0; // Reset after completing 3-hit sequence
+    }
+    
+    // 🎨 Callisto slam buff duration management
+    if (this.characterKey === 'CALLISTO' && this.slamBuffActive) {
+      this.slamBuffTimer -= dt;
+      if (this.slamBuffTimer <= 0) {
+        // Restore original values
+        this.attackRange = this.originalAttackRange || this.attackRange;
+        this.attackInterval = this.originalAttackInterval || this.attackInterval;
+        this.slamBuffActive = false;
+        console.log('🎨 Callisto slam buffs expired!');
+      }
+    }
+  }
+
+  updateAttackSystem(dt, opponents) {
+    // Handle both single opponent (backward compatibility) and array of opponents
+    const opponent = Array.isArray(opponents) ? (opponents.length > 0 ? opponents[0] : null) : opponents;
+    
+    if (this.state === 'attack') {
+      // Handle attack sequence frame timing
+      if (this.attackSequence > 0) {
+        this.attackFrameTimer += dt;
+        
+        if (this.attackFrameTimer >= this.attackFrameDuration) {
+          this.attackFrameTimer = 0;
+          this.attackFrame++;
+          this.attackDamageDealt = false; // Reset damage flag for next frame
+          
+          // Check if sequence is complete
+          if (this.attackSequence === 1 && this.attackFrame >= 4) { // Attack 1: 4 frames
+            this.setState('idle');
+            this.strikeActive = false;
+            this.attackSequence = 0;
+          } else if (this.attackSequence === 2 && this.attackFrame >= 4) { // Attack 2: 4 frames
+            this.setState('idle');
+            this.strikeActive = false;
+            this.attackSequence = 0;
+          } else if (this.attackSequence === 3 && this.attackFrame >= 4) { // Attack 3: 4 frames
+            this.setState('idle');
+            this.strikeActive = false;
+            this.attackSequence = 0;
+          }
+        }
+      }
+      
+      // Handle attack timer expiration for non-sequence attacks
+      if (this.state === 'attack' && this.attackTimer <= 0) {
+        if (!this.attackHitResolved) {
+          this.resolveAttackForMultipleOpponents(opponents);
+        }
+        // Add 1 second delay before allowing idle state transition
+        this.attackTimer = 1.0; // Prevent immediate transition to idle
+        this.setState('idle');
+        this.strikeActive = false;
+      }
+    }
+
+    // Deal damage during attack sequences when strike is active
+    if (this.strikeActive && this.attackSequence > 0 && !this.attackHitResolved && this.attackTimer > 0) {
+      this.resolveAttackForMultipleOpponents(opponents);
+      this.attackHitResolved = true; // Set immediately to prevent timer expiration from resolving
+    }
+  }
+  
+  /**
+   * MULTI-TARGET ATTACK RESOLUTION: Handle attacks that hit multiple opponents
+   * Used by dash attacks and slam attacks to damage all targets in range
+   * @param {Fighter|Fighter[]} opponents - Single opponent or array of opponents to check
+   */
+  resolveAttackForMultipleOpponents(opponents) {
+    // Exit if no opponents provided
+    if (!opponents) return;
+    
+    // Normalize input: ensure we have an array of targets
+    // Handle both single opponent and array of opponents
+    const targets = Array.isArray(opponents) ? opponents : [opponents];
+    
+    // Check each opponent for hit detection and apply damage if valid
+    targets.forEach(target => {
+      if (target) {
+        // Use enhanced dash hit detection if this is a dash attack
+        // Dash attacks get 50% increased range for more forgiving hit detection
+        const canHit = (this.state === 'attack' && this.isDashing) ? 
+          this.canDashHitTarget(target) : this.canHitTarget(target);
+          
+        // If target can be hit, apply damage through the attack system
+        if (canHit) {
+          this.attackSystem.resolveAttack(target);
+        }
+      }
+    });
+  }
+  
+  /**
+   * STANDARD HIT DETECTION: Check if a target is within normal attack range
+   * Used by regular attacks, guard actions, and most combat mechanics
+   * @param {Fighter} target - The opponent to check range against
+   * @returns {boolean} - True if target is within attack range
+   */
+  canHitTarget(target) {
+    // Validate target: must exist and not be self
+    if (!target || target === this) return false;
+    
+    // Calculate distance between this fighter and target
+    const distance = dist(this.pos.x, this.pos.y, target.pos.x, target.pos.y);
+    // Check if distance is within this fighter's attack range
+    return distance <= this.attackRange;
+  }
+  
+  /**
+   * ENHANCED DASH HIT DETECTION: Check if target is within dash attack range
+   * Dash attacks get 50% increased range for more forgiving hit detection
+   * This compensates for the high-speed movement of dash attacks
+   * @param {Fighter} target - The opponent to check dash range against
+   * @returns {boolean} - True if target is within enhanced dash range
+   */
+  canDashHitTarget(target) {
+    // Validate target: must exist, not be self, and not be defeated
+    if (!target || target === this || target.isDefeated) return false;
+    
+    // Calculate distance between this fighter and target
+    const distance = dist(this.pos.x, this.pos.y, target.pos.x, target.pos.y);
+    // Dash attacks get 50% increased range for more forgiving hit detection
+    const dashRange = this.attackRange * 1.5; // 50% increased range
+    return distance <= dashRange;
+  }
+
+  updateStateTransitions() {
+    // Make stagger bar lower as visual timer during stagger period
+    if (this.state === 'staggered') {
+      if (this.staggerTimer > 0) {
+        // During stagger phase, bar lowers from max to 0 over stagger duration
+        this.stagger = map(this.staggerTimer, 0, this.staggerLength, 0, this.staggerThreshold);
+      } else if (this.staggerRecoveryTimer > 0) {
+        // During recovery phase, bar stays at 0
+        this.stagger = 0;
+      } else {
+        // Start recovery timer when stagger timer ends
+        if (this.staggerTimer <= 0 && this.staggerRecoveryTimer <= 0) {
+          this.staggerRecoveryTimer = this.staggerLength; // 5 seconds recovery
+        } else {
+          // Full recovery - automatically exit staggered state and clear buildup
+          this.setState('idle');
+          this.stagger = 0; // Clear any remaining stagger buildup
+        }
+      }
+    }
+
+    // Don't auto-exit hurt state - player must act to exit
+
+    if (this.isEvading && this.evadeTimer <= 0) {
+      this.isEvading = false;
+      this.setState('idle');
+    }
+  }
+
+
+  updateVisuals(dt) {
+    // Handle halt sequence timing
+    if (this.haltSequence) {
+      this.haltFrameTimer += dt;
+      
+      if (this.haltFrameTimer >= this.haltFrameDuration) {
+        this.haltFrameTimer = 0;
+        this.haltFrame++;
+        
+        // Check if halt sequence is complete
+        if (this.haltFrame >= 3) { // halt1, halt2, idle
+          this.haltSequence = false;
+          this.haltFrame = 0;
+        }
+      }
+    }
+
+    // Update slash effects
+    for (let i = this.slashEffects.length - 1; i >= 0; i--) {
+      const effect = this.slashEffects[i];
+      effect.timer -= dt;
+      
+      if (effect.timer <= 0) {
+        this.slashEffects.splice(i, 1);
+      }
+    }
+
+    // Update sprite based on current state
+    this.updateSprite();
+  }
+
+  updateAI(opponent) {
+    this.updateAIControls(opponent);
+  }
+
+  updateAIControls(opponent) {
+    // Don't act if enemy is in actual stagger phase (but allow movement during recovery)
+    if (this.state === 'staggered' && this.staggerTimer > 0) {
+      this.ai.moveLeft = false;
+      this.ai.moveRight = false;
+      this.ai.moveUp = false;
+      this.ai.moveDown = false;
+      this.ai.attack = false;
+      this.ai.defend = false;
+      return;
+    }
+    
+    // Completely disable all actions if opponent is in ultimate
+    if (opponent && opponent.ultimateActive) {
+      this.ai.moveLeft = false;
+      this.ai.moveRight = false;
+      this.ai.moveUp = false;
+      this.ai.moveDown = false;
+      this.ai.attack = false;
+      this.ai.defend = false;
+      return;
+    }
+    
+    const distance = opponent.pos.x - this.pos.x;
+    const absDistance = abs(distance);
+    
+    // AI completely disabled - enemy is mindless and non-reactive
+    // All AI properties set to false to ensure truly passive behavior
+    this.ai.moveLeft = false;
+    this.ai.moveRight = false;
+    this.ai.moveUp = false;
+    this.ai.moveDown = false;
+    this.ai.attack = false;
+    this.ai.defend = false;
+    
+    // All AI behavior disabled - enemy is mindless and non-reactive
+    this.ai.defend = false;
+    
+    // Dash attack disabled
+    // if (absDistance < 100 && this.dashCharges > 0 && this.attackTimer <= 0 && random() < 0.03 && !this.ultimateActive && !opponent.ultimateActive) {
+    //   this.startDash();
+    // }
+    
+    // Regular attack disabled
+    // Attack regardless of whether opponent is in front or behind
+    // this.ai.attack = absDistance < 120 && this.attackTimer <= 0 && !opponentAttacking && opponent.state !== 'staggered' && random() < 0.05;
+    
+    // AI attack execution completely disabled
+    // if (this.ai.attack && !this.attackRequest && !this.ultimateActive && this.state !== 'ultimate') {
+    //   const distance = opponent.pos.x - this.pos.x;
+    //   const inRange = abs(distance) < this.attackRange && abs(this.pos.y - opponent.pos.y) < 50;
+    //   
+    //   if (inRange) {
+    //     // Turn to face opponent before attacking
+    //       this.facing = distance > 0 ? 1 : -1;
+    //     // Execute attack directly for AI (no need for request/release cycle)
+    //       this.attackSystem.executeAttack(opponent);
+    //   }
+    // }
+    
+    // AI as human player controller - basic input handling
+    if (this.ai.defend) {
+      this.requestGuard(opponent);
+    } else {
+      this.releaseGuard();
+    }
+    
+    // Basic AI input simulation for testing
+    if (random() < 0.02) { // 2% chance to attack
+      this.attackRelease = true;
+    }
+    if (random() < 0.01) { // 1% chance to dash
+      this.startDash();
+    }
+  }
+
+  applyMovement(dt, opponent) {
+    if (
+      this.state === 'hit' ||
+      (this.state === 'staggered' && this.staggerTimer > 0) || // Only block during actual stagger phase
+      this.ultimateActive // Completely disable movement during ultimate
+    ) {
+      return;
+    }
+
+    let moveDir = 0;
+    
+    // Only process AI movement if AI is enabled
+    if (this.isAI) {
+      if (this.ai.moveLeft) moveDir -= 1;
+      if (this.ai.moveRight) moveDir += 1;
+    } else if (this.isPlayerControlled) {
+      // For player-controlled fighter, check actual input (not AI properties)
+      if (keyIsDown(this.controls.left.toUpperCase().charCodeAt(0))) moveDir -= 1;
+      if (keyIsDown(this.controls.right.toUpperCase().charCodeAt(0))) moveDir += 1;
+    }
+    // If not AI and not player-controlled, don't move (for second player control later)
+
+    if (moveDir !== 0) {
+      this.facing = moveDir;
+    }
+
+    // Movement should work for both player and AI
+    if (!this.isDashing) {
+      this.vel.x = moveDir * this.speed;
+    }
+
+    if (this.duckRequest && this.onGround()) {
+      this.setState('duck');
+      this.isDucking = true;
+      this.vel.x *= 0.7;
+    } else {
+      this.isDucking = false;
+    }
+
+    if (this.jumpRequest && this.onGround() && !this.isDucking) {
+      this.vel.y = this.jumpStrength;
+      this.setState('jump');
+      this.jumpRequest = false;
+    }
+
+    if (this.isDashing) {
+      this.dashDuration -= dt;
+      if (this.dashDuration <= 0) {
+        this.isDashing = false;
+        this.setState('idle'); // Reset dash state when dash ends
+        
+        // Start halt sequence when dash ends
+        this.haltSequence = true;
+        this.haltFrame = 0;
+        this.haltFrameTimer = 0;
+      }
+      // DASH ATTACK TRIGGER: Check for dash attack opportunity during dash movement
+      // Dash attacks trigger when any opponent is within 80 pixels during a dash
+      if (!this.dashAttacked) {
+        // Get all fighters from the global battle array for multi-target checking
+        const allFighters = window.allFighters || [];
+        // Filter out self and defeated players to get valid targets
+        const targets = allFighters.filter(f => f !== this && !f.isDefeated);
+        
+        // Check if ANY opponent is within dash trigger range (80 pixels)
+        // This ensures dash attacks can trigger regardless of which opponent is closest
+        const hasTargetInRange = targets.some(f => abs(this.pos.x - f.pos.x) < 80);
+        
+        // If any opponent is in range, execute the dash attack
+        if (hasTargetInRange) {
+          // Execute dash attack with all valid targets (multi-target damage)
+          this.executeDashAttack(targets);
+          
+          // Mark dash as executed to prevent multiple dash attacks in same dash
+          this.dashAttacked = true;
+          
+          // Apply dash velocity (60 pixels/frame in facing direction)
+          // This creates the high-speed movement characteristic of dash attacks
+          this.vel.x = this.facing * 60;
+          
+          // Extend dash duration to ensure full dash attack animation plays
+          this.dashDuration += 0.16;
+        }
+      }
+    }
+
+    if (this.isEvading) {
+      const desiredGap = 120;
+      const distance = abs(this.pos.x - opponent.pos.x);
+      if (distance < desiredGap) {
+        this.vel.x = -this.facing * 18;
+      }
+    }
+
+    if (this.state === 'idle' || this.state === 'run' || this.state === 'hit') {
+      if (moveDir === 0) {
+        this.setState('idle');
+      } else {
+        this.setState('run');
+      }
+    }
+  }
+
+  applyGravity(dt, opponent) {
+    if (!this.onGround()) {
+      if (this.isSlamAttacking) {
+        // Override gravity for slam attack - maintain high speed descent
+        this.vel.y = 30;
+      } else if (!this.ultimateGravityDisabled) {
+        this.vel.y += GRAVITY;
+      }
+    }
+    this.pos.add(this.vel);
+    
+    // Reset jump state to idle when landing
+    if (this.state === 'jump' && this.onGround()) {
+      this.setState('idle');
+    }
+    
+    // Check for slam attack landing
+    if (this.isSlamAttacking && this.onGround()) {
+      this.onSlamLanding(opponent);
+    }
+  }
+
+  cleanupPosition(opponent) {
+    this.pos.x = constrain(this.pos.x, 60, width - 60);
+    if (this.pos.y >= this.spawnY) {
+      this.pos.y = this.spawnY;
+      this.vel.y = 0;
+    }
+    
+    // Check hitbox collision with opponent and push back if overlapping
+    const myBox = { x: this.pos.x - 25, y: this.pos.y - 36, w: 50, h: 72 };
+    const oppBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
+    
+    // Only check horizontal overlap to allow jumping over enemies
+    const horizontalOverlap = !(myBox.x + myBox.w < oppBox.x || oppBox.x + oppBox.w < myBox.x);
+    
+    if (horizontalOverlap) {
+      // Only apply collision if both fighters are on the ground or at similar heights
+      const heightDifference = abs(this.pos.y - opponent.pos.y);
+      if (heightDifference < 40) { // Allow jumping over when height difference is significant
+        // Push back based on which side we're on
+        if (this.pos.x < opponent.pos.x) {
+          this.pos.x = opponent.pos.x - 25 - 25 - 5; // Left of opponent
+        } else {
+          this.pos.x = opponent.pos.x + 25 + 25 + 5; // Right of opponent
+        }
+      }
+    }
+  }
+
+  processActions(opponent, dt) {
+    // Completely disable all actions if defeated
+    if (this.isDefeated) {
+      return;
+    }
+    
+    // Only block actions during actual stagger phase, not recovery phase
+    if (this.state === 'staggered' && this.staggerTimer > 0) {
+      return;
+    }
+    
+    // Completely disable all actions if opponent is in ultimate
+    if (opponent && opponent.ultimateActive) {
+      return;
+    }
+
+    if (this.evadeRequested) {
+      this.startEvade(opponent);
+      this.evadeRequested = false;
+    }
+
+    if (this.slamAttackRequested && !this.onGround() && !this.isSlamAttacking) {
+      this.executeSlamAttack(opponent);
+      this.slamAttackRequested = false;
+    }
+
+    if (this.attackRelease) {
+      if (!this.isEvading && this.state !== 'attack' && !this.isSlamAttacking) {
+        this.attackSystem.executeAttack(opponent);
+      }
+      this.attackRequest = false;
+      this.attackRelease = false;
+    }
+
+    if (this.isGuarding && this.state !== 'staggered') {
+      this.setState('guard');
+      // AI defend property should only be set in AI functions
+    }
+    
+    // Cancel guard when attack is requested
+    if (this.attackRequest && this.isGuarding) {
+      this.releaseGuard();
+    }
+
+  }
+
+  applyDashRecharge(dt) {
+    if (this.dashCharges >= 3) {
+      this.dashTimer = 0;
+      return;
+    }
+    this.dashTimer += dt;
+    while (this.dashTimer >= this.dashCooldown && this.dashCharges < 3) {
+      this.dashCharges += 1;
+      this.dashTimer -= this.dashCooldown;
+    }
+  }
+
+  startDash() {
+    if (this.dashCharges <= 0 || this.isDashing || !this.onGround() || this.ultimateActive) {
+      return;
+    }
+    this.dashCharges -= 1;
+    this.isDashing = true;
+    this.setState('dash');
+    this.vel.x = this.facing * 60;
+    this.dashDuration = 0.2;
+    this.dashAttacked = false;
+  }
+
+  executeAttack(opponent) {
+    // Prevent attacks during ultimate
+    if (this.ultimateActive || this.state === 'ultimate') {
+      return;
+    }
+
+    // Update attack sequence counter for 1-3 rotation
+    this.attackCounter = min(3, this.attackCounter + 1);
+    this.attackCounterDisplay = this.attackCounter;
+    this.attackCounterTimer = 1.0; // Show for 1 second
+
+    // Start attack sequence based on attack counter
+    this.attackSequence = this.attackCounter;
+    this.attackFrame = 0;
+    this.attackFrameTimer = 0;
+    
+    // Combo is handled when the attack actually lands (in addCombo)
+    this.attackDamageDealt = false;
+    this.attackFrameDuration = 0.2;
+    
+    const attackType = this.chargeAttack ? 'heavy' : 'light';
+    this.state = 'attack';
+    this.attackTimer = this.attackInterval;
+    this.attackHitResolved = false;
+    this.statusEffectsApplied = false;
+    this.slashEffectsSpawned = false;
+    this.lastAttackHit = false;
+    this.strikeActive = true; // Set strikeActive for normal attacks
+
+    // Valencina's charged attack mechanics
+    if (this.characterKey === 'VALENCINA' && this.chargeAttack) {
+      // Use 1 acceleration round when charged
+      if (this.accelerationRounds < this.maxAccelerationRounds) {
+        this.accelerationRounds++;
+        this.isCharged = true;
+        
+        // Gain 4 poise count and potency
+        this.statusSystem.addStatus('Poise', 4, 4);
+        
+        // Trigger tremor burst
+        const tremorStatus = this.statuses.find((s) => s.type === 'Tremor');
+        if (tremorStatus && tremorStatus.count > 0) {
+          // Deal damage based on burn + tremor potency / 2
+          const burnStatus = this.statuses.find((s) => s.type === 'Burn');
+          const damage = (burnStatus?.potency || 0 + tremorStatus.potency) / 2;
+          opponent.hp -= damage;
+          spawnDamageNumber(damage, opponent.pos.copy(), this.facing, false, 'tremor', false, 'slam');
+          
+          // Tremor bursts are impactful - add screen shake
+          if (typeof addScreenShake === 'function' && damage > 0) {
+            addScreenShake(damage);
+          }
+        }
+      }
+    }
+
+    // AUTO-FACE DIRECTION: Face towards closest opponent when attacking
+    // This ensures the attack animation faces the nearest target
+    const closestOpponent = this.getClosestOpponent();
+    if (closestOpponent) {
+      this.faceTowards(closestOpponent);
+    }
+    
+    // Emit attackStarted event
+    this.events.emit('attackStarted', {
+      attacker: this.characterKey,
+      target: opponent.characterKey,
+      attackType: this.chargeAttack ? 'heavy' : 'light',
+      damage: this.attackDamage
+    });
+    
+    // Consume Bleed status when attacking
+    this.statusSystem.consumeOnAttack();
+    
+    // Base attack damage and range
+    this.attackDamage = attackType === 'heavy' ? this.baseDamage * 2 : this.baseDamage;
+    this.attackRange = attackType === 'heavy' ? 294 : 231; // 50% increase: 196→294, 154→231
+    this.attackKnockback = attackType === 'heavy' ? 18 * 0.5 : 12 * 0.5; // 50% knockback
+    
+    // Valencina's acceleration round bonuses
+    if (this.characterKey === 'VALENCINA') {
+      // +30% damage (150% against shields)
+      this.attackDamage *= 1.3;
+      // Range +100%
+      this.attackRange *= 2.0;
+    }
+  }
+
+  /**
+   * DASH ATTACK EXECUTION: Perform a high-speed dash attack that hits multiple opponents
+   * Dash attacks are unparrieable, do enhanced damage, and hit all targets in extended range
+   * @param {Fighter[]} targets - Array of all valid opponents to potentially hit
+   */
+  executeDashAttack(targets) {
+    // Prevent attacks during ultimate (can't dash while ultimate is active)
+    if (this.ultimateActive || this.state === 'ultimate') {
+      return;
+    }
+    
+    // Set up dash attack state and properties
+    this.state = 'attack';           // Enter attack state for animation and damage
+    this.strikeActive = true;         // Enable strike detection for damage application
+    this.attackTimer = this.attackInterval; // Reset attack timer for sequence timing
+    this.attackHitResolved = false;  // Track whether damage has been applied
+    this.statusEffectsApplied = false; // Track status effect application
+    this.slashEffectsSpawned = false;  // Track visual effect spawning
+    this.lastAttackHit = false;       // Track if this attack hit (for combo system)
+
+    // Auto-face towards closest opponent when dash attacking
+    // This ensures the dash attack animation faces the right direction
+    const closestOpponent = this.getClosestOpponent();
+    if (closestOpponent) {
+      this.faceTowards(closestOpponent);
+    }
+    
+    // Dash attacks deal 1.5x normal damage for high-impact strikes
+    this.attackDamage = this.baseDamage * 1.5;
+    // Dash attacks have 40% increased range (120→168 pixels) for better hit detection
+    this.attackRange = 168;
+    // Dash attacks apply moderate knockback to opponents
+    this.attackKnockback = 15;
+
+    // Set flag for post-dash attack sprite (special animation after dash completes)
+    this.usePostDashSprite = true;
+
+    // Spawn visual joust slash effect for dash attack
+    // Positioned slightly above the fighter for visual impact
+    if (this.characterKey === 'CALLISTO') {
+      this.spawnSlashEffect('cjs1', { x: 0, y: -10 });
+    } else {
+      this.spawnSlashEffect('js1', { x: 0, y: -10 });
+    }
+
+    // Immediately resolve the attack since dash attacks are instant damage
+    // Use multi-target system to hit all opponents within enhanced range
+    this.resolveAttackForMultipleOpponents(targets);
+  }
+
+  executeSlamAttack(opponent) {
+    // Only usable in mid-air
+    if (this.onGround()) return;
+    
+    // Cancel guard state when starting slam attack
+    this.releaseGuard();
+    
+    this.isSlamAttacking = true;
+    this.state = 'slam';
+    this.vel.y = 30; // High speed downward movement
+    this.vel.x = 0;
+    
+    // Set up landing hitbox (AOE area)
+    this.slamLandingHitbox = {
+      x: this.pos.x,
+      y: this.spawnY, // Ground level
+      radius: 80, // AOE radius
+      damage: this.baseDamage * 2, // Base damage
+      staggerDamage: 0 // Will be calculated on landing
+    };
+  }
+
+  onSlamLanding(opponent) {
+    if (!this.slamLandingHitbox) return;
+    
+    // Spawn debris particles at slam landing point
+    spawnSlamDebris(this.slamLandingHitbox.x, this.slamLandingHitbox.y, 12);
+    
+    // Get all fighters for multi-target AOE damage
+    const allFighters = window.allFighters || [];
+    const targets = allFighters.filter(f => f !== this && !f.isDefeated);
+    
+    let hitAnyTarget = false;
+    
+    // Apply AOE damage to all opponents within range
+    targets.forEach(target => {
+      const distance = dist(target.pos.x, target.pos.y, this.slamLandingHitbox.x, this.slamLandingHitbox.y);
+      if (distance <= this.slamLandingHitbox.radius) {
+        // Calculate final damage with 50% bonus stagger damage
+        const finalDamage = this.calculateDamage(this.slamLandingHitbox.damage, target);
+        const staggerDamage = finalDamage * 0.5; // 50% of damage as stagger
+        
+        target.receiveHit(finalDamage, this, 20);
+        // Only add stagger damage if opponent is not already staggered
+        if (target.state !== 'staggered') {
+          target.stagger += staggerDamage;
+        }
+        spawnDamageNumber(finalDamage, target.pos.copy(), this.facing, false, 'normal', false, 'slam');
+        
+        hitAnyTarget = true;
+      }
+    });
+    
+    // Ground slams build attack sequence counter (1-3 rotation) if any target was hit
+    if (hitAnyTarget) {
+      this.attackCounter = min(3, this.attackCounter + 1);
+      this.attackCounterDisplay = this.attackCounter;
+      this.attackCounterTimer = 1.0; // Show for 1 second
+    }
+    
+    // Hold slam position until input detected
+    this.slamHoldPosition = true;
+    this.state = 'slam';
+    this.slamLandingHitbox = null;
+    
+    // Spawn character-specific slash effect for slam attack
+    if (this.characterKey === 'CALLISTO') {
+      this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
+    } else {
+      this.spawnSlashEffect('s2s2', { x: 0, y: -10 });
+    }
+  }
+
+  /**
+   * ATTACK RESOLUTION: Apply damage to an opponent when attack connects
+   * This is the core damage application function called by all attack types
+   * @param {Fighter} opponent - The opponent to apply damage to
+   */
+  resolveAttack(opponent) {
+    // Don't resolve if strike is not active (attack not in damage phase)
+    if (!this.strikeActive) {
+      return;
+    }
+
+    // Use enhanced range for dash attacks, standard range for other attacks
+    // Dash attacks get 50% increased range for more forgiving hit detection
+    const attackRange = (this.state === 'attack' && this.isDashing) ? 
+      this.attackRange * 1.5 : this.attackRange;
+
+    // Check if opponent is within attack range using collision detection
+    // calcAttackBox creates the hitbox, hitOpponent checks collision
+    if (this.hitOpponent(opponent, this.calcAttackBox(attackRange))) {
+      // Calculate final damage after all modifiers (resistance, critical, etc.)
+      const finalDamage = this.calculateDamage(this.attackDamage, opponent);
+      
+      // Emit attackHit event for game systems (combos, sound effects, etc.)
+      this.events.emit('attackHit', {
+        attacker: this.characterKey,
+        target: opponent.characterKey,
+        damage: finalDamage,
+        knockback: this.attackKnockback
+      });
+      
+      // Apply damage to opponent through their receiveHit method
+      // This handles damage reduction, status effects, defeat conditions, etc.
+      opponent.receiveHit(finalDamage, this, this.attackKnockback);
+      
+      // Special character interaction: Valencina's tremor burst on 3rd attack
+      // This is character-specific logic that triggers on certain attack counts
+      if (this.characterKey === 'VALENCINA' && this.attackCounter === 3) {
+        opponent.triggerTremorBurst();
+      }
+      
+      // Call character-specific onSuccessfulHit method for additional effects
+      // This allows characters to have unique behaviors when they land hits
+      this.onSuccessfulHit(finalDamage, opponent);
+      
+      // Mark attack as resolved to prevent duplicate damage
+      // Only set when damage actually lands (not just when attack starts)
+      this.attackHitResolved = true;
+    }
+  }
+
+  calcAttackBox(range) {
+    const x = this.pos.x + this.facing * (range / 2);
+    const y = this.pos.y - 28;
+    return { x, y, w: range, h: 70 };
+  }
+
+  hitOpponent(opponent, box) {
+    const playerBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
+    const attackBox = { x: box.x - box.w / 2, y: box.y, w: box.w, h: box.h };
+    return this.rectOverlap(playerBox, attackBox) && opponent.hitCooldown <= 0;
+  }
+
+  rectOverlap(r1, r2) {
+    return !(r1.x + r1.w < r2.x || r2.x + r2.w < r1.x || r1.y + r1.h < r2.y || r2.y + r2.h < r1.y);
+  }
+
+
+
+  calculateDamage(base, opponent) {
+    let damage = base;
+    
+    // Scale with combo counter
+    damage += this.combo * 2;
+    
+    // 3-hit combo system: 100%, 100%, 200% damage
+    if (this.attackCounter === 3) {
+      damage *= 2.0; // 200% damage on third hit
+    }
+    
+    if (this.chargeAttack) {
+      damage *= 1.4;
+    }
+    if (this.hasStatus('Poise')) {
+      damage *= 1.15;
+    }
+    if (opponent.state === 'staggered') {
+      damage *= 2;
+    }
+    return damage;
+  }
+
+  receiveHit(amount, attacker, knockback) {
+    // Don't take damage if already defeated
+    if (this.isDefeated) {
+      return;
+    }
+    
+    if (this.isGuarding) {
+      amount *= 0.45;
+      // Spawn guard sparks at impact point
+      spawnGuardSparks(this.pos.x, this.pos.y - 30, 8);
+      
+      if (this.isCountering) {
+        attacker.receiveHit(amount * 0.8, this, knockback * 0.8);
+        this.isCountering = false;
+      }
+    }
+
+    if (this.isEvading) {
+      spawnEvadeIndicator(this.pos.copy());
+      return;
+    }
+
+    // hitCooldown removed to allow consecutive hits
+
+    // Ultimate protection - prevent HP reduction until final attack
+    if (this.ultimateProtected) {
+      // Still apply hit effects but don't reduce HP
+      const wasGuarding = this.isGuarding;
+      this.setState('hit');
+      this.hitCooldown = 0.25;
+      
+      // Apply knockback but reduced
+      const awayFromAttacker = this.pos.x < attacker.pos.x ? -1 : 1;
+      this.vel.x = awayFromAttacker * knockback * 0.5;
+      this.vel.y = -5;
+      
+      return;
+    }
+
+    this.hp -= amount;
+    const wasGuarding = this.isGuarding;
+    spawnDamageNumber(amount, this.pos.copy(), attacker.facing, wasGuarding, 'normal', false, 'normal');
+    
+    // Check for defeat condition
+    if (this.hp <= 0 && !this.isDefeated) {
+      this.hp = 0;
+      this.defeat();
+      return;
+    }
+    
+    // Add screen shake based on damage
+    if (typeof addScreenShake === 'function') {
+      console.log('[NORMAL ATTACK DEBUG] Adding screen shake for damage:', amount);
+      addScreenShake(amount);
+    }
+    
+    // Add sprite shake to character taking damage
+    this.addSpriteShake(amount, false);
+    
+    // Emit damageDealt event
+    this.events.emit('damageDealt', {
+      attacker: attacker.characterKey,
+      target: this.characterKey,
+      damage: amount,
+      knockback: knockback
+    });
+    
+    // Apply hitstun
+    if (this.state !== 'staggered') {
+      this.setState('hit');
+      this.staggerTimer = 0.18;
+      // FACE TOWARDS SPECIFIC ATTACKER: Face the direction damage came from
+      // This ensures the hurt animation faces the correct direction
+      this.faceTowards(attacker);
+    }
+    
+    // Only add stagger if not already staggered (applies to both players and enemies)
+    if (this.state !== 'staggered') {
+      this.stagger += amount * 1.2;
+      this.staggerRecoveryTimer = 0;
+    }
+    
+    const strength = max(1, amount * 0.05);
+    const awayFromAttacker = this.pos.x < attacker.pos.x ? -1 : 1;
+    // Apply knockback with attacker's knockback multiplier (if available)
+    const knockbackMultiplier = attacker.knockbackMultiplier || 1.0;
+    this.vel.x = awayFromAttacker * knockback * strength * knockbackMultiplier;
+    this.vel.y = -5;
+    this.hitCooldown = 0.25;
+
+    if (this.stagger >= this.staggerThreshold) {
+      this.setStaggerState(this.staggerLength);
+    }
+
+    // Consume status effects when hit
+    this.statusSystem.consumeOnHit();
+    
+    // Call character-specific onReceiveHit method
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.onReceiveHit) {
+      character.onReceiveHit(amount, attacker, this);
+    }
+
+    this.addCombo(attacker);
+  }
+  
+  defeat() {
+    this.isDefeated = true;
+    this.vel.x = 0;
+    this.vel.y = 0;
+    
+    // Force switch to hurt sprite if available
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.sprites && character.sprites.hurt) {
+      this.currentSprite = 'hurt';
+    } else {
+      this.setState('hurt'); // Fallback to hurt state
+    }
+    
+    // Clear all action states
+    this.isGuarding = false;
+    this.isCountering = false;
+    this.isEvading = false;
+    this.attackRequest = false;
+    this.attackRelease = false;
+    this.guardRequest = false;
+    this.evadeRequested = false;
+    this.slamAttackRequested = false;
+    this.isSlamAttacking = false;
+    this.strikeActive = false;
+    this.ultimateActive = false;
+    
+    // Disable collision for defeated players
+    this.hasCollision = false;
+    
+    // Disable AI aggression
+    this.isAI = false;
+    
+    // Emit defeat event
+    this.events.emit('defeated', {
+      character: this.characterKey,
+      name: this.name
+    });
+  }
+  
+  isDead() {
+    return this.isDefeated;
+  }
+  
+  /**
+   * HELPER FUNCTION: Find the closest opponent for facing direction
+   * Used by attack and guard actions to face the nearest threat
+   * @returns {Fighter|null} - Closest non-defeated opponent or null if none found
+   */
+  getClosestOpponent() {
+    // Get all fighters from the global battle array
+    const allFighters = window.allFighters || [];
+    // Filter out self and defeated players to get valid opponents
+    const opponents = allFighters.filter(f => f !== this && !f.isDefeated);
+    
+    // If no valid opponents, return null
+    if (opponents.length === 0) return null;
+    
+    // Start with the first opponent as the closest
+    let closest = opponents[0];
+    // Calculate initial distance to this opponent
+    let minDistance = dist(this.pos.x, this.pos.y, closest.pos.x, closest.pos.y);
+    
+    // Check all other opponents to find the closest one
+    for (let i = 1; i < opponents.length; i++) {
+      const distance = dist(this.pos.x, this.pos.y, opponents[i].pos.x, opponents[i].pos.y);
+      // If this opponent is closer, update the closest
+      if (distance < minDistance) {
+        minDistance = distance;
+        closest = opponents[i];
+      }
+    }
+    
+    return closest;
+  }
+  
+  /**
+   * HELPER FUNCTION: Set facing direction towards a specific target
+   * Used by all actions that need to face a particular opponent
+   * @param {Fighter} target - The opponent to face towards
+   */
+  faceTowards(target) {
+    // Don't try to face if no target provided
+    if (!target) return;
+    
+    // Set facing direction based on target's relative position
+    // If target is to the right (x > this.x), face right (1), else face left (-1)
+    this.facing = target.pos.x > this.pos.x ? 1 : -1;
+  }
+
+    onParry(attacker) {
+    if (this.parryCount <= 0) return false; // Cannot parry if no parries left
+    const attackerRight = attacker.pos.x > this.pos.x;
+    this.state = 'parry';
+    attacker.state = 'parried';
+    attacker.vel.x = attackerRight ? 12 : -12;
+    this.vel.x = attackerRight ? -10 : 10;
+    attacker.strikeActive = false;
+    this.strikeActive = false;
+    attacker.parryWindow = 0;
+    this.parryWindow = 0;
+    attacker.hitCooldown = 0.15;
+    this.hitCooldown = 0.15;
+    this.parryIndicator = 0.35;
+    attacker.parryIndicator = 0.35;
+    this.attackTimer = this.attackInterval;
+    attacker.attackTimer = attacker.attackInterval;
+    this.combo = max(0, this.combo - 1);
+    // Only the defender (parrier) loses parry count, not the attacker
+    this.parryCount -= 1;
+    attacker.parryStunTimer = 0.2;
+    this.parryStunTimer = 0.2;
+    
+    // Emit parryOccurred event
+    this.events.emit('parryOccurred', {
+      defender: this.characterKey,
+      attacker: attacker.characterKey,
+      successful: true
+    });
+    
+    return true;
+}
+
+calculateDamage(base, opponent) {
+  let damage = base;
+  
+  // Scale with combo counter
+  damage += this.combo * 2;
+  
+  // 3-hit combo system: 100%, 100%, 200% damage
+  if (this.attackCounter === 3) {
+    damage *= 2.0; // 200% damage on third hit
+  }
+  
+  if (this.chargeAttack) {
+    damage *= 1.4;
+  }
+  if (this.hasStatus('Poise')) {
+    damage *= 1.15;
+  }
+  if (opponent && opponent.state === 'staggered') {
+    damage *= 2;
+  }
+  
+  // 🎨 Callisto's Artwork: Tibia bonus (+10% damage per stack)
+  if (this.characterKey === 'CALLISTO' && this.artworkTibiaStacks > 0) {
+    const artworkBonus = 1 + (this.artworkTibiaStacks * 0.1);
+    damage *= artworkBonus;
+  }
+  
+  // Fragile: Take 10% more damage per stack
+  if (opponent && opponent.hasStatus('Fragile')) {
+    const fragileStatus = opponent.statuses.find(s => s.type === 'Fragile');
+    if (fragileStatus) {
+      const fragileMultiplier = 1 + (0.1 * fragileStatus.potency);
+      damage *= fragileMultiplier;
+    }
+  }
+  
+  // Protection: Take 10% less damage per stack
+  if (opponent && opponent.hasStatus('Protection')) {
+    const protectionStatus = opponent.statuses.find(s => s.type === 'Protection');
+    if (protectionStatus) {
+      const protectionMultiplier = 1 - (0.1 * protectionStatus.potency);
+      damage *= protectionMultiplier;
+    }
+  }
+  
+  return damage;
+}
+
+
+onSuccessfulHit(damage, opponent) {
+  this.lastAttackHit = true;
+  this.comboTimer = this.comboTimeout;
+  // Combo already increased by 1 in addCombo, don't double increment
+  
+  // Combo system: combo continues as long as timer is active
+  // Attack sequence system: handled separately in update function
+  
+  if (this.parryTimer <= 0 && this.parryCount < 3) {
+    this.parryCount += 1;
+    this.parryTimer = 10;
+  }
+  
+  // Call character-specific onSuccessfulHit method only once per attack
+  if (!this.statusEffectsApplied) {
+    this.statusEffectsApplied = true;
+    const character = CHARACTERS[this.characterKey];
+    if (character && character.onSuccessfulHit) {
+      character.onSuccessfulHit(damage, opponent, this);
+    }
+    
+    // 🎨 Apply Callisto's Artwork: Tibia bleed bonus after onSuccessfulHit
+    if (this.characterKey === 'CALLISTO' && character && character.applyArtworkBleedBonus) {
+      character.applyArtworkBleedBonus(opponent, this);
+    }
+  }
+}
+
+addCombo(attacker) {
+  console.log('[COMBO DEBUG] addCombo called - attacker:', attacker, 'this:', this, 'comboTimer:', this.comboTimer, 'combo before:', this.combo);
+  
+  // Only the attacker should gain combo, not the victim
+  if (this !== attacker) {
+    console.log('[COMBO DEBUG] addCombo early return - not the attacker');
+    return;
+  }
+  
+  // During ultimate, always increase combo regardless of timer state
+  if (this.ultimateActive) {
+    console.log('[COMBO DEBUG] Ultimate active - forcing combo increase');
+    this.combo += 1;
+    this.comboTimer = this.comboTimeout;
+    console.log('[COMBO DEBUG] addCombo completed - combo after:', this.combo);
+    return;
+  }
+  
+  // Normal combo logic for non-ultimate
+  // Increase combo for the attacker only
+  this.comboTimer = this.comboTimeout;
+  this.combo += 1;
+  console.log('[COMBO DEBUG] addCombo completed - combo after:', this.combo);
+}
+
+  hasStatus(type) {
+    return this.statuses.some((status) => status.type === type);
+  }
+
+  addStatus(type, count, potency) {
+    const existing = this.statuses.find((status) => status.type === type);
+    if (existing) {
+      existing.count += count;
+      existing.potency += potency; // Accumulate potency instead of taking max
+    } else {
+      this.statuses.push({ type, count, potency, timer: 1.0 });
+    }
+    
+    // Emit statusApplied event
+    this.events.emit('statusApplied', {
+      target: this.characterKey,
+      statusType: type,
+      count: count,
+      potency: potency,
+      wasExisting: !!existing
+    });
+  }
+
+  consumeStatus(type) {
+    const status = this.statuses.find((s) => s.type === type);
+    if (!status) return;
+    status.count -= 1;
+    if (status.count <= 0) {
+      this.statuses = this.statuses.filter((s) => s.type !== type);
+    }
+  }
+
+  removeStatus(type) {
+    this.statuses = this.statuses.filter((s) => s.type !== type);
+  }
+
+  consumeStatusOnHit() {
+    // Handle Bleed when hit (lose 1 count, trigger damage if count reaches 0)
+    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
+    if (bleedStatus) {
+      bleedStatus.count -= 1;
+      if (bleedStatus.count <= 0) {
+        const damage = bleedStatus.potency;
+        if (damage > 0) {
+          this.hp -= damage;
+          spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
+          if (this.hp <= 0 && !this.isDefeated) {
+            this.defeat();
+          }
+        }
+        this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
+      }
+    }
+    
+    // Handle Rupture and Sinking when hit
+    ['Rupture', 'Sinking'].forEach((type) => {
+      const status = this.statuses.find((s) => s.type === type);
+      if (status) {
+        status.count -= 1;
+        if (type === 'Rupture') {
+          this.hp -= status.potency;
+          spawnDamageNumber(status.potency, this.pos.copy(), 1, false, 'rupture', false, 'status');
+          
+          // Status effects don't cause screen shake (only direct combat damage)
+        }
+      }
+    });
+  }
+
+  consumeStatusOnAttack() {
+    // Handle Bleed when attacking - deal damage by potency, then lose 1 count
+    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
+    if (bleedStatus && bleedStatus.potency > 0) {
+      // Deal damage by current potency
+      const damage = bleedStatus.potency;
+      this.hp -= damage;
+      spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
+      if (this.hp <= 0 && !this.isDefeated) {
+        this.defeat();
+      }
+      
+      // Then lose 1 count
+      bleedStatus.count -= 1;
+      if (bleedStatus.count <= 0) {
+        this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
+      }
+    }
+  }
+
+  consumeStatusOnAbility() {
+    // Handle Bleed when using an ability - deal damage by potency, then lose 1 count
+    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
+    if (bleedStatus && bleedStatus.potency > 0) {
+      // Deal damage by current potency
+      const damage = bleedStatus.potency;
+      this.hp -= damage;
+      spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
+      if (this.hp <= 0 && !this.isDefeated) {
+        this.defeat();
+      }
+      
+      // Then lose 1 count
+      bleedStatus.count -= 1;
+      if (bleedStatus.count <= 0) {
+        this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
+      }
+    }
+  }
+
+  applyStatuses(dt) {
+    this.statuses.forEach((status) => {
+      status.timer += dt;
+      
+      // Burn: Every second, lose 1 count and take damage
+      if (status.type === 'Burn') {
+        if (status.timer >= 1) {
+          status.timer = 0;
+          status.count -= 1;
+          this.hp -= status.potency;
+          spawnDamageNumber(status.potency, this.pos.copy(), 1, false, 'burn', false, 'status');
+          
+          // Status effects don't cause screen shake (only direct combat damage)
+        }
+      }
+      
+      // Tremor: Only lose count when bursted (handled elsewhere)
+      else if (status.type === 'Tremor') {
+        // No automatic count decrease - handled in burst logic
+        // When count expires, raise stagger by potency
+        if (status.count <= 0) {
+          this.stagger += status.potency;
+          this.staggerRecoveryTimer = 0;
+          // Remove expired status
+          this.statuses = this.statuses.filter((s) => s.type !== 'Tremor');
+        }
+      }
+      
+      // Rupture: When hit, lose 1 count (handled in receiveHit)
+      else if (status.type === 'Rupture') {
+        // No automatic count decrease - handled in receiveHit
+      }
+      
+      // Bleed: Lose 1 potency per second
+      else if (status.type === 'Bleed') {
+        if (status.timer >= 1) {
+          status.timer = 0;
+          status.potency = max(0, status.potency - 1);
+          if (status.potency <= 0) {
+            status.count = 0;
+          }
+        }
+      }
+      
+      // Sinking: When hit, lose 1 count (handled in receiveHit)
+      else if (status.type === 'Sinking') {
+        // No automatic count decrease - handled in receiveHit
+        // Apply ongoing effects
+        const resistancePenalty = 0.05 * Math.floor(status.potency / 5);
+        this.damageResistance = min(0.5, 1 - resistancePenalty);
+        const speedPenalty = 0.1 * Math.floor(status.potency / 10);
+        this.speed = max(1, this.speed - speedPenalty);
+      }
+      
+      // Charge: When used, lose 1 count (handled elsewhere)
+      else if (status.type === 'Charge') {
+        // No automatic count decrease - handled when used
+      }
+      
+      // Poise: On crit, lose 1 count (handled in calculateDamage)
+      else if (status.type === 'Poise') {
+        // No automatic count decrease - handled on crit
+        // Apply ongoing effects
+        this.critChance = this.critChance || 0;
+        this.critChance += 0.05 * status.potency;
+      }
+      
+      // Game Target: 5 hits or 10 seconds duration
+      else if (status.type === 'Game Target') {
+        this.speed = 1;
+        if (status.timer >= 10) {
+          status.count = 0;
+        }
+      }
+      
+      // Haste: Gain movement speed based on potency (max +5 bonus)
+      else if (status.type === 'Haste') {
+        // Calculate speed: baseSpeed + haste (capped at +5)
+        const hasteBonus = Math.min(status.potency * 0.01, 0.5);
+        //this.speed = (this.baseSpeed || this.speed) + hasteBonus;
+      }
+      
+      // Bind: Lose movement speed based on potency (max -5 penalty)
+      else if (status.type === 'Bind') {
+        // Calculate speed: baseSpeed - bind (capped at -5)
+        const bindPenalty = Math.min(status.potency * 0.01, 0.5);
+       // this.speed = max(1, (this.baseSpeed || this.speed) - bindPenalty);
+      }
+      
+      // Fragile: Take 10% more damage
+      else if (status.type === 'Fragile') {
+        // Damage multiplier applied in calculateDamage method
+        // No automatic count decrease - status persists until consumed
+      }
+      
+      // Protection: Take 10% less damage
+      else if (status.type === 'Protection') {
+        // Damage reduction applied in calculateDamage method
+        // No automatic count decrease - status persists until consumed
+      }
+      
+      // Precognition: Unique mechanics handled in character profile
+      else if (status.type === 'Precognition') {
+        // No automatic count decrease - handled in character profile
+      }
+      
+      // Overheat: Unique mechanics handled in character profile
+      else if (status.type === 'Overheat') {
+        // No automatic count decrease - handled in character profile
+      }
+      
+      // Remove status if count reaches 0
+      if (status.count <= 0) {
+        // Reset status-specific properties
+        if (status.type === 'Sinking') {
+          this.damageResistance = 1;
+        }
+        if (status.type === 'Poise') {
+          this.critChance = 0;
+        }
+        if (status.type === 'Game Target') {
+          this.speed = this.baseSpeed || 7.5;
+        }
+        
+        this.statuses.splice(this.statuses.indexOf(status), 1);
+      }
+    });
+  }
+
+  drawStatusEffects() {
+    if (this.statuses.length === 0) return;
+    
+    const baseY = this.pos.y + 10;
+    const rowLimit = 7;
+    const cellWidth = 48;
+    
+    // Calculate total rows needed
+    const totalRows = Math.ceil(this.statuses.length / rowLimit);
+    
+    for (let row = 0; row < totalRows; row++) {
+      const startIndex = row * rowLimit;
+      const endIndex = Math.min(startIndex + rowLimit, this.statuses.length);
+      const rowStatuses = this.statuses.slice(startIndex, endIndex);
+      
+      // Center the row
+      const rowWidth = rowStatuses.length * cellWidth;
+      const startX = this.pos.x - rowWidth * 0.5;
+      
+      rowStatuses.forEach((status, colIndex) => {
+        const x = startX + colIndex * cellWidth;
+        const y = baseY + row * 24;
+        
+        push();
+        textAlign(CENTER, CENTER);
+        
+        // Draw status potency on left
+        fill(255);
+        textSize(8);
+        textAlign(LEFT, CENTER);
+        text(status.potency, x - 20, y);
+        
+        // Draw placeholder shape in the middle
+        drawStatusPlaceholder(status.type, x, y);
+        
+        // Draw status count on right
+        fill(255);
+        textSize(8);
+        textAlign(RIGHT, CENTER);
+        text(status.count, x + 20, y);
+        pop();
+      });
+    }
+  }
+
+  /**
+   * Draws a placeholder shape for status effects
+   * @param {string} statusType - Type of status effect
+   * @param {number} x - Center X position
+   * @param {number} y - Center Y position
+   */
+  drawStatusPlaceholder(statusType, x, y) {
+    push();
+    fill(255, 255, 255, 200);
+    stroke(0, 0, 0, 150);
+    strokeWeight(1);
+    
+    const shapeSize = 8;
+    
+    switch (statusType) {
+      case 'Burn':
+        // Flame shape (triangle)
+        triangle(x, y - shapeSize/2, x - shapeSize/2, y + shapeSize/2, x + shapeSize/2, y + shapeSize/2);
+        break;
+      case 'Bleed':
+        // Droplet shape (circle)
+        ellipse(x, y, shapeSize);
+        break;
+      case 'Tremor':
+        // Star shape (diamond)
+        push();
+        translate(x, y);
+        rotate(PI / 4);
+        rect(-shapeSize/2, -shapeSize/2, shapeSize, shapeSize, 1);
+        pop();
+        break;
+      case 'Rupture':
+        // Burst shape (hexagon approximation)
+        beginShape();
+        for (let i = 0; i < 6; i++) {
+          const angle = (PI * 2 / 6) * i;
+          const px = x + cos(angle) * shapeSize/2;
+          const py = y + sin(angle) * shapeSize/2;
+          vertex(px, py);
+        }
+        endShape(CLOSE);
+        break;
+      case 'Sinking':
+        // Wave shape (arc)
+        arc(x, y, shapeSize, shapeSize, 0, PI);
+        break;
+      case 'Charge':
+        // Lightning shape (zigzag)
+        beginShape();
+        vertex(x - shapeSize/2, y);
+        vertex(x - shapeSize/4, y - shapeSize/3);
+        vertex(x, y + shapeSize/3);
+        vertex(x + shapeSize/4, y - shapeSize/3);
+        vertex(x + shapeSize/2, y);
+        endShape();
+        break;
+      case 'Poise':
+        // Shield shape (square with rounded corners)
+        rect(x - shapeSize/2, y - shapeSize/2, shapeSize, shapeSize, 2);
+        break;
+      default:
+        // Default circle
+        ellipse(x, y, shapeSize);
+    }
+    
+    pop();
+  }
+
+  onGround() {
+    return this.pos.y >= this.spawnY - 0.01;
+  }
+
+  drawWorldHpBar() {
+    // if (!this.isAI) return;
+    // const barWidth = 120;
+    // const x = this.pos.x;
+    // const y = this.pos.y - 90;
+    // push();
+    // rectMode(CENTER);
+    
+    // // HP Bar background
+    // fill(0, 180);
+    // rect(x, y, barWidth, 18, 8);
+    
+    // // HP Bar fill
+    // fill('#42d492');
+    // rect(x - barWidth / 2 + (barWidth * (this.hp / this.maxHp)) / 2, y, barWidth * (this.hp / this.maxHp), 10, 5);
+    
+    // // Stagger Bar background (below HP bar)
+    // fill(0, 180);
+    // rect(x, y + 16, barWidth, 10, 6);
+    
+    // // Stagger Bar fill (red/orange gradient)
+    // const staggerPercent = constrain(this.stagger / this.staggerThreshold, 0, 1);
+    // if (staggerPercent > 0) {
+    //   fill(255, 100 + staggerPercent * 50, 50);
+    //   rect(x - barWidth / 2 + (barWidth * staggerPercent) / 2, y + 16, barWidth * staggerPercent, 6, 4);
+    // }
+    
+    // fill(255);
+    // textSize(14);
+    // textAlign(CENTER, BOTTOM);
+    // text(this.name, x, y - 10);
+    
+    // // Draw parry charges
+    // for (let i = 0; i < 3; i++) {
+    //   fill(i < this.parryCount ? '#ffff00' : '#333');
+    //   ellipse(x - 15 + i * 12, y + 15, 6, 6);
+    // }
+    // pop();
+  }
+
+  draw() {
+    push();
+    translate(this.pos.x + this.spriteShakeX, this.pos.y + this.spriteShakeY);
+    
+    // Debug: Show current sprite name
+    if (this.characterKey === 'VALENCINA') {
+      push();
+      fill(255);
+      textAlign(CENTER);
+      text(this.currentSprite || 'null', 0, -100);
+      pop();
+    }
+    
+    // Draw sprite if available, otherwise draw default character
+    if (this.spriteType === 'atlas' && this.currentSprite) {
+      push();
+
+      // Flip atlas sprites based on facing
+      scale(this.facing === 1 ? -1 : 1, 1);
+
+      // Debug missing sprite
+      const spriteInfo = SPRITES?.[this.currentSprite];
+      if (!spriteInfo) {
+        console.warn("Missing sprite:", this.currentSprite);
+      } else {
+        // 512px reference height → 144px character height
+        const scaleFactor = 144 / 512;
+
+        // Align feet to hitbox bottom
+        
+        // Position Valencina's feet at the bottom of her hitbox
+        // Hitbox bottom is at this.pos.y + 36, so feet should be at y = 36
+        const hitboxBottomY = 36;
+        drawSpriteScaled(this.currentSprite, 0, hitboxBottomY, scaleFactor);
+      }
+      pop();
+    } else if (this.sprite && this.sprite.width > 0) {
+      // Regular sprite loading
+      push();
+      scale(this.facing, 1);
+      imageMode(CENTER);
+      
+      // Calculate scale to make sprite 2x as big (144 pixels) while maintaining proportions
+      const targetHeight = 144;
+      const scaleFactor = targetHeight / this.sprite.height;
+      const scaledWidth = this.sprite.width * scaleFactor;
+      
+      image(this.sprite, 0, -30, scaledWidth, targetHeight);
+      pop();
+    } else {
+      fill(this.color);
+      noStroke();
+      ellipse(0, -30, 52, 72);
+      fill(30);
+      rectMode(CENTER);
+      rect(this.facing * 20, -42, 20, 6, 4);
+    }
+    if (this.isGuarding) {
+      stroke('#90ee90');
+      strokeWeight(3);
+      noFill();
+      ellipse(0, -30, 72, 88);
+    }
+    if (this.state === 'attack' && this.attackTimer > 0) {
+      const progress = constrain(this.attackTimer / this.attackInterval, 0, 1);
+      push();
+      noFill();
+      stroke(255, 220, 80, 180);
+      strokeWeight(3);
+      ellipse(0, -70, 46 + (1 - progress) * 26, 18 + (1 - progress) * 12);
+      strokeWeight(2);
+      arc(0, -70, 38, 14, PI, PI + progress * PI);
+      pop();
+    }
+    if (this.state === 'attack') {
+      stroke('#ffd24d');
+      strokeWeight(4);
+      line(this.facing * 22, -50, this.facing * 70, -60);
+    }
+    if (this.state === 'evade') {
+      fill('#8a8a8a');
+      ellipse(0, -40, 12, 12);
+    }
+    pop();
+    
+    // Draw slash effects
+    this.drawSlashEffects(0.016); // Assuming 60 FPS
+    
+    this.drawWorldHpBar();
+    this.drawStatusEffects();
+
+    // Draw player hitbox
+    stroke(0, 255, 0);
+noFill();
+rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
+
+// Draw Installation Art range and hitbox for Callisto
+    if (this.characterKey === 'CALLISTO' && this.installationArtActive) {
+      this.drawInstallationArtRange();
+    }
+    
+    // Draw Time to Hunt range and hitbox for Valencina
+    if (this.characterKey === 'VALENCINA' && this.gameTimeTarget) {
+      this.drawTimeToHuntRange();
+    }
+  }
+
+  // Draw Time to Hunt range and hitbox
+  drawTimeToHuntRange() {
+    const targetRange = 200; // Time to Hunt target range
+    
+    push();
+    
+    // Draw target indicator on affected enemy
+    if (this.lastHitOpponent && this.lastHitOpponent.gameTimeTarget) {
+      const target = this.lastHitOpponent;
+      
+      // Draw targeting circle around affected enemy
+      stroke(255, 100, 255, 150); // Purple with transparency
+      strokeWeight(3);
+      noFill();
+      ellipse(target.pos.x, target.pos.y - 30, 80, 80);
+      
+      // Draw targeting lines
+      stroke(255, 100, 255, 100);
+      strokeWeight(2);
+      const time = Date.now() / 1000;
+      for (let i = 0; i < 4; i++) {
+        const angle = (time * 2 + i * PI/2) % (PI * 2);
+        const x1 = target.pos.x + cos(angle) * 40;
+        const y1 = target.pos.y - 30 + sin(angle) * 40;
+        const x2 = target.pos.x + cos(angle) * 50;
+        const y2 = target.pos.y - 30 + sin(angle) * 50;
+        line(x1, y1, x2, y2);
+      }
+      
+      // Draw Game Target status text
+      fill(255, 100, 255);
+      noStroke();
+      textAlign(CENTER, CENTER);
+      textSize(12);
+      text("GAME TARGET", target.pos.x, target.pos.y - 70);
+    }
+    
+    pop();
+  }
+
+  // Draw Installation Art range and hitbox
+  drawInstallationArtRange() {
+    const attackRange = 300; // Same range as hitbox check (2x radius)
+    
+    push();
+    
+    // Draw range circle (ground-based)
+    stroke(255, 200, 100, 100); // Orange with transparency
+    strokeWeight(2);
+    noFill();
+    ellipse(this.pos.x, this.spawnY, attackRange * 2);
+    
+    // Draw hitbox during execution phase
+    if (this.installationArtTimer <= 0 && this.installationArtExecuted) {
+      // Draw attack hitbox
+      stroke(255, 100, 100, 150); // Red with transparency
+      strokeWeight(3);
+      fill(255, 100, 100, 50); // Light red fill
+      ellipse(this.pos.x, this.spawnY, attackRange * 2);
+      
+      // Draw attack direction indicator
+      stroke(255, 200, 100, 200);
+      strokeWeight(4);
+      const facing = this.facing || 1;
+      line(this.pos.x, this.spawnY, this.pos.x + facing * attackRange, this.spawnY);
+    }
+    
+    pop();
+  }
+
+  // Draw visual overlays and status indicators
+  drawOverlays() {
+    // Draw slam attack landing hitbox
+    if (this.isSlamAttacking && this.slamLandingHitbox) {
+      push();
+      stroke(255, 100, 255, 150);
+      strokeWeight(3);
+      noFill();
+      ellipse(this.slamLandingHitbox.x, this.slamLandingHitbox.y, this.slamLandingHitbox.radius * 2);
+      stroke(255, 150, 255, 100);
+      strokeWeight(2);
+      ellipse(this.slamLandingHitbox.x, this.slamLandingHitbox.y, this.slamLandingHitbox.radius * 1.5);
+      pop();
+    }
+
+    // Draw attack counter display
+    if (this.attackCounterTimer > 0 && this.attackCounterDisplay > 0) {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(24);
+      fill(255, 255, 100, map(this.attackCounterTimer, 0, 1, 0, 255));
+      stroke(0, map(this.attackCounterTimer, 0, 1, 0, 255));
+      strokeWeight(2);
+      text(`Attack ${this.attackCounterDisplay}`, this.pos.x, this.pos.y - 100);
+      pop();
+    }
+
+    // Draw staggered display
+    if (this.staggeredDisplayTimer > 0 && this.staggeredDisplay > 0) {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(28);
+      fill(255, 100, 100, map(this.staggeredDisplayTimer, 0, 2, 0, 255));
+      stroke(0, map(this.staggeredDisplayTimer, 0, 2, 0, 255));
+      strokeWeight(3);
+      text('STAGGERED', this.pos.x, this.pos.y - 130);
+      pop();
+    }
+
+    // Draw stagger phase timer
+    if (this.state === 'staggered' && this.staggerTimer > 0) {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(20);
+      fill(255, 150, 150, 255);
+      stroke(0, 255);
+      strokeWeight(2);
+      const timeLeft = this.staggerTimer.toFixed(1);
+      text(`Stagger: ${timeLeft}s`, this.pos.x, this.pos.y - 100);
+      pop();
+    }
+
+    // Draw recovery phase timer
+    if (this.state === 'staggered' && this.staggerTimer <= 0 && this.staggerRecoveryTimer > 0) {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(20);
+      fill(150, 150, 255, 255);
+      stroke(0, 255);
+      strokeWeight(2);
+      const timeLeft = this.staggerRecoveryTimer.toFixed(1);
+      text(`Recovery: ${timeLeft}s`, this.pos.x, this.pos.y - 100);
+      pop();
+    }
+
+    // Draw stagger buildup progress
+    if (this.stagger > 0 && this.stagger < this.staggerThreshold && this.state !== 'staggered') {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(16);
+      const progress = (this.stagger / this.staggerThreshold * 100).toFixed(0);
+      fill(255, 200, 100, 200);
+      stroke(0, 200);
+      strokeWeight(1);
+      text(`Buildup: ${progress}%`, this.pos.x, this.pos.y - 70);
+      pop();
+    }
+
+    // Draw stagger immunity indicator
+    if (this.state === 'staggered') {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(14);
+      fill(255, 255, 100, 200);
+      stroke(0, 200);
+      strokeWeight(1);
+      text('IMMUNE', this.pos.x, this.pos.y - 40);
+      pop();
+    }
+    
+    // Draw dialogue for Valencina
+    if (this.characterKey === 'VALENCINA' && this.currentDialogue) {
+      push();
+      textAlign(CENTER, CENTER);
+      textSize(8);
+      fill(255, 255, 255, map(this.dialogueTimer, 0, 10, 0, 255));
+      stroke(0, map(this.dialogueTimer, 0, 10, 0, 255));
+      strokeWeight(1);
+      text(this.currentDialogue, this.pos.x, this.pos.y - 160);
+      pop();
+    }
+  }
+
+  // STEP 8: Server readiness layer - deterministic state snapshot
+  getStateSnapshot() {
+    return {
+      // Position and velocity
+      position: {
+        x: this.pos.x,
+        y: this.pos.y
+      },
+      velocity: {
+        x: this.vel.x,
+        y: this.vel.y
+      },
+      
+      // Health and combat state
+      hp: this.hp,
+      state: this.state,
+      facing: this.facing,
+      
+      // Active statuses
+      statuses: this.statuses.map(status => ({
+        type: status.type,
+        count: status.count,
+        potency: status.potency,
+        timer: status.timer
+      })),
+      
+      // Attack state
+      attackState: {
+        attackTimer: this.attackTimer,
+        attackSequence: this.attackSequence,
+        attackFrame: this.attackFrame,
+        strikeActive: this.strikeActive,
+        attackDamage: this.attackDamage,
+        attackRange: this.attackRange,
+        attackKnockback: this.attackKnockback,
+        chargeAttack: this.chargeAttack
+      },
+      
+      // Movement state
+      movementState: {
+        isDashing: this.isDashing,
+        isEvading: this.isEvading,
+        isGuarding: this.isGuarding,
+        isGrounded: this.isGrounded
+      },
+      
+      // Timers and cooldowns
+      timers: {
+        evadeTimer: this.evadeTimer,
+        staggerTimer: this.staggerTimer,
+        staggerRecoveryTimer: this.staggerRecoveryTimer,
+        comboTimer: this.comboTimer,
+        hitCooldown: this.hitCooldown,
+        attackCounterTimer: this.attackCounterTimer
+      },
+      
+      // Combat stats
+      combatStats: {
+        combo: this.combo,
+        attackCounter: this.attackCounter,
+        stagger: this.stagger
+      },
+      
+      // Character identification
+      characterKey: this.characterKey,
+      isAI: this.isAI
+    };
+  }
+
+  applyStateSnapshot(snapshot) {
+    // Position and velocity
+    this.pos.x = snapshot.position.x;
+    this.pos.y = snapshot.position.y;
+    this.vel.x = snapshot.velocity.x;
+    this.vel.y = snapshot.velocity.y;
+    
+    // Health and combat state
+    this.hp = snapshot.hp;
+    this.state = snapshot.state;
+    this.facing = snapshot.facing;
+    
+    // Active statuses
+    this.statuses = snapshot.statuses.map(status => ({
+      type: status.type,
+      count: status.count,
+      potency: status.potency,
+      timer: status.timer
+    }));
+    
+    // Attack state
+    this.attackTimer = snapshot.attackState.attackTimer;
+    this.attackSequence = snapshot.attackState.attackSequence;
+    this.attackFrame = snapshot.attackState.attackFrame;
+    this.strikeActive = snapshot.attackState.strikeActive;
+    this.attackDamage = snapshot.attackState.attackDamage;
+    this.attackRange = snapshot.attackState.attackRange;
+    this.attackKnockback = snapshot.attackState.attackKnockback;
+    this.chargeAttack = snapshot.attackState.chargeAttack;
+    
+    // Movement state
+    this.isDashing = snapshot.movementState.isDashing;
+    this.isEvading = snapshot.movementState.isEvading;
+    this.isGuarding = snapshot.movementState.isGuarding;
+    this.isGrounded = snapshot.movementState.isGrounded;
+    
+    // Timers and cooldowns
+    this.evadeTimer = snapshot.timers.evadeTimer;
+    this.staggerTimer = snapshot.timers.staggerTimer;
+    this.staggerRecoveryTimer = snapshot.timers.staggerRecoveryTimer;
+    this.comboTimer = snapshot.timers.comboTimer;
+    this.hitCooldown = snapshot.timers.hitCooldown;
+    this.attackCounterTimer = snapshot.timers.attackCounterTimer;
+    
+    // Combat stats
+    this.combo = snapshot.combatStats.combo;
+    this.attackCounter = snapshot.combatStats.attackCounter;
+    this.stagger = snapshot.combatStats.stagger;
+    
+    // Sync stateMachine to match restored state
+    this.syncState();
+  }
+
+  // Sprite shake functions
+  updateSpriteShake(dt) {
+    if (this.spriteShakeIntensity > 0) {
+      let decayRate;
+      
+      if (this.isUltimateSpriteShake) {
+        // Ultimate attacks: slower decay rate (longer duration)
+        decayRate = this.spriteShakeIntensity > 10 ? 0.06 : 0.032;
+      } else {
+        // Regular attacks: 1.5x longer duration (slower decay rate)
+        decayRate = this.spriteShakeIntensity > 10 ? 0.08 : 0.043;
+      }
+      
+      this.spriteShakeIntensity -= decayRate;
+      
+      if (this.spriteShakeIntensity <= 0) {
+        this.spriteShakeIntensity = 0;
+        this.spriteShakeX = 0;
+        this.spriteShakeY = 0;
+        this.isUltimateSpriteShake = false;
+      } else {
+        // Generate random shake offset based on intensity
+        const maxShake = min(this.spriteShakeIntensity, 15); // Cap at 15 pixels for clarity
+        this.spriteShakeX = random(-maxShake, maxShake);
+        this.spriteShakeY = random(-maxShake, maxShake);
+      }
+    }
+  }
+
+  addSpriteShake(damage, isUltimate = false) {
+    let shakeAmount;
+    
+    if (isUltimate) {
+      // Ultimate attacks: capped at 30 damage
+      // 5 damage = 0.5 shake, 30 damage = 6 shake (max)
+      const cappedDamage = min(damage, 30);
+      shakeAmount = map(cappedDamage, 5, 30, 0.5, 6, true);
+      this.isUltimateSpriteShake = true;
+    } else {
+      // Regular attacks: capped at 30 damage
+      // 5 damage = 0.2 shake, 30 damage = 2.4 shake (max)
+      const cappedDamage = min(damage, 30);
+      shakeAmount = map(cappedDamage, 5, 30, 0.2, 2.4, true);
+      this.isUltimateSpriteShake = false;
+    }
+    
+    // Replace current shake if new shake is stronger, otherwise keep current
+    if (shakeAmount > this.spriteShakeIntensity) {
+      this.spriteShakeIntensity = min(shakeAmount, 20); // Cap at 20 for clarity
+      // Update shake type if this is a stronger shake
+      if (isUltimate) {
+        this.isUltimateSpriteShake = true;
+      }
+    }
+    // If new shake is weaker, don't change current intensity
+  }
+
+  triggerTremorBurst() {
+    const tremorStatus = this.statuses.find((s) => s.type === 'Tremor');
+    if (!tremorStatus || tremorStatus.count <= 0) return;
+    
+    // Show tremor visual indicator
+    if (typeof spawnTremorIndicator === 'function') {
+      spawnTremorIndicator(this.pos.copy());
+    }
+    
+    // Lose 1 count
+    tremorStatus.count -= 1;
+    if (tremorStatus.count <= 0) {
+      this.statuses = this.statuses.filter((s) => s.type !== 'Tremor');
+    }
+    
+    // Apply tremor burst damage (Burn + Tremor potency)
+    const burnStatus = this.statuses.find((s) => s.type === 'Burn');
+    const burnPotency = burnStatus ? burnStatus.potency : 0;
+    const tremorPotency = tremorStatus.potency;
+    const damage = burnPotency + tremorPotency;
+    
+    if (damage > 0) {
+      this.hp -= damage;
+      spawnDamageNumber(damage, this.pos.copy(), 1, false, 'tremor', false, 'status');
+      
+      // Tremor bursts are impactful - add screen shake
+      if (typeof addScreenShake === 'function') {
+        addScreenShake(damage);
+      }
+      this.addSpriteShake(damage, false);
+    }
+  }
+}

@@ -241,7 +241,7 @@ function processSnapshot(snapshot) {
     for (const state of snapshot.players) {
         const fighter = allFighters.find(
             f => f.clientId === state.id
-        );
+        );//note
 
         if (!fighter) {
             console.warn('[Snapshot] Fighter not found for clientId:', state.id, 'Available fighters:', allFighters.map(f => f.clientId));

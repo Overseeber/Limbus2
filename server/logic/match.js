@@ -88,7 +88,10 @@ class Match {
                 attackPhase: 'startup',   // startup, active, recovery
                 attackFrameTimer: 0,      // Time into current attack phase
                 strikeActive: false,      // Whether hitbox is currently active
-                lastAttackTime: 0         // When last attack was initiated
+                lastAttackTime: 0,        // When last attack was initiated
+                attackHoldStart: null,    // Timestamp when attack input began
+                attackRequestActive: false,
+                attackCharge: false       // Whether current attack is charged
             };
         });
     }
@@ -127,6 +130,9 @@ class Match {
         if (!this.running) return;
 
         const dt = this.tickRate / 1000; // Convert to seconds
+
+        // Update combo timers and combat state once per tick
+        this.engine.updateCombos(dt);
 
         // Update each player's authoritative state
         Object.values(this.players).forEach(player => {
@@ -175,7 +181,8 @@ class Match {
         const config = player.config;
         
         // MOVEMENT INPUT - Acceleration-based for responsive feel
-        const maxSpeed = config.speed || 9;
+        // Shared configs use per-frame style 'speed' (old client). Convert to pixels/second by *60.
+        const maxSpeed = (config.speed || 9) * 60;
         const acceleration = config.acceleration || 1800;
         
         let targetVelX = 0;
@@ -209,11 +216,14 @@ class Match {
             state.velocity.x *= airControl;
         }
 
-        // JUMP INPUT - Use jumpHeight from config
+        // JUMP INPUT - Use jumpHeight from config (converted to pixels/s if needed)
         if (input.up && state.onGround) {
-            const jumpHeight = config.jumpHeight || 300;
+            const jumpHeight = config.jumpHeight || 1200; // already scaled in shared configs
+            // Debug logging to investigate jump/gravity issues
+            console.log(`[Jump] player=${player.clientId} jumpHeight=${jumpHeight} gravity=${config.gravity} dt=${dt}`);
             state.velocity.y = -jumpHeight;
             state.onGround = false;
+            console.log(`[Jump] player=${player.clientId} vy_after=${state.velocity.y}`);
         }
 
         // GUARD INPUT
@@ -234,25 +244,37 @@ class Match {
             state.dashCooldown = config.dashCooldown || 1.0;
         }
 
-        // ATTACK INPUT - Initiate or continue combo
-        if (input.attack && !state.isAttacking && player.attackTimer <= 0) {
-            // Determine attack type based on held duration or simple sequence
-            const timeSinceLastAttack = Date.now() - player.lastAttackTime;
+        // ATTACK INPUT - Track press/release for light vs charged attacks
+        const now = Date.now();
+        const attackPressed = input.attack && !player.input.attack;
+        const attackReleased = !input.attack && player.input.attack && player.attackRequestActive;
+
+        if (attackPressed) {
+            player.attackHoldStart = now;
+            player.attackRequestActive = true;
+        }
+
+        if (attackReleased && !state.isAttacking && player.attackTimer <= 0) {
+            const heldDuration = now - (player.attackHoldStart || now);
+            const isCharged = heldDuration >= 300;
+            const timeSinceLastAttack = now - player.lastAttackTime;
             const comboWindow = 300; // 300ms window for combo
-            
-            if (timeSinceLastAttack < comboWindow && player.attackSequence > 0) {
-                // Continue combo
+
+            if (!isCharged && timeSinceLastAttack < comboWindow && player.attackSequence > 0) {
                 player.attackSequence = Math.min(3, player.attackSequence + 1);
             } else {
-                // Start new combo
-                player.attackSequence = 1;
+                player.attackSequence = isCharged ? 3 : 1;
             }
-            
+
             player.attackPhase = 'startup';
             player.attackFrameTimer = 0;
             player.strikeActive = false;
-            player.lastAttackTime = Date.now();
+            player.lastAttackTime = now;
+            player.attackCharge = isCharged;
+            player.attackRequestActive = false;
+            player.attackHoldStart = null;
             state.isAttacking = true;
+            state.state = 'attacking';
         }
     }
 
@@ -265,9 +287,11 @@ class Match {
 
         // GRAVITY - Continuous acceleration when airborne
         if (!state.onGround) {
-            const gravity = config.gravity || 980;
+            // Shared configs now use per-second gravity (converted from old client)
+            const gravity = (typeof config.gravity !== 'undefined') ? config.gravity : 36;
             state.velocity.y += gravity * dt;
-            state.velocity.y = Math.min(state.velocity.y, 500); // Terminal velocity
+            // Raise terminal velocity to match higher movement units
+            state.velocity.y = Math.min(state.velocity.y, 2000);
         }
 
         // APPLY VELOCITY - Update position
@@ -318,6 +342,7 @@ class Match {
             if (!attackDef) {
                 state.isAttacking = false;
                 player.attackSequence = 0;
+                player.attackCharge = false;
                 return;
             }
 
@@ -340,8 +365,11 @@ class Match {
                 if (player.attackFrameTimer >= attackDef.recovery) {
                     // Attack complete
                     state.isAttacking = false;
+                    state.state = 'idle';
                     player.attackSequence = 0;
+                    player.attackPhase = 'none';
                     player.attackTimer = config.attackInterval || 0.75;
+                    player.attackCharge = false;
                 }
             }
         }
@@ -496,15 +524,20 @@ class Match {
             }
         });
         
-        // Increment attack counter
-        attacker.gameState.attackCounter = Math.min(3, (attacker.gameState.attackCounter || 0) + 1);
-        
+        // Update charged attack state
+        attacker.gameState.attackCharge = !!attackData.chargeAttack;
+
+        if (results.length > 0) {
+            attacker.gameState.attackCounter = Math.min(3, (attacker.gameState.attackCounter || 0) + 1);
+        }
+
         // Broadcast attack results
         this.broadcast({
             type: 'attackResult',
             attackerId: attackerId,
             hits: results,
-            attackCounter: attacker.gameState.attackCounter
+            attackCounter: attacker.gameState.attackCounter,
+            chargeAttack: attacker.gameState.attackCharge
         });
         
         return results;
@@ -522,58 +555,87 @@ class Match {
         
         if (!attackDef) return;
 
+        const attackData = {
+            range: attackDef.range,
+            baseDamage: attackDef.damage,
+            knockback: attackDef.knockback,
+            staggerDamage: attackDef.staggerDamage,
+            statusEffects: attackDef.statusEffects || [],
+            chargeAttack: attacker.attackCharge || false
+        };
+
         // Find all defenders
         const defenders = Object.values(this.players).filter(p => 
             p.clientId !== attacker.clientId && !p.gameState.isDefeated
         );
 
-        // Check each defender for hit
         defenders.forEach(defender => {
-            // Simple distance check - check if defender is within range
-            const dx = Math.abs(defender.gameState.position.x - attacker.gameState.position.x);
-            const dy = Math.abs(defender.gameState.position.y - attacker.gameState.position.y);
-            const distance = Math.sqrt(dx * dx + dy * dy);
-
-            // Check if in range and facing correct direction
-            const inRange = distance <= attackDef.range;
-            const facingCorrect = Math.sign(defender.gameState.position.x - attacker.gameState.position.x) === attacker.gameState.facing;
-
-            if (inRange && facingCorrect) {
-                // Apply damage based on attack definition
-                const damage = Math.round(attackDef.damage * attacker.config.baseDamage);
-                const knockback = attackDef.knockback;
-                const staggerDamage = attackDef.staggerDamage;
-
-                // Apply knockback
-                const knockDir = Math.sign(defender.gameState.position.x - attacker.gameState.position.x) || 1;
-                defender.gameState.velocity.x = knockback * knockDir * 0.5; // Scale knockback
-
-                // Apply damage
-                defender.gameState.hp = Math.max(0, defender.gameState.hp - damage);
-
-                // Broadcast hit
-                this.broadcast({
-                    type: 'HIT',
-                    attackerId: attacker.clientId,
-                    targetId: defender.clientId,
-                    damage: damage,
-                    attackSequence: attacker.attackSequence,
-                    hp: defender.gameState.hp
-                });
-
-                // Check defeat
-                if (defender.gameState.hp <= 0) {
-                    defender.gameState.isDefeated = true;
-                    this.broadcast({
-                        type: 'FIGHTER_DEFEATED',
-                        fighterId: defender.clientId,
-                        defeatedBy: attacker.clientId
-                    });
+            const result = this.engine.resolveAttack(
+                attacker.gameState,
+                defender.gameState,
+                attackData,
+                {
+                    staggerThreshold: attacker.config.staggerThreshold,
+                    staggerLength: attacker.config.staggerLength
                 }
+            );
 
-                // Mark attack as having hit (don't allow multiple hits per attack)
-                attacker.strikeActive = false;
+            if (!result.hit) return;
+
+            // Keep attack counter state in sync for the attacker
+            attacker.gameState.attackCounter = Math.min(3, (attacker.gameState.attackCounter || 0) + 1);
+
+            this.broadcast({
+                type: 'HIT',
+                attackerId: attacker.clientId,
+                targetId: defender.clientId,
+                damage: result.damage,
+                attackSequence: attacker.attackSequence,
+                hp: defender.gameState.hp,
+                knockback: result.knockback,
+                statuses: result.statuses || [],
+                staggerResult: result.staggerResult || null,
+                chargeAttack: result.chargeAttack || false,
+                defeated: result.defeated
+            });
+
+            if (result.consumeEvents) {
+                result.consumeEvents.forEach(ev => {
+                    if (ev.type === 'BLEED_DAMAGE' || ev.type === 'RUPTURE_DAMAGE' || ev.type === 'BLEED_ATTACK_DAMAGE') {
+                        this.broadcast({
+                            type: 'STATUS_DAMAGE',
+                            fighterId: defender.clientId,
+                            eventType: ev.type,
+                            damage: ev.damage,
+                            hp: defender.gameState.hp
+                        });
+                    }
+                });
             }
+
+            if (result.bleedAttackEvents) {
+                result.bleedAttackEvents.forEach(ev => {
+                    this.broadcast({
+                        type: 'STATUS_DAMAGE',
+                        fighterId: attacker.clientId,
+                        eventType: ev.type,
+                        damage: ev.damage,
+                        hp: attacker.gameState.hp
+                    });
+                });
+            }
+
+            if (result.defeated) {
+                defender.gameState.isDefeated = true;
+                this.broadcast({
+                    type: 'FIGHTER_DEFEATED',
+                    fighterId: defender.clientId,
+                    defeatedBy: attacker.clientId
+                });
+            }
+
+            // Mark attack as having hit (don't allow multiple hits per attack)
+            attacker.strikeActive = false;
         });
     }
 
@@ -660,7 +722,9 @@ broadcastSnapshot() {
                 // Attack state for client-side animation
                 attackSequence: player.attackSequence || 0,
                 attackPhase: player.attackPhase || 'none',
-                strikeActive: player.strikeActive || false
+                strikeActive: player.strikeActive || false,
+                attackCounter: player.gameState.attackCounter || 0,
+                chargeAttack: player.attackCharge || (this.engine.combatState[player.clientId] || {}).chargeAttack || false
             }))
         };
 

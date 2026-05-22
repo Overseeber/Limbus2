@@ -1,6 +1,7 @@
 var express = require('express');
 var app = express();
-var server = app.listen(3000);
+var port = process.env.PORT || 3000;
+var server = app.listen(port);
 app.use(express.static('public'));
 
 var socket = require('socket.io');
@@ -366,20 +367,11 @@ socket.on('toggleReady', () => {
         }
     });
     socket.on('input', (input) => {
+        const room = roomList[client.room];
+        if (!room || !room.match) return;
 
-    const room = roomList[client.room];
-
-    if (!room || !room.match) return;
-
-    const player = room.match.getPlayer(socket.id);
-
-    if (!player) return;
-
-    player.input = input;
-  //  console.log("ROOM MEMBERS:", io.in(client.room).allSockets());
-    
-   // console.log(player.clientId, player.input);
-});
+        room.match.handleInput(socket.id, input);
+    });
     // Handle ability requests with full server authority
     socket.on('ability', (data) => {
         const room = roomList[client.room];
@@ -395,15 +387,18 @@ socket.on('toggleReady', () => {
         
         const attacker = room.match.getPlayer(socket.id);
         if (!attacker || attacker.gameState.isDefeated || attacker.gameState.state === 'staggered') return;
+
+        const attackType = data.heavy ? 'heavy' : 'light';
+        const attackDef = attacker.config.attacks[attackType];
+        if (!attackDef) return;
         
-        // Create attack data
         const attackData = {
-            range: data.heavy ? 294 : 231,
-            baseDamage: data.heavy ? attacker.config.baseDamage * 2 : attacker.config.baseDamage,
-            knockback: data.heavy ? 9 : 6,
-            staggerDamage: attacker.config.baseDamage * 0.5,
-            statusEffects: [],
-            heavy: data.heavy || false
+            range: attackDef.range,
+            baseDamage: attackDef.damage,
+            knockback: attackDef.knockback,
+            staggerDamage: attackDef.staggerDamage || (attacker.config.baseDamage * 0.5),
+            statusEffects: attackDef.statusEffects || [],
+            chargeAttack: !!data.heavy
         };
         
         room.match.resolveAttack(socket.id, attackData);

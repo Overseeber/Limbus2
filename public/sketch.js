@@ -280,6 +280,8 @@ function processSnapshot(snapshot) {
         fighter.attackSequence = state.attackSequence || 0;
         fighter.attackPhase = state.attackPhase || 'none';
         fighter.strikeActive = state.strikeActive || false;
+        fighter.chargeAttack = state.chargeAttack || false;
+        fighter.attackCounter = state.attackCounter || 0;
         
         // Trigger attack animation if attack sequence changed
         if (state.attackSequence && state.attackSequence > 0) {

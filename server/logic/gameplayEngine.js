@@ -783,8 +783,19 @@ class GameplayEngine {
 
     result.hit = true;
 
+    // Base damage multiplier can be modified by guard
+    let baseDamage = attackData.baseDamage || attacker.baseDamage;
+    let knockbackAmount = attackData.knockback || 0;
+    let staggerAmount = attackData.staggerDamage || 0;
+
+    if (defender.isGuarding) {
+      baseDamage = baseDamage * 0.5;
+      knockbackAmount = Math.floor(knockbackAmount * 0.5);
+      staggerAmount = 0;
+      result.wasGuarded = true;
+    }
+
     // Calculate damage
-    const baseDamage = attackData.baseDamage || attacker.baseDamage;
     const finalDamage = this.calculateDamage(baseDamage, attacker, defender);
     
     // Apply damage
@@ -794,15 +805,15 @@ class GameplayEngine {
     result.defeated = applyResult.defeated;
 
     // Apply knockback
-    if (attackData.knockback) {
-      const knockbackAmount = this.calculateKnockback(attackData.knockback, attacker);
-      this.applyKnockback(defender, knockbackAmount, attacker.facing);
-      result.knockback = knockbackAmount;
+    if (knockbackAmount) {
+      const finalKnockback = this.calculateKnockback(knockbackAmount, attacker);
+      this.applyKnockback(defender, finalKnockback, attacker.facing);
+      result.knockback = finalKnockback;
     }
 
     // Apply stagger
-    if (attackData.staggerDamage) {
-      result.staggerResult = this.applyStagger(defender, attackData.staggerDamage, config);
+    if (staggerAmount) {
+      result.staggerResult = this.applyStagger(defender, staggerAmount, config);
     }
 
     // Apply attack status effects
@@ -817,12 +828,24 @@ class GameplayEngine {
     const consumeEvents = this.consumeOnHit(defender);
     result.consumeEvents = consumeEvents;
 
+    // Consume bleed effects when attacker hits
+    const bleedAttackEvents = this.consumeBleedOnAttack(attacker);
+    if (bleedAttackEvents.length) {
+      result.bleedAttackEvents = bleedAttackEvents;
+    }
+
+    // Track charge attack state for damage scaling
+    const combatState = this.combatState[attacker.id] || {};
+    combatState.chargeAttack = !!attackData.chargeAttack || !!attackData.heavy;
+    this.combatState[attacker.id] = combatState;
+
     // Combo
     this.addCombo(attacker.id);
 
     // Attack counter
     this.incrementAttackCounter(attacker.id);
 
+    result.chargeAttack = combatState.chargeAttack;
     result.success = true;
     return result;
   }
@@ -847,9 +870,6 @@ class GameplayEngine {
    */
   updateFighter(state, dt, config) {
     const events = [];
-
-    // Apply gravity
-    this.applyGravity(state);
 
     // Update cooldowns
     this.updateCooldowns(state, dt);

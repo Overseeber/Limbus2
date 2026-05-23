@@ -95,7 +95,11 @@ class Match {
                 lastAttackTime: 0,        // When last attack was initiated
                 attackHoldStart: null,    // Timestamp when attack input began
                 attackRequestActive: false,
-                attackCharge: false       // Whether current attack is charged
+                attackCharge: false,      // Whether current attack is charged
+                // Dash attack state
+                dashAttackQueued: false,  // Whether dash attack is pending
+                dashAttackInitiated: false, // Whether dash attack was triggered
+                dashAttackResolved: false  // Whether dash attack damage has been applied
             };
         });
     }
@@ -246,6 +250,13 @@ class Match {
             state.dashTimer = 0;
             state.dashCharges -= 1;
             state.canDash = state.dashCharges > 0;
+            player.dashAttackQueued = false; // Reset dash attack flag
+        }
+        
+        // DASH ATTACK - Trigger attack during dash if attack input occurs
+        if (input.attack && state.isDashing && !player.dashAttackQueued) {
+            player.dashAttackQueued = true;
+            player.dashAttackInitiated = true;
         }
 
         // ATTACK INPUT - Track press/release for light vs charged attacks
@@ -333,6 +344,15 @@ class Match {
             const dashDuration = config.dashDuration || 0.2;
             if (state.dashTimer >= dashDuration) {
                 state.isDashing = false;
+                // Reset dash attack flags when dash ends
+                player.dashAttackInitiated = false;
+                player.dashAttackResolved = false;
+            }
+            
+            // RESOLVE DASH ATTACK if triggered during dash
+            if (player.dashAttackInitiated && !player.dashAttackResolved) {
+                player.dashAttackResolved = true;
+                this.resolveDashAttack(player);
             }
         }
 
@@ -566,6 +586,147 @@ class Match {
     }
 
     /**
+     * Resolve dash attack - high speed attack during dash
+     */
+    resolveDashAttack(player) {
+        const attacker = player;
+        const state = player.gameState;
+        const config = player.config;
+        
+        // Dash attacks use enhanced stats
+        const attackData = {
+            range: 168,           // 40% increased range
+            baseDamage: 1.5,      // 1.5x base damage multiplier
+            knockback: 80,        // Moderate knockback
+            staggerDamage: 60,    // Stagger damage
+            statusEffects: [],
+            chargeAttack: false,
+            isDashAttack: true
+        };
+        
+        const defenders = Object.values(this.players).filter(p => 
+            p.clientId !== attacker.clientId && !p.gameState.isDefeated
+        );
+        
+        const results = [];
+        
+        defenders.forEach(defender => {
+            const hit = this.engine.checkHit(
+                state.position,
+                defender.gameState.position,
+                attackData.range,
+                state.facing
+            );
+            
+            if (hit) {
+                const result = this.engine.resolveAttack(
+                    state,
+                    defender.gameState,
+                    attackData,
+                    {
+                        staggerThreshold: attacker.config.staggerThreshold,
+                        staggerLength: attacker.config.staggerLength
+                    }
+                );
+                
+                results.push({
+                    targetId: defender.clientId,
+                    damage: result.damage,
+                    defenderHp: result.defenderHp,
+                    hit: result.hit,
+                    defeated: result.defeated,
+                    knockback: result.knockback
+                });
+            }
+        });
+        
+        // Broadcast dash attack results
+        if (results.length > 0) {
+            this.broadcast({
+                type: 'dashAttackResult',
+                attackerId: attacker.clientId,
+                hits: results
+            });
+        }
+    }
+
+    /**
+     * Resolve slam attack - AOE attack after jumping
+     */
+    resolveSlamAttack(player, targetId) {
+        const attacker = player;
+        const state = player.gameState;
+        const config = player.config;
+        
+        // Validate slam can be used
+        if (state.onGround) {
+            return { success: false, reason: 'Cannot slam on ground' };
+        }
+        
+        const abilityConfig = config.abilities.slam;
+        if (!abilityConfig) {
+            return { success: false, reason: 'No slam config' };
+        }
+        
+        // Slam creates an AOE at current position with landing damage
+        const slamPos = { x: state.position.x, y: 600 }; // Assume ground Y
+        const slamRadius = abilityConfig.range || 200;
+        
+        const defenders = Object.values(this.players).filter(p => 
+            p.clientId !== attacker.clientId && !p.gameState.isDefeated
+        );
+        
+        const results = [];
+        
+        defenders.forEach(defender => {
+            const dx = defender.gameState.position.x - slamPos.x;
+            const dy = defender.gameState.position.y - slamPos.y;
+            const distance = Math.hypot(dx, dy);
+            
+            if (distance <= slamRadius) {
+                const attackData = {
+                    range: slamRadius,
+                    baseDamage: abilityConfig.baseDamage,
+                    knockback: abilityConfig.knockback,
+                    staggerDamage: abilityConfig.baseDamage * 100, // Heavy stagger
+                    statusEffects: abilityConfig.statusEffects || [],
+                    chargeAttack: false
+                };
+                
+                const result = this.engine.resolveAttack(
+                    state,
+                    defender.gameState,
+                    attackData,
+                    {
+                        staggerThreshold: attacker.config.staggerThreshold,
+                        staggerLength: attacker.config.staggerLength
+                    }
+                );
+                
+                results.push({
+                    targetId: defender.clientId,
+                    damage: result.damage,
+                    defenderHp: result.defenderHp,
+                    hit: true,
+                    defeated: result.defeated,
+                    knockback: result.knockback
+                });
+            }
+        });
+        
+        // Broadcast slam attack results
+        this.broadcast({
+            type: 'slamAttackResult',
+            attackerId: attacker.clientId,
+            slamPos: slamPos,
+            radius: slamRadius,
+            hits: results
+        });
+        
+        return { success: true, results };
+    }
+
+    /**
      * Check and resolve attack hits during active frame
      */
     checkAttackHits(attacker) {
@@ -666,6 +827,11 @@ class Match {
         
         const attacker = this.players[attackerId];
         if (!attacker || attacker.gameState.isDefeated) return;
+        
+        // Handle slam attack specially (direct server-side resolution)
+        if (abilityId === 'slamAttack') {
+            return this.resolveSlamAttack(attacker, targetId);
+        }
         
         const target = targetId ? this.players[targetId] : null;
         

@@ -568,6 +568,37 @@ function triggerAbilityVisuals(fighter, abilityId, result) {
   }
 }
 
+/**
+ * Draw debug hitbox for active attack
+ */
+function drawAttackHitbox(fighter) {
+  if (!fighter || !fighter.pos) return;
+  
+  const attackConfig = fighter.config?.attacks;
+  if (!attackConfig) return;
+  
+  const attackType = fighter.attackSequence === 1 ? 'light' :
+                     fighter.attackSequence === 2 ? 'medium' : 'heavy';
+  const attackDef = attackConfig[attackType];
+  if (!attackDef) return;
+  
+  const range = attackDef.range || 120;
+  
+  // Draw attack range circle (centered at fighter position)
+  push();
+  stroke(200, 100, 100);
+  strokeWeight(2);
+  noFill();
+  circle(fighter.pos.x, fighter.pos.y, range * 2);
+  
+  // Draw attack indicator label
+  fill(200, 100, 100);
+  textSize(10);
+  textAlign(CENTER);
+  text(`ATK ${attackType}`, fighter.pos.x, fighter.pos.y - (range + 15));
+  pop();
+}
+
 function draw() {
   // Process pending scene transitions (safely delayed to next frame)
   // This prevents same-frame UI destruction from breaking button click context
@@ -793,6 +824,15 @@ function drawOpeningSequence() {
   // Draw all fighters
   if (window.allFighters) {
     window.allFighters.forEach(fighter => fighter.draw());
+    
+    // Draw attack debug hitboxes
+    if (DEBUG) {
+      window.allFighters.forEach(fighter => {
+        if (fighter.strikeActive && fighter.attackSequence > 0) {
+          drawAttackHitbox(fighter);
+        }
+      });
+    }
   }
   
   endCamera();

@@ -30,9 +30,10 @@ const VALENCINA_CONFIG = {
   // Convert to per-second units (≈60fps): jumpHeight = 20 * 60 = 1200, gravity = 0.6 * 3600 = 2160
   jumpHeight: 1200,       // Jump initial velocity (pixels/s)
   gravity: 2160,          // Gravity acceleration (pixels/s²)
-  dashSpeed: 800,         // Dash movement speed
-  dashDuration: 0.16,     // Dash duration in seconds
-  dashCooldown: 1.0,      // Cooldown between dashes
+  dashSpeed: 60,          // Dash movement speed (old client per-frame units)
+  dashDuration: 0.2,      // Dash duration in seconds
+  dashCooldown: 3.0,      // Dash recharge cooldown between dash charges
+  dashCharges: 3,         // Maximum dash charges
   airControl: 0.6,        // Air movement responsiveness (0-1)
   
   // VISUAL CONFIG (client-only)

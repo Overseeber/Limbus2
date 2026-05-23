@@ -54,6 +54,10 @@ class Match {
             
             // Initialize authoritative game state through GameplayEngine
             const gameState = this.engine.initializeCharacter(config.clientId, charKey);
+            gameState.dashCharges = charConfig.dashCharges || 3;
+            gameState.dashTimer = 0;
+            gameState.isDashing = false;
+            gameState.canDash = true;
             
             // Set starting position
             const index = config.index || 0;
@@ -233,15 +237,15 @@ class Match {
             state.isGuarding = false;
         }
 
-        // DASH INPUT - Directional movement boost
-        if (input.dash && state.canDash && !state.isAttacking) {
+        // DASH INPUT - Directional movement boost with charge-based recovery
+        if (input.dash && state.dashCharges > 0 && !state.isAttacking && state.onGround) {
             const dashDir = input.right ? 1 : (input.left ? -1 : state.facing);
-            const dashSpeed = config.dashSpeed || 800;
+            const dashSpeed = ((typeof config.dashSpeed !== 'undefined' ? config.dashSpeed : 60) * 60);
             state.velocity.x = dashDir * dashSpeed;
             state.isDashing = true;
             state.dashTimer = 0;
-            state.canDash = false;
-            state.dashCooldown = config.dashCooldown || 1.0;
+            state.dashCharges -= 1;
+            state.canDash = state.dashCharges > 0;
         }
 
         // ATTACK INPUT - Track press/release for light vs charged attacks
@@ -305,26 +309,44 @@ class Match {
             state.onGround = true;
         }
 
-        // WALL BOUNDARIES - Keep in arena
-        if (state.position.x < 50) state.position.x = 50;
-        if (state.position.x > 1350) state.position.x = 1350;
+        // WALL BOUNDARIES - Keep in arena and stop dash when hitting an edge
+        let hitBoundary = false;
+        if (state.position.x < 50) {
+            state.position.x = 50;
+            hitBoundary = state.velocity.x < 0;
+        }
+        if (state.position.x > 1350) {
+            state.position.x = 1350;
+            hitBoundary = state.velocity.x > 0;
+        }
 
-        // DASH TIMER
+        if (hitBoundary) {
+            state.velocity.x = 0;
+            if (state.isDashing) {
+                state.isDashing = false;
+            }
+        }
+
+        // DASH TIMER / RECHARGE
         if (state.isDashing) {
             state.dashTimer += dt;
-            const dashDuration = config.dashDuration || 0.16;
+            const dashDuration = config.dashDuration || 0.2;
             if (state.dashTimer >= dashDuration) {
                 state.isDashing = false;
             }
         }
 
-        // DASH COOLDOWN
-        if (state.dashCooldown > 0) {
-            state.dashCooldown -= dt;
-            if (state.dashCooldown <= 0) {
-                state.canDash = true;
-                state.dashCooldown = 0;
+        if (state.dashCharges >= 3) {
+            state.dashTimer = 0;
+            state.canDash = true;
+        } else {
+            state.dashTimer += dt;
+            const dashCooldown = config.dashCooldown || 3.0;
+            while (state.dashTimer >= dashCooldown && state.dashCharges < 3) {
+                state.dashCharges += 1;
+                state.dashTimer -= dashCooldown;
             }
+            state.canDash = state.dashCharges > 0;
         }
 
         // ATTACK COOLDOWN
@@ -718,6 +740,7 @@ broadcastSnapshot() {
                 isAttacking: player.gameState.isAttacking || false,
                 isGuarding: player.gameState.isGuarding || false,
                 isDashing: player.gameState.isDashing || false,
+                dashCharges: player.gameState.dashCharges || 0,
                 onGround: player.gameState.onGround || false,
                 // Attack state for client-side animation
                 attackSequence: player.attackSequence || 0,

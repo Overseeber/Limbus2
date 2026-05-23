@@ -275,6 +275,7 @@ function processSnapshot(snapshot) {
         fighter.isAttacking = state.isAttacking || false;
         fighter.isGuarding = state.isGuarding || false;
         fighter.isDashing = state.isDashing || false;
+        fighter.dashCharges = typeof state.dashCharges !== 'undefined' ? state.dashCharges : fighter.dashCharges || 0;
 
         // Apply attack sequence state for animation control
         fighter.attackSequence = state.attackSequence || 0;

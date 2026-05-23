@@ -25,9 +25,10 @@ const JOHN_CONFIG = {
   // Using old-client derived per-second values: jumpHeight = 20*60 = 1200, gravity = 0.6*3600 = 2160
   jumpHeight: 1200,
   gravity: 2160,
-  dashSpeed: 800,
-  dashDuration: 0.16,
-  dashCooldown: 1.0,
+  dashSpeed: 60,
+  dashDuration: 0.2,
+  dashCooldown: 3.0,
+  dashCharges: 3,
   airControl: 0.6,
   
   // VISUAL CONFIG (client-only)

@@ -280,24 +280,54 @@ function processSnapshot(snapshot) {
         // Apply attack sequence state for animation control
         fighter.attackSequence = state.attackSequence || 0;
         fighter.attackPhase = state.attackPhase || 'none';
+        fighter.attackFrameTimer = state.attackFrameTimer || 0;
+        fighter.attackFrame = state.attackFrame || 0;
         fighter.strikeActive = state.strikeActive || false;
         fighter.chargeAttack = state.chargeAttack || false;
         fighter.attackCounter = state.attackCounter || 0;
         
-        // Trigger attack animation if attack sequence changed
-        if (state.attackSequence && state.attackSequence > 0) {
-            if (fighter.attackSequence !== state.attackSequence || fighter.attackPhase !== state.attackPhase) {
-                console.log(`[Snapshot] ${fighter.characterKey} attack ${state.attackSequence} (${state.attackPhase})`);
-            }
+        // Apply slam state
+        fighter.isSlamAttacking = state.isSlamAttacking || false;
+        
+        // Apply dash attack state
+        fighter.dashAttackQueued = state.dashAttackQueued || false;
+        
+        // Reset slash effects on new attack
+        if (state.attackSequence > 0 && fighter.attackSequence !== state.attackSequence) {
+            fighter.slashEffectsSpawned = false;
         }
     }
 
     console.log('[Snapshot] Snapshot applied successfully');
 }
 
+// Track mouse/attack state for edge detection
+let mouseWasPressed = false;
+let attackInputSent = false;
+let networkAttackHeld = 0;
+
 function sendInputState() {
     const controlledFighter = getPlayerControlledFighter();
     if (!controlledFighter) return;
+
+    // Use the onGround property (set by server) not the method
+    const isOnGround = controlledFighter.onGround || 
+        (controlledFighter.pos && controlledFighter.pos.y >= (controlledFighter.spawnY || 600) - 0.01);
+
+    // Detect attack press/release edge for reliable detection at low tick rate
+    const isLeftMouseDown = mouseIsPressed && mouseButton === LEFT;
+    
+    // Attack is true only on the frame the mouse is first pressed (edge trigger)
+    // This ensures the server reliably detects attack input at 20tps
+    const attackPressed = isLeftMouseDown && !mouseWasPressed;
+    if (attackPressed) {
+        networkAttackHeld = performance.now();
+    }
+    
+    // Attack release - only when mouse goes up after being held
+    const attackReleased = !isLeftMouseDown && mouseWasPressed;
+    
+    mouseWasPressed = isLeftMouseDown;
 
     // Collect current input state
     const input = {
@@ -305,9 +335,12 @@ function sendInputState() {
         right: keyIsDown(68) || keyIsDown(RIGHT_ARROW), // D or Right
         up: keyIsDown(87) || keyIsDown(UP_ARROW), // W or Up
         down: keyIsDown(83) || keyIsDown(DOWN_ARROW), // S or Down
-        attack: mouseIsPressed && mouseButton === LEFT,
+        attack: isLeftMouseDown, // continuous hold state for server
+        attackPressed: attackPressed, // edge trigger for reliable detection
+        attackReleased: attackReleased, // release trigger
         guard: mouseIsPressed && mouseButton === RIGHT,
-        dash: keyIsDown(32) // Space
+        dash: keyIsDown(32), // Space
+        slam: keyIsDown(83) && !isOnGround // S in air for slam
     };
 
     Network.sendInput(input);
@@ -569,33 +602,59 @@ function triggerAbilityVisuals(fighter, abilityId, result) {
 }
 
 /**
- * Draw debug hitbox for active attack
+ * RESTORED: Draw debug hitbox for active attack using rect-based detection
+ * Draws the actual rect hitbox like the original game's debug overlay
  */
 function drawAttackHitbox(fighter) {
   if (!fighter || !fighter.pos) return;
+
+  // Get attack range from the attack state
+  const attackRange = fighter.attackRange || 120;
   
-  const attackConfig = fighter.config?.attacks;
-  if (!attackConfig) return;
+  // RESTORED: Calculate attack box using same formula as server (calcAttackBox)
+  const facing = fighter.facing || 1;
+  const atkBox = {
+    x: fighter.pos.x + facing * (attackRange / 2),
+    y: fighter.pos.y - 28,
+    w: attackRange,
+    h: 70
+  };
   
-  const attackType = fighter.attackSequence === 1 ? 'light' :
-                     fighter.attackSequence === 2 ? 'medium' : 'heavy';
-  const attackDef = attackConfig[attackType];
-  if (!attackDef) return;
+  // Draw the actual rect hitbox
+  const boxX = atkBox.x - atkBox.w / 2;
+  const boxY = atkBox.y;
+  const boxW = atkBox.w;
+  const boxH = atkBox.h;
   
-  const range = attackDef.range || 120;
-  
-  // Draw attack range circle (centered at fighter position)
   push();
-  stroke(200, 100, 100);
+  // Attack hitbox - red when strike is active, yellow during startup/recovery
+  const hitboxColor = fighter.strikeActive ? color(255, 50, 50, 120) : color(255, 255, 50, 80);
+  fill(hitboxColor);
+  stroke(fighter.strikeActive ? color(255, 0, 0) : color(255, 255, 0));
   strokeWeight(2);
-  noFill();
-  circle(fighter.pos.x, fighter.pos.y, range * 2);
+  rect(boxX, boxY, boxW, boxH);
   
   // Draw attack indicator label
-  fill(200, 100, 100);
+  const attackLabel = fighter.strikeActive ? 'HITBOX ACTIVE' : 
+                      fighter.attackPhase === 'startup' ? 'STARTUP' :
+                      fighter.attackPhase === 'recovery' ? 'RECOVERY' : 'ATTACK';
+  fill(255);
   textSize(10);
-  textAlign(CENTER);
-  text(`ATK ${attackType}`, fighter.pos.x, fighter.pos.y - (range + 15));
+  textAlign(LEFT, BOTTOM);
+  text(`${attackLabel} Seq:${fighter.attackSequence} Ph:${fighter.attackPhase}`, boxX, boxY - 5);
+  
+  // Draw range line
+  stroke(255, 200, 0, 100);
+  strokeWeight(1);
+  line(fighter.pos.x, fighter.pos.y - 30, fighter.pos.x + facing * atkBox.w, fighter.pos.y - 30);
+  pop();
+  
+  // Draw player hitbox for reference
+  push();
+  noFill();
+  stroke(0, 255, 0, 100);
+  strokeWeight(1);
+  rect(fighter.pos.x - 25, fighter.pos.y - 36, 50, 72);
   pop();
 }
 
@@ -639,7 +698,14 @@ function draw() {
     
     // Draw all fighters
     if (window.allFighters) {
-      window.allFighters.forEach(fighter => fighter.draw());
+      window.allFighters.forEach(fighter => {
+        fighter.draw();
+        
+        // Draw debug attack hitboxes when any attack is active
+        if (DEBUG && fighter.attackSequence > 0) {
+          drawAttackHitbox(fighter);
+        }
+      });
     }
     
     drawDamageNumbers();

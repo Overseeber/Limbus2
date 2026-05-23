@@ -603,6 +603,10 @@ class Fighter {
     }
   }
 
+  /**
+   * RESTORED: Update sprite based on state and attack phase
+   * Driven by server snapshot values for synchronization
+   */
   updateSprite() {
     // Skip sprite updates during ultimate - ultimate controls its own sprites
     if (this.ultimateActive) {
@@ -614,6 +618,14 @@ class Fighter {
       const introSprite = this.getIntroSprite();
       if (introSprite) {
         this.currentSprite = introSprite;
+        return;
+      }
+    }
+    
+    // RESTORED: Map attack phase to animation frame for proper visual feedback
+    if (this.state === 'attack' || this.state === 'attacking') {
+      if (this.attackSequence > 0) {
+        this.updateAttackSprite();
         return;
       }
     }
@@ -631,45 +643,36 @@ class Fighter {
         hit: 'churt',
         staggered: 'churt',
         duck: 'cidle',
-        ultimate: 'cuend' // Use cuend sprite for ultimate state
+        ultimate: 'cuend'
       };
 
       // Handle special states for Callisto
       if (this.isSlamAttacking) {
-        this.currentSprite = 'cs1f2'; // Slam sprite with cs1s1
-        // Spawn slam slash effect
+        this.currentSprite = 'cs1f2';
         if (!this.slashEffectsSpawned) {
           this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
           this.slashEffectsSpawned = true;
         }
       } else if (this.isDashing) {
-        if (this.state === 'attack') {
-          this.currentSprite = 'cjoust'; // Dash attack sprite with cjs1
-          // Spawn dash attack slash effect
+        if (this.state === 'attack' || this.state === 'attacking') {
+          this.currentSprite = 'cjoust';
           if (!this.slashEffectsSpawned) {
             this.spawnSlashEffect('cjs1', { x: 0, y: -10 });
             this.slashEffectsSpawned = true;
           }
         } else if (this.usePostDashSprite) {
-          this.currentSprite = 'chalt'; // Dash end sprite
+          this.currentSprite = 'chalt';
         } else {
-          this.currentSprite = 'cmove'; // Regular dash movement sprite
+          this.currentSprite = 'cmove';
         }
-      } else if (this.state === 'attack' && this.attackSequence > 0) {
-        // Handle attack sequences for Callisto
-        this.updateCallistoAttackSequence();
       } else if (this.haltSequence) {
-        // Handle halt sequence for Callisto
         this.updateCallistoHaltSequence();
       } else if (this.usePostDashSprite && !this.isDashing) {
-        // Reset post-dash sprite when dash ends
         this.usePostDashSprite = false;
         this.currentSprite = callistoStateMap[this.state] || 'cidle';
       } else {
-        // For Callisto, respect currentSprite during Installation Art
-        if (this.characterKey === 'CALLISTO' && this.installationArtActive) {
-          // Don't override sprite during Installation Art - use currentSprite
-          // this.currentSprite is already set by Installation Art logic
+        if (this.installationArtActive) {
+          // Don't override sprite during Installation Art
         } else {
           this.currentSprite = callistoStateMap[this.state] || 'cidle';
         }
@@ -677,7 +680,7 @@ class Fighter {
       return;
     }
     
-    // State to sprite mapping for Valencina (original)
+    // State to sprite mapping for Valencina
     const stateMap = {
       idle: 'idle',
       run: 'moving',
@@ -689,40 +692,32 @@ class Fighter {
       hit: 'hurt',
       staggered: 'hurt',
       duck: 'idle',
-      ultimate: 'dist1' // Use dist1 sprite for ultimate state
+      ultimate: 'dist1'
     };
 
     // For Valencina, respect currentSprite during Time to Hunt casting
     if (this.characterKey === 'VALENCINA' && this.timeToHuntCasting) {
-      // Don't override sprite during Time to Hunt casting - use currentSprite
-      // this.currentSprite is already set by Time to Hunt logic
       return;
     }
 
     // Handle special states
     if (this.isSlamAttacking) {
-      // Character-specific slam sprites
       if (this.characterKey === 'CALLISTO') {
-        this.currentSprite = 'cs1f2'; // Callisto slam sprite
+        this.currentSprite = 'cs1f2';
       } else {
-        this.currentSprite = 's4f4'; // Valencina slam sprite
+        this.currentSprite = 's4f4';
       }
     } else if (this.isDashing) {
-      if (this.state === 'attack') {
-        this.currentSprite = 'joust'; // Dash attack sprite
+      if (this.state === 'attack' || this.state === 'attacking') {
+        this.currentSprite = 'joust';
       } else if (this.usePostDashSprite) {
-        this.currentSprite = 's2f1'; // Post-dash attack sprite
+        this.currentSprite = 's2f1';
       } else {
-        this.currentSprite = 'moving'; // Regular dash movement sprite
+        this.currentSprite = 'moving';
       }
-    } else if (this.state === 'attack' && this.attackSequence > 0) {
-      // Handle attack sequences
-      this.updateAttackSequence();
     } else if (this.haltSequence) {
-      // Handle halt sequence
       this.updateHaltSequence();
     } else if (this.usePostDashSprite && !this.isDashing) {
-      // Reset post-dash sprite when dash ends
       this.usePostDashSprite = false;
       this.currentSprite = stateMap[this.state] || 'idle';
     } else {
@@ -730,76 +725,101 @@ class Fighter {
     }
   }
 
+  /**
+   * RESTORED: Update attack sprite based on attack phase from server
+   * Maps server attack phase to visual animation frames
+   */
+  updateAttackSprite() {
+    const dt = 0.016; // Assume 60fps frame timing for animation
+    
+    // Advance attack frame timer on client side for smooth animation
+    this.attackFrameTimer += dt;
+    
+    // Map server attack phases to animation frames for both characters
+    if (this.characterKey === 'CALLISTO') {
+      this.updateCallistoAttackSequence();
+    } else {
+      this.updateAttackSequence();
+    }
+  }
+
+  /**
+   * RESTORED: Update attack sequence sprite for Valencina
+   * Frame timing driven by attackPhase from server
+   */
   updateAttackSequence() {
     // Attack 1 sequence: prepat > s1f1 > s1f2 > s1f3
     if (this.attackSequence === 1) {
       const sequence = ['prepat', 's1f1', 's1f2', 's1f3'];
-      const damageFrames = [false, true, true, false]; // s1f1 and s1f2 deal damage
       
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
+      // Map server attack phase to visual frame
+      let visualFrame = this.attackFrame;
+      
+      // If we have an attack phase from server, use it for timing
+      if (this.attackPhase === 'startup') {
+        visualFrame = 0; // prepat during startup
+      } else if (this.attackPhase === 'active') {
+        visualFrame = 1; // s1f1 during active
+      } else if (this.attackPhase === 'recovery') {
+        visualFrame = 2; // s1f2 during recovery
+      }
+      
+      if (visualFrame < sequence.length) {
+        this.currentSprite = sequence[visualFrame];
         
-        // Spawn slash effects on specific frames (only once per frame)
-        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
+        // Spawn slash effects on specific frames (only once per attack)
+        if (visualFrame === 1 && !this.slashEffectsSpawned) {
           this.spawnSlashEffect('s1s1', { x: 0, y: -10 });
           this.spawnSlashEffect('s1s2', { x: 15, y: -5 });
           this.slashEffectsSpawned = true;
-        }
-        
-        // Deal damage on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
-          this.dealAttackDamage();
-          this.attackDamageDealt = true;
         }
       }
     }
     // Attack 2 sequence: s2f1 > halt1 > halt2 > s3f1
     else if (this.attackSequence === 2) {
       const sequence = ['s2f1', 'halt1', 'halt2', 's3f1'];
-      const damageFrames = [true, false, false, false]; // s2f1 deals damage
       
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
+      let visualFrame = this.attackFrame;
+      
+      if (this.attackPhase === 'startup') {
+        visualFrame = 0; // s2f1
+      } else if (this.attackPhase === 'active') {
+        visualFrame = 0; // s2f1 still (active frame)
+      } else if (this.attackPhase === 'recovery') {
+        visualFrame = 1; // halt1
+      }
+      
+      if (visualFrame < sequence.length) {
+        this.currentSprite = sequence[visualFrame];
         
-        // Spawn slash effects on specific frames (only once per frame)
-        if (this.attackFrame === 0 && !this.slashEffectsSpawned) {
+        // Spawn slash effects on specific frames
+        if (visualFrame === 0 && !this.slashEffectsSpawned) {
           this.spawnSlashEffect('s1s3', { x: 0, y: -10 });
           this.slashEffectsSpawned = true;
-        }
-        
-        // Deal damage on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
-          this.dealAttackDamage();
-          this.attackDamageDealt = true;
         }
       }
     }
     // Attack 3 sequence: s3f1 > s3f2 > s3f3 (0.5s hold)
     else if (this.attackSequence === 3) {
       const sequence = ['s3f1', 's3f2', 's3f3'];
-      const damageFrames = [false, true, false]; // s3f2 deals damage
-      const holdTimes = [0.2, 0.2, 0.5]; // s3f3 holds for 0.5s
       
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
+      let visualFrame = this.attackFrame;
+      
+      if (this.attackPhase === 'startup') {
+        visualFrame = 0; // s3f1
+      } else if (this.attackPhase === 'active') {
+        visualFrame = 1; // s3f2
+      } else if (this.attackPhase === 'recovery') {
+        visualFrame = 2; // s3f3
+      }
+      
+      if (visualFrame < sequence.length) {
+        this.currentSprite = sequence[visualFrame];
         
-        // Spawn slash effects on specific frames (only once per frame)
-        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
+        // Spawn slash effects on specific frames
+        if (visualFrame === 1 && !this.slashEffectsSpawned) {
           this.spawnSlashEffect('s1s4', { x: 0, y: -10 });
           this.slashEffectsSpawned = true;
-        }
-        
-        // Use custom frame duration for s3f3
-        if (this.attackFrame === 2) {
-          this.attackFrameDuration = 0.5;
-        } else {
-          this.attackFrameDuration = 0.2;
-        }
-        
-        // Deal damage on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
-          this.dealAttackDamage();
-          this.attackDamageDealt = true;
         }
       }
     }

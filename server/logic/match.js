@@ -58,6 +58,7 @@ class Match {
             gameState.dashTimer = 0;
             gameState.isDashing = false;
             gameState.canDash = true;
+            gameState.hitTimer = 0; // hitstun timer
             
             // Set starting position
             const index = config.index || 0;
@@ -84,18 +85,36 @@ class Match {
                     down: false,
                     attack: false,
                     guard: false,
+                    dash: false,
+                    slam: false,
+                    attackPressed: false,
+                    attackReleased: false
+                },
+                prevInput: {
+                    left: false,
+                    right: false,
+                    up: false,
+                    down: false,
+                    attack: false,
+                    guard: false,
                     dash: false
                 },
-                // Attack sequence state
+                // Attack sequence state - RESTORED original game feel
                 attackTimer: 0,           // Cooldown before next attack allowed
                 attackSequence: 0,        // 0=none, 1=light, 2=medium, 3=heavy
-                attackPhase: 'startup',   // startup, active, recovery
+                attackPhase: 'none',      // none, startup, active, recovery
                 attackFrameTimer: 0,      // Time into current attack phase
+                attackFrame: 0,           // Current animation frame for client
                 strikeActive: false,      // Whether hitbox is currently active
                 lastAttackTime: 0,        // When last attack was initiated
                 attackHoldStart: null,    // Timestamp when attack input began
                 attackRequestActive: false,
                 attackCharge: false,      // Whether current attack is charged
+                attackCounter: 0,         // 1-3 rotation counter
+                hitTargetsThisAttack: [], // Track who we've hit this attack
+                // Slam state
+                isSlamAttacking: false,
+                slamLandingHitbox: null,
                 // Dash attack state
                 dashAttackQueued: false,  // Whether dash attack is pending
                 dashAttackInitiated: false, // Whether dash attack was triggered
@@ -145,16 +164,16 @@ class Match {
         // Update each player's authoritative state
         Object.values(this.players).forEach(player => {
             if (!player.gameState.isDefeated) {
-                // Process input
+                // Process input with edge detection
                 this.processInput(player, dt);
 
-                // Update physics
+                // Update physics (includes attack phase timer)
                 this.updatePhysics(player, dt);
 
                 // Resolve collisions
                 this.resolveCollisions(player);
 
-                // Check attacks during active frame
+                // Check attacks during active frame (RESTORED rect-based detection)
                 if (player.strikeActive && player.attackSequence > 0) {
                     this.checkAttackHits(player);
                 }
@@ -177,30 +196,33 @@ class Match {
 
         // Broadcast snapshot to all clients
         this.broadcastSnapshot();
-        console.log("tick running");
     }
 
     /**
-     * Process player input with proper acceleration-based movement
+     * Process player input with proper attack system
+     * RESTORED: Original game input handling for responsive combat
      */
     processInput(player, dt) {
         const input = player.input;
+        const prevInput = player.prevInput;
         const state = player.gameState;
         const config = player.config;
         
         // MOVEMENT INPUT - Acceleration-based for responsive feel
-        // Shared configs use per-frame style 'speed' (old client). Convert to pixels/second by *60.
         const maxSpeed = (config.speed || 9) * 60;
         const acceleration = config.acceleration || 1800;
         
         let targetVelX = 0;
         
-        if (input.left) {
-            targetVelX = -maxSpeed;
-            state.facing = -1;
-        } else if (input.right) {
-            targetVelX = maxSpeed;
-            state.facing = 1;
+        // Don't allow movement input during hitstun or stagger active phase
+        if (state.state !== 'hit' && !(state.state === 'staggered' && state.staggerTimer > 0)) {
+            if (input.left) {
+                targetVelX = -maxSpeed;
+                state.facing = -1;
+            } else if (input.right) {
+                targetVelX = maxSpeed;
+                state.facing = 1;
+            }
         }
         
         // Accelerate/decelerate smoothly
@@ -211,8 +233,8 @@ class Match {
             state.velocity.x = Math.max(targetVelX, state.velocity.x - accelAmount);
         }
         
-        // Apply friction when no input
-        if (targetVelX === 0 && state.onGround) {
+        // Apply friction when no input (but not during dash)
+        if (targetVelX === 0 && state.onGround && !state.isDashing) {
             const friction = config.friction || 0.85;
             state.velocity.x *= friction;
             if (Math.abs(state.velocity.x) < 0.1) state.velocity.x = 0;
@@ -224,25 +246,25 @@ class Match {
             state.velocity.x *= airControl;
         }
 
-        // JUMP INPUT - Use jumpHeight from config (converted to pixels/s if needed)
-        if (input.up && state.onGround) {
-            const jumpHeight = config.jumpHeight || 1200; // already scaled in shared configs
-            // Debug logging to investigate jump/gravity issues
-            console.log(`[Jump] player=${player.clientId} jumpHeight=${jumpHeight} gravity=${config.gravity} dt=${dt}`);
+        // JUMP INPUT - edge triggered
+        if (input.up && !prevInput.up && state.onGround && state.state !== 'hit' && 
+            state.state !== 'staggered' && !state.isAttacking) {
+            const jumpHeight = config.jumpHeight || 1200;
             state.velocity.y = -jumpHeight;
             state.onGround = false;
-            console.log(`[Jump] player=${player.clientId} vy_after=${state.velocity.y}`);
         }
 
         // GUARD INPUT
-        if (input.guard && !state.isAttacking) {
+        if (input.guard && !state.isAttacking && state.state !== 'hit' && state.state !== 'staggered') {
             state.isGuarding = true;
         } else {
             state.isGuarding = false;
         }
 
-        // DASH INPUT - Directional movement boost with charge-based recovery
-        if (input.dash && state.dashCharges > 0 && !state.isAttacking && state.onGround) {
+        // DASH INPUT - edge triggered
+        const dashEdge = input.dash && !prevInput.dash;
+        if (dashEdge && state.dashCharges > 0 && !state.isAttacking && state.onGround && 
+            state.state !== 'hit' && state.state !== 'staggered' && state.state !== 'slam') {
             const dashDir = input.right ? 1 : (input.left ? -1 : state.facing);
             const dashSpeed = ((typeof config.dashSpeed !== 'undefined' ? config.dashSpeed : 60) * 60);
             state.velocity.x = dashDir * dashSpeed;
@@ -250,62 +272,163 @@ class Match {
             state.dashTimer = 0;
             state.dashCharges -= 1;
             state.canDash = state.dashCharges > 0;
-            player.dashAttackQueued = false; // Reset dash attack flag
+            player.dashAttackQueued = false;
+            player.dashAttackInitiated = false;
         }
         
-        // DASH ATTACK - Trigger attack during dash if attack input occurs
+        // DASH ATTACK - When attacking during dash
         if (input.attack && state.isDashing && !player.dashAttackQueued) {
             player.dashAttackQueued = true;
             player.dashAttackInitiated = true;
         }
 
-        // ATTACK INPUT - Track press/release for light vs charged attacks
-        const now = Date.now();
-        const attackPressed = input.attack && !player.input.attack;
-        const attackReleased = !input.attack && player.input.attack && player.attackRequestActive;
+        // ATTACK INPUT - Use explicit edge-triggered flags from client for reliable detection
+        // At 20tps, quick clicks can be missed by prevInput comparison alone
+        const attackPressed = input.attackPressed || (input.attack && !prevInput.attack);
+        const attackReleased = input.attackReleased || (!input.attack && prevInput.attack && player.attackRequestActive);
 
-        if (attackPressed) {
-            player.attackHoldStart = now;
+        if (attackPressed && !state.isAttacking && state.state !== 'hit' && 
+            state.state !== 'staggered' && state.state !== 'slam' && player.attackTimer <= 0) {
+            player.attackHoldStart = Date.now();
             player.attackRequestActive = true;
         }
 
-        if (attackReleased && !state.isAttacking && player.attackTimer <= 0) {
-            const heldDuration = now - (player.attackHoldStart || now);
-            const isCharged = heldDuration >= 300;
-            const timeSinceLastAttack = now - player.lastAttackTime;
-            const comboWindow = 300; // 300ms window for combo
+        // RESTORED: Start attack on release (like original game: press to charge, release to swing)
+        // Also handle the case where client sends continuous attack (no release detected at 20tps)
+        // If attack is held for more than one tick and we have an active request, start attack
+        if (player.attackRequestActive && state.state !== 'attack' && state.state !== 'attacking') {
+            if (attackReleased) {
+                const now = Date.now();
+                const heldDuration = now - (player.attackHoldStart || now);
+                const isCharged = heldDuration >= 300;
+                
+                // Use attackCounter for 1-3 rotation like original game
+                const timeSinceLastAttack = now - player.lastAttackTime;
+                const comboWindow = 500;
+                let sequence = 1;
 
-            if (!isCharged && timeSinceLastAttack < comboWindow && player.attackSequence > 0) {
-                player.attackSequence = Math.min(3, player.attackSequence + 1);
-            } else {
-                player.attackSequence = isCharged ? 3 : 1;
+                if (!isCharged && timeSinceLastAttack < comboWindow && player.attackCounter > 0) {
+                    sequence = Math.min(3, player.attackCounter + 1);
+                } else if (isCharged) {
+                    sequence = 3;
+                } else {
+                    sequence = 1;
+                }
+
+                this.startAttack(player, sequence, isCharged);
+            } 
+            // FALLBACK: If client attack is held for >300ms and input is still attack=true,
+            // treat as a tap attack (release may have been missed between ticks)
+            else if (input.attack && player.attackHoldStart) {
+                const heldMs = Date.now() - player.attackHoldStart;
+                if (heldMs > 100 && heldMs < 400) {
+                    // Likely a tap attack - release was missed, start attack now
+                    const now = Date.now();
+                    const heldDuration = now - player.attackHoldStart;
+                    const isCharged = heldDuration >= 300;
+                    const timeSinceLastAttack = now - player.lastAttackTime;
+                    const comboWindow = 500;
+                    let sequence = 1;
+                    
+                    if (!isCharged && timeSinceLastAttack < comboWindow && player.attackCounter > 0) {
+                        sequence = Math.min(3, player.attackCounter + 1);
+                    } else if (isCharged) {
+                        sequence = 3;
+                    }
+                    
+                    this.startAttack(player, sequence, isCharged);
+                }
             }
+        }
 
-            player.attackPhase = 'startup';
-            player.attackFrameTimer = 0;
-            player.strikeActive = false;
-            player.lastAttackTime = now;
-            player.attackCharge = isCharged;
-            player.attackRequestActive = false;
-            player.attackHoldStart = null;
-            state.isAttacking = true;
-            state.state = 'attacking';
+        // SLAM ATTACK - When in air and pressing S (down) key
+        // Slam triggers while in air and down is pressed (not on ground, not attacking)
+        if (input.down && !input.up && !state.onGround && !state.isAttacking && 
+            state.state !== 'hit' && state.state !== 'staggered' && !player.isSlamAttacking) {
+            this.startSlamAttack(player);
         }
     }
 
     /**
+     * RESTORED: Start an attack with proper phase timing
+     */
+    startAttack(player, sequence, isCharged) {
+        const config = player.config;
+        const state = player.gameState;
+        
+        // Get attack definition
+        const attackKey = sequence === 1 ? 'light' : sequence === 2 ? 'medium' : 'heavy';
+        const attackDef = config.attacks[attackKey];
+        
+        if (!attackDef) return;
+        
+        // Set attack state
+        const now = Date.now();
+        player.attackSequence = sequence;
+        player.attackPhase = 'startup';
+        player.attackFrameTimer = 0;
+        player.attackFrame = 0;
+        player.strikeActive = false;
+        player.lastAttackTime = now;
+        player.attackCharge = isCharged;
+        player.attackRequestActive = false;
+        player.attackHoldStart = null;
+        player.hitTargetsThisAttack = [];
+        
+        state.isAttacking = true;
+        state.state = 'attacking';
+        
+        // Set attack cooldown based on attack interval
+        player.attackTimer = config.attackInterval || 0.75;
+        
+        // Update attack counter for rotation
+        player.attackCounter = sequence;
+        
+        console.log(`[Attack] ${player.clientId} started attack ${sequence} (${attackKey}), phase=startup`);
+    }
+
+    /**
+     * RESTORED: Start a slam attack
+     */
+    startSlamAttack(player) {
+        const state = player.gameState;
+        
+        // Only usable in mid-air
+        if (state.onGround) return;
+        
+        state.state = 'slam';
+        state.isAttacking = true;
+        player.isSlamAttacking = true;
+        
+        // Set slam landing hitbox
+        player.slamLandingHitbox = {
+            x: state.position.x,
+            y: 600, // Ground level
+            radius: 80,
+            damage: player.config.baseDamage * 2
+        };
+        
+        console.log(`[Slam] ${player.clientId} started slam attack`);
+    }
+
+    /**
      * Update physics for a player with gravity and collision
+     * RESTORED: Added attack phase transitions + proper slam
      */
     updatePhysics(player, dt) {
         const state = player.gameState;
         const config = player.config;
 
-        // GRAVITY - Continuous acceleration when airborne
-        if (!state.onGround) {
-            // Shared configs now use per-second gravity (converted from old client)
+        // SLAM GRAVITY - Override velocity for fast descent
+        if (player.isSlamAttacking && !state.onGround) {
+            state.velocity.y += 50 * dt; // Strong slam gravity (was 30 per-frame, now per-second)
+            if (state.velocity.y < 30) state.velocity.y = 30; // Minimum slam speed
+            state.velocity.x *= 0.9; // Slow horizontal movement during slam
+        }
+        // NORMAL GRAVITY
+        else if (!state.onGround) {
             const gravity = (typeof config.gravity !== 'undefined') ? config.gravity : 36;
             state.velocity.y += gravity * dt;
-            // Raise terminal velocity to match higher movement units
             state.velocity.y = Math.min(state.velocity.y, 2000);
         }
 
@@ -313,14 +436,34 @@ class Match {
         state.position.x += state.velocity.x * dt;
         state.position.y += state.velocity.y * dt;
 
+        // CHECK FOR SLAM LANDING
+        if (player.isSlamAttacking && state.position.y >= 600) {
+            state.position.y = 600;
+            state.velocity.y = 0;
+            state.onGround = true;
+            state.isAttacking = false;
+            state.state = 'idle';
+            this.resolveSlamLanding(player);
+            player.isSlamAttacking = false;
+            player.slamLandingHitbox = null;
+            player.attackTimer = 1.0; // Slam cooldown
+            return;
+        }
+
         // GROUND COLLISION
         if (state.position.y >= 600) {
             state.position.y = 600;
             state.velocity.y = 0;
             state.onGround = true;
+            
+            // Reset state from slam when landing naturally
+            if (state.state === 'slam') {
+                state.state = 'idle';
+                player.isSlamAttacking = false;
+            }
         }
 
-        // WALL BOUNDARIES - Keep in arena and stop dash when hitting an edge
+        // WALL BOUNDARIES
         let hitBoundary = false;
         if (state.position.x < 50) {
             state.position.x = 50;
@@ -344,7 +487,7 @@ class Match {
             const dashDuration = config.dashDuration || 0.2;
             if (state.dashTimer >= dashDuration) {
                 state.isDashing = false;
-                // Reset dash attack flags when dash ends
+                state.velocity.x *= 0.3; // Slow down after dash
                 player.dashAttackInitiated = false;
                 player.dashAttackResolved = false;
             }
@@ -356,6 +499,7 @@ class Match {
             }
         }
 
+        // DASH RECHARGE
         if (state.dashCharges >= 3) {
             state.dashTimer = 0;
             state.canDash = true;
@@ -373,18 +517,14 @@ class Match {
         player.attackTimer -= dt;
         if (player.attackTimer < 0) player.attackTimer = 0;
 
-        // ATTACK SEQUENCE TIMER - Handle attack phases (startup, active, recovery)
-        if (state.isAttacking && player.attackSequence > 0) {
-            const attackDef = config.attacks[
-                player.attackSequence === 1 ? 'light' :
-                player.attackSequence === 2 ? 'medium' :
-                'heavy'
-            ];
+        // RESTORED: ATTACK SEQUENCE PHASE TIMING
+        if (state.isAttacking && player.attackSequence > 0 && player.attackPhase !== 'none') {
+            const attackKey = player.attackSequence === 1 ? 'light' :
+                             player.attackSequence === 2 ? 'medium' : 'heavy';
+            const attackDef = config.attacks[attackKey];
             
             if (!attackDef) {
-                state.isAttacking = false;
-                player.attackSequence = 0;
-                player.attackCharge = false;
+                this.endAttack(player);
                 return;
             }
 
@@ -406,22 +546,36 @@ class Match {
             } else if (player.attackPhase === 'recovery') {
                 if (player.attackFrameTimer >= attackDef.recovery) {
                     // Attack complete
-                    state.isAttacking = false;
-                    state.state = 'idle';
-                    player.attackSequence = 0;
-                    player.attackPhase = 'none';
-                    player.attackTimer = config.attackInterval || 0.75;
-                    player.attackCharge = false;
+                    this.endAttack(player);
                 }
             }
         }
+    }
+    
+    /**
+     * Helper: End an attack cleanly
+     */
+    endAttack(player) {
+        const state = player.gameState;
+        state.isAttacking = false;
+        state.state = 'idle';
+        player.attackSequence = 0;
+        player.attackPhase = 'none';
+        player.attackFrameTimer = 0;
+        player.attackFrame = 0;
+        player.attackCharge = false;
+        player.strikeActive = false;
+        // Don't reset attackTimer - let it expire naturally for cooldown
+        if (player.attackTimer <= 0) {
+            player.attackTimer = player.config.attackInterval || 0.75;
+        }
+        console.log(`[Attack] ${player.clientId} attack complete`);
     }
 
     /**
      * Resolve collisions between players
      */
     resolveCollisions(player) {
-        // Simple circle collision detection
         Object.values(this.players).forEach(other => {
             if (other.clientId === player.clientId) return;
             if (other.gameState.isDefeated) return;
@@ -429,10 +583,9 @@ class Match {
             const dx = player.gameState.position.x - other.gameState.position.x;
             const dy = player.gameState.position.y - other.gameState.position.y;
             const distance = Math.sqrt(dx * dx + dy * dy);
-            const minDistance = 50; // Sum of radii
+            const minDistance = 50;
 
             if (distance < minDistance) {
-                // Push players apart
                 const overlap = minDistance - distance;
                 const pushX = (dx / distance) * overlap / 2;
                 const pushY = (dy / distance) * overlap / 2;
@@ -503,7 +656,7 @@ class Match {
     }
 
     /**
-     * Handle player input
+     * Handle player input - stores current and previous input for edge detection
      */
     handleInput(playerId, input) {
         if (!this.running) return;
@@ -511,223 +664,27 @@ class Match {
         const player = this.players[playerId];
         if (!player || player.gameState.isDefeated) return;
 
-        // Store input state
-        player.input = input;
-    }
-
-    /**
-     * Resolve attack with server authority
-     */
-    resolveAttack(attackerId, attackData) {
-        if (!this.running) return;
+        // Store previous input state
+        player.prevInput = { ...player.input };
         
-        const attacker = this.players[attackerId];
-        if (!attacker || attacker.gameState.isDefeated || attacker.gameState.state === 'staggered') return;
-        
-        // Find all valid targets
-        const defenders = Object.values(this.players).filter(p => 
-            p.clientId !== attackerId && !p.gameState.isDefeated
-        );
-        
-        if (defenders.length === 0) return;
-        
-        const results = [];
-        
-        // Check each defender for hit
-        defenders.forEach(defender => {
-            const hit = this.engine.checkHit(
-                attacker.gameState.position,
-                defender.gameState.position,
-                attackData.range || 100,
-                attacker.gameState.facing
-            );
-            
-            if (hit) {
-                const config = {
-                    staggerThreshold: attacker.config.staggerThreshold,
-                    staggerLength: attacker.config.staggerLength
-                };
-                
-                const result = this.engine.resolveAttack(
-                    attacker.gameState,
-                    defender.gameState,
-                    attackData,
-                    config
-                );
-                
-                results.push({
-                    targetId: defender.clientId,
-                    damage: result.damage,
-                    defenderHp: result.defenderHp,
-                    hit: result.hit,
-                    defeated: result.defeated,
-                    knockback: result.knockback
-                });
-            }
-        });
-        
-        // Update charged attack state
-        attacker.gameState.attackCharge = !!attackData.chargeAttack;
-
-        if (results.length > 0) {
-            attacker.gameState.attackCounter = Math.min(3, (attacker.gameState.attackCounter || 0) + 1);
-        }
-
-        // Broadcast attack results
-        this.broadcast({
-            type: 'attackResult',
-            attackerId: attackerId,
-            hits: results,
-            attackCounter: attacker.gameState.attackCounter,
-            chargeAttack: attacker.gameState.attackCharge
-        });
-        
-        return results;
-    }
-
-    /**
-     * Resolve dash attack - high speed attack during dash
-     */
-    resolveDashAttack(player) {
-        const attacker = player;
-        const state = player.gameState;
-        const config = player.config;
-        
-        // Dash attacks use enhanced stats
-        const attackData = {
-            range: 168,           // 40% increased range
-            baseDamage: 1.5,      // 1.5x base damage multiplier
-            knockback: 80,        // Moderate knockback
-            staggerDamage: 60,    // Stagger damage
-            statusEffects: [],
-            chargeAttack: false,
-            isDashAttack: true
+        // Store current input state (merge with defaults)
+        player.input = { 
+            left: !!input.left,
+            right: !!input.right,
+            up: !!input.up,
+            down: !!input.down,
+            attack: !!input.attack,
+            guard: !!input.guard,
+            dash: !!input.dash,
+            slam: !!input.slam,
+            attackPressed: !!input.attackPressed,
+            attackReleased: !!input.attackReleased
         };
-        
-        const defenders = Object.values(this.players).filter(p => 
-            p.clientId !== attacker.clientId && !p.gameState.isDefeated
-        );
-        
-        const results = [];
-        
-        defenders.forEach(defender => {
-            const hit = this.engine.checkHit(
-                state.position,
-                defender.gameState.position,
-                attackData.range,
-                state.facing
-            );
-            
-            if (hit) {
-                const result = this.engine.resolveAttack(
-                    state,
-                    defender.gameState,
-                    attackData,
-                    {
-                        staggerThreshold: attacker.config.staggerThreshold,
-                        staggerLength: attacker.config.staggerLength
-                    }
-                );
-                
-                results.push({
-                    targetId: defender.clientId,
-                    damage: result.damage,
-                    defenderHp: result.defenderHp,
-                    hit: result.hit,
-                    defeated: result.defeated,
-                    knockback: result.knockback
-                });
-            }
-        });
-        
-        // Broadcast dash attack results
-        if (results.length > 0) {
-            this.broadcast({
-                type: 'dashAttackResult',
-                attackerId: attacker.clientId,
-                hits: results
-            });
-        }
     }
 
     /**
-     * Resolve slam attack - AOE attack after jumping
-     */
-    resolveSlamAttack(player, targetId) {
-        const attacker = player;
-        const state = player.gameState;
-        const config = player.config;
-        
-        // Validate slam can be used
-        if (state.onGround) {
-            return { success: false, reason: 'Cannot slam on ground' };
-        }
-        
-        const abilityConfig = config.abilities.slam;
-        if (!abilityConfig) {
-            return { success: false, reason: 'No slam config' };
-        }
-        
-        // Slam creates an AOE at current position with landing damage
-        const slamPos = { x: state.position.x, y: 600 }; // Assume ground Y
-        const slamRadius = abilityConfig.range || 200;
-        
-        const defenders = Object.values(this.players).filter(p => 
-            p.clientId !== attacker.clientId && !p.gameState.isDefeated
-        );
-        
-        const results = [];
-        
-        defenders.forEach(defender => {
-            const dx = defender.gameState.position.x - slamPos.x;
-            const dy = defender.gameState.position.y - slamPos.y;
-            const distance = Math.hypot(dx, dy);
-            
-            if (distance <= slamRadius) {
-                const attackData = {
-                    range: slamRadius,
-                    baseDamage: abilityConfig.baseDamage,
-                    knockback: abilityConfig.knockback,
-                    staggerDamage: abilityConfig.baseDamage * 100, // Heavy stagger
-                    statusEffects: abilityConfig.statusEffects || [],
-                    chargeAttack: false
-                };
-                
-                const result = this.engine.resolveAttack(
-                    state,
-                    defender.gameState,
-                    attackData,
-                    {
-                        staggerThreshold: attacker.config.staggerThreshold,
-                        staggerLength: attacker.config.staggerLength
-                    }
-                );
-                
-                results.push({
-                    targetId: defender.clientId,
-                    damage: result.damage,
-                    defenderHp: result.defenderHp,
-                    hit: true,
-                    defeated: result.defeated,
-                    knockback: result.knockback
-                });
-            }
-        });
-        
-        // Broadcast slam attack results
-        this.broadcast({
-            type: 'slamAttackResult',
-            attackerId: attacker.clientId,
-            slamPos: slamPos,
-            radius: slamRadius,
-            hits: results
-        });
-        
-        return { success: true, results };
-    }
-
-    /**
-     * Check and resolve attack hits during active frame
+     * RESTORED: Check and resolve attack hits during active frame
+     * Uses rect-based hit detection from GameplayEngine
      */
     checkAttackHits(attacker) {
         if (!attacker.strikeActive || !attacker.attackSequence) return;
@@ -753,6 +710,28 @@ class Match {
         );
 
         defenders.forEach(defender => {
+            // RESTORED: Use rect-based hit detection
+            const hitResult = this.engine.checkAttackHit(
+                attacker.gameState.position,
+                defender.gameState.position,
+                attackDef.range,
+                attacker.gameState.facing,
+                defender.gameState.hitCooldown || 0
+            );
+
+            if (!hitResult.hit) return;
+
+            // Check if we already hit this target this attack
+            if (attacker.hitTargetsThisAttack && attacker.hitTargetsThisAttack.includes(defender.clientId)) {
+                return;
+            }
+
+            // Track this target as hit
+            if (!attacker.hitTargetsThisAttack) {
+                attacker.hitTargetsThisAttack = [];
+            }
+            attacker.hitTargetsThisAttack.push(defender.clientId);
+
             const result = this.engine.resolveAttack(
                 attacker.gameState,
                 defender.gameState,
@@ -765,9 +744,7 @@ class Match {
 
             if (!result.hit) return;
 
-            // Keep attack counter state in sync for the attacker
-            attacker.gameState.attackCounter = Math.min(3, (attacker.gameState.attackCounter || 0) + 1);
-
+            // Broadcast hit result
             this.broadcast({
                 type: 'HIT',
                 attackerId: attacker.clientId,
@@ -779,7 +756,8 @@ class Match {
                 statuses: result.statuses || [],
                 staggerResult: result.staggerResult || null,
                 chargeAttack: result.chargeAttack || false,
-                defeated: result.defeated
+                defeated: result.defeated,
+                wasGuarded: result.wasGuarded || false
             });
 
             if (result.consumeEvents) {
@@ -816,9 +794,143 @@ class Match {
                     defeatedBy: attacker.clientId
                 });
             }
+        });
+    }
 
-            // Mark attack as having hit (don't allow multiple hits per attack)
-            attacker.strikeActive = false;
+    /**
+     * Resolve dash attack - RESTORED with proper rect-based detection
+     */
+    resolveDashAttack(player) {
+        const attacker = player;
+        const state = player.gameState;
+        const config = player.config;
+        
+        // Dash attacks use enhanced stats
+        const attackData = {
+            range: 168,           // 40% increased range
+            baseDamage: 1.5,      // 1.5x base damage multiplier
+            knockback: 80,        // Moderate knockback
+            staggerDamage: 60,    // Stagger damage
+            statusEffects: [],
+            chargeAttack: false,
+            isDashAttack: true
+        };
+        
+        const defenders = Object.values(this.players).filter(p => 
+            p.clientId !== attacker.clientId && !p.gameState.isDefeated
+        );
+        
+        const results = [];
+        
+        defenders.forEach(defender => {
+            // RESTORED: Use rect-based hit detection with dash range bonus
+            const hitResult = this.engine.checkAttackHit(
+                state.position,
+                defender.gameState.position,
+                attackData.range * 1.5, // 50% increased range for dash
+                state.facing,
+                defender.gameState.hitCooldown || 0
+            );
+            
+            if (!hitResult.hit) return;
+            
+            const result = this.engine.resolveAttack(
+                state,
+                defender.gameState,
+                attackData,
+                {
+                    staggerThreshold: attacker.config.staggerThreshold,
+                    staggerLength: attacker.config.staggerLength
+                }
+            );
+            
+            results.push({
+                targetId: defender.clientId,
+                damage: result.damage,
+                defenderHp: result.defenderHp,
+                hit: result.hit,
+                defeated: result.defeated,
+                knockback: result.knockback
+            });
+        });
+        
+        // Broadcast dash attack results
+        if (results.length > 0) {
+            this.broadcast({
+                type: 'dashAttackResult',
+                attackerId: attacker.clientId,
+                hits: results
+            });
+        }
+    }
+
+    /**
+     * RESTORED: Resolve slam attack landing with AOE damage
+     */
+    resolveSlamLanding(player) {
+        const state = player.gameState;
+        const config = player.config;
+        
+        // Slam position (at ground level)
+        const slamPos = { x: state.position.x, y: 600 };
+        const slamRadius = 80;
+        
+        const defenders = Object.values(this.players).filter(p => 
+            p.clientId !== player.clientId && !p.gameState.isDefeated
+        );
+        
+        let hitAny = false;
+        
+        defenders.forEach(defender => {
+            const dx = defender.gameState.position.x - slamPos.x;
+            const dy = defender.gameState.position.y - slamPos.y;
+            const distance = Math.hypot(dx, dy);
+            
+            if (distance <= slamRadius) {
+                const attackData = {
+                    range: slamRadius,
+                    baseDamage: config.baseDamage * 2,
+                    knockback: 150,
+                    staggerDamage: config.baseDamage * 100,
+                    statusEffects: [],
+                    chargeAttack: false,
+                    isDashAttack: false
+                };
+                
+                const result = this.engine.resolveAttack(
+                    state,
+                    defender.gameState,
+                    attackData,
+                    {
+                        staggerThreshold: config.staggerThreshold,
+                        staggerLength: config.staggerLength
+                    }
+                );
+                
+                hitAny = true;
+                
+                this.broadcast({
+                    type: 'slamHit',
+                    attackerId: player.clientId,
+                    targetId: defender.clientId,
+                    slamPos: slamPos,
+                    radius: slamRadius,
+                    damage: result.damage,
+                    defenderHp: result.defenderHp,
+                    hit: result.hit,
+                    defeated: result.defeated,
+                    knockback: result.knockback
+                });
+            }
+        });
+        
+        // Broadcast slam landing for VFX
+        this.broadcast({
+            type: 'slamLanding',
+            attackerId: player.clientId,
+            slamPos: slamPos,
+            radius: slamRadius,
+            hitAny: hitAny
         });
     }
 
@@ -830,12 +942,11 @@ class Match {
         
         // Handle slam attack specially (direct server-side resolution)
         if (abilityId === 'slamAttack') {
-            return this.resolveSlamAttack(attacker, targetId);
+            return this.startSlamAttack(attacker);
         }
         
         const target = targetId ? this.players[targetId] : null;
         
-        // Execute ability through GameplayEngine
         const result = this.engine.executeAbility(
             attacker.gameState,
             abilityId,
@@ -843,7 +954,6 @@ class Match {
             target ? target.gameState : null
         );
         
-        // Broadcast result
         result.fighterId = attackerId;
         result.abilityId = abilityId;
         this.broadcast({
@@ -855,41 +965,14 @@ class Match {
     }
 
     /**
-     * Broadcast snapshot to all clients in room
+     * Broadcast snapshot to all clients
      */
-//     async broadcastSnapshot() {
-//         const snapshot = {
-//             players: Object.values(this.players).map(player => ({
-//                 id: player.clientId,
-//                 x: player.gameState.position.x,
-//                 y: player.gameState.position.y,
-//                 vx: player.gameState.velocity.x,
-//                 vy: player.gameState.velocity.y,
-//                 hp: player.gameState.hp,
-//                 maxHp: player.gameState.maxHp,
-//                 state: player.gameState.state,
-//                 facing: player.gameState.facing,
-//                 statuses: player.gameState.statuses,
-//                 isDefeated: player.gameState.isDefeated,
-//                 isAttacking: player.gameState.isAttacking || false,
-//                 isGuarding: player.gameState.isGuarding || false,
-//                 isDashing: player.gameState.isDashing || false
-//             }))
-//         };
-//         console.log("snapshot sent");
-//        // this.io.to(this.room.id).emit('snapshot', snapshot);
-//        //this.io.emit('snapshot', snapshot);
-//        this.room.clients.forEach(id => {
-//     const socket = this.io.sockets.sockets.get(id);
-//     if (socket) socket.emit('snapshot', snapshot);
-// });
-// console.log("ROOM CLIENT IDS:", this.room.clients);
-// console.log("SOCKET IDS IN ROOM:", await this.io.in(this.room.id).allSockets());
-//     //    console.log("EMITTING TO ROOM:", this.room.id);
-//     //    console.log("ROOM SOCKETS:", await this.io.in(this.room.id).allSockets());
-      
-//     }
-broadcastSnapshot() {
+    broadcastSnapshot() {
+        // Update prevInput for next tick (done here to ensure proper edge detection)
+        Object.values(this.players).forEach(player => {
+            player.prevInput = { ...player.input };
+        });
+
         const snapshot = {
             players: Object.values(this.players).map(player => ({
                 id: player.clientId,
@@ -908,26 +991,22 @@ broadcastSnapshot() {
                 isDashing: player.gameState.isDashing || false,
                 dashCharges: player.gameState.dashCharges || 0,
                 onGround: player.gameState.onGround || false,
-                // Attack state for client-side animation
+                // Attack state for client animation
                 attackSequence: player.attackSequence || 0,
                 attackPhase: player.attackPhase || 'none',
+                attackFrameTimer: player.attackFrameTimer || 0,
+                attackFrame: player.attackFrame || 0,
                 strikeActive: player.strikeActive || false,
-                attackCounter: player.gameState.attackCounter || 0,
-                chargeAttack: player.attackCharge || (this.engine.combatState[player.clientId] || {}).chargeAttack || false
+                attackCounter: player.attackCounter || 0,
+                chargeAttack: player.attackCharge || false,
+                // Slam state
+                isSlamAttacking: player.isSlamAttacking || false,
+                // Dash attack state
+                dashAttackQueued: player.dashAttackQueued || false
             }))
         };
 
-        console.log("snapshot sent");
-        console.log("EMIT snapshot to room:", this.room.id);
         this.io.to(this.room.id).emit('snapshot', snapshot);
-
-        this.io.in(this.room.id).allSockets()
-            .then(sockets => {
-                console.log("room sockets:", sockets);
-            })
-            .catch(err => {
-                console.error("Failed to inspect room sockets:", err);
-            });
     }
 
     /**

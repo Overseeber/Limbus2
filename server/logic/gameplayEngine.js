@@ -1,22 +1,7 @@
 /**
  * GAMEPLAY ENGINE - SERVER-SIDE AUTHORITY
- * Pure JavaScript (no p5.js, no window object)
- * 
- * Handles all authoritative game logic:
- * - Damage calculation and application
- * - Hit detection
- * - Stagger system
- * - Status effect application and resolution  
- * - Combo system
- * - Ability validation and execution
- * - Cooldown management
- * - Movement validation
- * - Combat state transitions
- * - Knockback calculation
- * - Defeat detection
  */
 
-// Arena constants (mirrored from public/constants.js)
 const ARENA_WIDTH = 1400;
 const ARENA_HEIGHT = 700;
 const GRAVITY = 0.6;
@@ -25,978 +10,273 @@ class GameplayEngine {
   constructor() {
     this.combatState = {};
     this.characterLogic = {};
-    this.groundY = ARENA_HEIGHT - 100; // Match spawnY = height - 100
+    this.groundY = ARENA_HEIGHT - 100;
   }
 
-  /**
-   * INITIALIZE CHARACTER STATE
-   * Called when a character joins the battle
-   */
   initializeCharacter(characterId, characterKey) {
     const config = this.getCharacterConfig(characterKey);
-    if (!config) {
-      throw new Error(`Invalid character: ${characterKey}`);
-    }
+    if (!config) throw new Error(`Invalid character: ${characterKey}`);
 
     const state = {
-      id: characterId,
-      characterKey: characterKey,
-      hp: config.maxHp,
-      maxHp: config.maxHp,
-      baseDamage: config.baseDamage,
-      speed: config.speed,
-      knockbackMultiplier: config.knockbackMultiplier || 1.0,
-      kbResist: 0.08,
-      position: { x: 0, y: 0 },
-      velocity: { x: 0, y: 0 },
-      facing: 1, // 1 = right, -1 = left
-      
-      // PHYSICS STATE
-      onGround: true,
-      canDash: true,
-      dashCooldown: 0,
-      
-      // ACTION FLAGS
-      isAttacking: false,
-      isGuarding: false,
-      isDashing: false,
-      
-      // COMBAT STATE
-      state: 'idle', // idle, attacking, staggered, recovering, defeated
-      stagger: 0,
-      staggerTimer: 0,
-      staggerRecoveryTimer: 0,
-      isDefeated: false,
-      
-      // COOLDOWNS
-      attackCooldown: 0,
-      abilityCooldowns: {},
-      
-      // STATUS EFFECTS
-      statuses: [],
-      
-      // COMBO SYSTEM
-      combo: 0,
-      comboTimer: 0,
-      attackCounter: 0,
-      
-      // CHARACTER-SPECIFIC RESOURCES
-      resources: {}
+      id: characterId, characterKey, hp: config.maxHp, maxHp: config.maxHp,
+      baseDamage: config.baseDamage, speed: config.speed,
+      knockbackMultiplier: config.knockbackMultiplier || 1.0, kbResist: 0.08,
+      position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, facing: 1,
+      onGround: true, canDash: true, dashCooldown: 0,
+      isAttacking: false, isGuarding: false, isDashing: false,
+      state: 'idle', stagger: 0, staggerTimer: 0, staggerRecoveryTimer: 0, isDefeated: false,
+      attackCooldown: 0, abilityCooldowns: {}, statuses: [],
+      combo: 0, comboTimer: 0, attackCounter: 0, resources: {}
     };
-
-    // Initialize character-specific resources
     this.initializeCharacterResources(state, characterKey, config);
-    
-    // Initialize ability cooldowns
-    Object.keys(config.abilities || {}).forEach(abilityName => {
-      state.abilityCooldowns[abilityName] = 0;
-    });
-
-    // Initialize combat state
-    this.combatState[characterId] = {
-      combo: 0,
-      comboTimer: 0,
-      attackCounter: 0,
-      chargeAttack: false,
-      lastAttackHit: false
-    };
-
+    Object.keys(config.abilities || {}).forEach(a => { state.abilityCooldowns[a] = 0; });
+    this.combatState[characterId] = { combo: 0, comboTimer: 0, attackCounter: 0, chargeAttack: false, lastAttackHit: false, hitTargetsThisAttack: [] };
     return state;
   }
 
-  /**
-   * INITIALIZE CHARACTER-SPECIFIC RESOURCES
-   */
+  resetHitTargets(id) { const s = this.combatState[id]; if (s) s.hitTargetsThisAttack = []; }
+  hasHitTargetThisAttack(id, tid) { const s = this.combatState[id]; return s && s.hitTargetsThisAttack.includes(tid); }
+  markHitTarget(id, tid) { const s = this.combatState[id]; if (s) s.hitTargetsThisAttack.push(tid); }
+
   initializeCharacterResources(state, characterKey, config) {
     if (characterKey === 'CALLISTO') {
-      state.resources = {
-        corpusIngredient: 0,
-        maxCorpusIngredient: config.corpusIngredient.max,
-        artworkTibiaStacks: 0,
-        corpusSpentTotal: 0,
-        slamCooldownActive: false,
-        slamBuffActive: false
-      };
+      state.resources = { corpusIngredient: 0, maxCorpusIngredient: config.corpusIngredient.max, artworkTibiaStacks: 0, corpusSpentTotal: 0, slamCooldownActive: false, slamBuffActive: false };
     } else if (characterKey === 'VALENCINA') {
-      state.resources = {
-        accelerationRounds: 0,
-        maxAccelerationRounds: config.accelerationRounds.max,
-        precognition: config.precognition.startingValue,
-        maxPrecognition: config.precognition.max,
-        overheat: 0,
-        maxOverheat: config.overheat.max,
-        shinActive: false
-      };
+      state.resources = { accelerationRounds: 0, maxAccelerationRounds: config.accelerationRounds.max, precognition: config.precognition.startingValue, maxPrecognition: config.precognition.max, overheat: 0, maxOverheat: config.overheat.max, shinActive: false };
     }
   }
 
-  /**
-   * GET CHARACTER CONFIG
-   */
-  getCharacterConfig(characterKey) {
-    try {
-      return require(`../../shared/characters/${characterKey.toLowerCase()}`);
-    } catch (e) {
-      return null;
-    }
+  getCharacterConfig(key) { try { return require(`../../shared/characters/${key.toLowerCase()}`); } catch(e) { return null; } }
+
+  calcAttackBox(pos, facing, range) { return { x: pos.x + facing * (range / 2), y: pos.y - 28, w: range, h: 70 }; }
+  getPlayerBox(pos) { return { x: pos.x - 25, y: pos.y - 36, w: 50, h: 72 }; }
+  hitOpponent(box, dPos, cd) { return this.checkRectOverlap(this.getPlayerBox(dPos), { x: box.x - box.w / 2, y: box.y, w: box.w, h: box.h }) && !cd; }
+  checkRectOverlap(r1, r2) { return !(r1.x + r1.w < r2.x || r2.x + r2.w < r1.x || r1.y + r1.h < r2.y || r2.y + r2.h < r1.y); }
+  
+  checkHit(aPos, tPos, range, facing) {
+    const dist = Math.hypot(aPos.x - tPos.x, aPos.y - tPos.y);
+    if (dist > range) return false;
+    const inFront = facing > 0 ? tPos.x > aPos.x : tPos.x < aPos.x;
+    return inFront || (!inFront && Math.abs(aPos.x - tPos.x) < range * 0.3);
   }
 
-  // ============================
-  // HIT DETECTION
-  // ============================
-
-  /**
-   * Check if an attack hits a target based on distance
-   * Pure JS replacement for p5.js dist()
-   */
-  checkHit(attackerPos, targetPos, attackRange, facing) {
-    const dx = attackerPos.x - targetPos.x;
-    const dy = attackerPos.y - targetPos.y;
-    const distance = Math.hypot(dx, dy);
-    
-    if (distance > attackRange) return false;
-    
-    // Check if target is in front of attacker (based on facing direction)
-    const isInFront = facing > 0 
-      ? targetPos.x > attackerPos.x 
-      : targetPos.x < attackerPos.x;
-    
-    // Allow a small area behind for forgiveness  
-    const behindThreshold = attackRange * 0.3;
-    const isBehind = !isInFront && Math.abs(attackerPos.x - targetPos.x) < behindThreshold;
-    
-    return isInFront || isBehind;
+  checkAttackHit(aPos, dPos, range, facing, cd) {
+    return { hit: this.hitOpponent(this.calcAttackBox(aPos, facing, range), dPos, cd > 0), distance: Math.hypot(aPos.x - dPos.x, 0) };
   }
 
-  /**
-   * Rect-based hitbox overlap detection
-   */
-  checkRectOverlap(box1, box2) {
-    return !(
-      box1.x + box1.w < box2.x ||
-      box2.x + box2.w < box1.x ||
-      box1.y + box1.h < box2.y ||
-      box2.y + box2.h < box1.y
-    );
+  calculateDamage(base, attacker, defender) {
+    let d = base * (attacker.baseDamage || 1);
+    const cs = this.combatState[attacker.id] || {};
+    d += (cs.combo || 0) * 2;
+    if (cs.attackCounter === 3) d *= 2;
+    if (cs.chargeAttack) d *= 1.4;
+    if (this.hasStatus(defender, 'Poise')) d *= 1.15;
+    if (defender.state === 'staggered') d *= 2;
+    if (attacker.characterKey === 'CALLISTO' && attacker.resources.artworkTibiaStacks > 0) d *= 1 + 0.1 * attacker.resources.artworkTibiaStacks;
+    if (this.hasStatus(defender, 'Fragile')) { const s = this.getStatus(defender, 'Fragile'); d *= 1 + 0.1 * s.potency; }
+    if (this.hasStatus(defender, 'Protection')) { const s = this.getStatus(defender, 'Protection'); d *= 1 - 0.1 * s.potency; }
+    if (this.hasStatus(defender, 'Sinking')) { const s = this.getStatus(defender, 'Sinking'); d *= Math.max(0.5, 1 - 0.05 * Math.floor(s.potency / 5)); }
+    return Math.floor(d);
   }
 
-  // ============================
-  // DAMAGE CALCULATION
-  // ============================
+  calculateKnockback(base, attacker) { return Math.floor(Math.max(0, base) * (attacker.knockbackMultiplier || 1.0)); }
 
-  /**
-   * Calculate final damage with all modifiers
-   * This is the AUTHORITATIVE damage calculation
-   */
-  calculateDamage(baseDamage, attacker, defender) {
-    let damage = baseDamage;
-
-    // Apply base damage scaling
-    damage = damage * (attacker.baseDamage || 1);
-
-    // Get combat state for attacker
-    const combatState = this.combatState[attacker.id] || {};
-
-    // Combo bonus: +2 per combo count
-    damage += (combatState.combo || 0) * 2;
-
-    // Attack counter bonus: 200% on 3rd hit
-    if (combatState.attackCounter === 3) {
-      damage *= 2.0;
-    }
-
-    // Charge attack bonus: 40%
-    if (combatState.chargeAttack) {
-      damage *= 1.4;
-    }
-
-    // Poise bonus: 15%
-    if (this.hasStatus(defender, 'Poise')) {
-      damage *= 1.15;
-    }
-
-    // Staggered target bonus: 2x damage
-    if (defender.state === 'staggered') {
-      damage *= 2;
-    }
-
-    // Character-specific: Callisto's Artwork: Tibia bonus
-    if (attacker.characterKey === 'CALLISTO' && attacker.resources.artworkTibiaStacks > 0) {
-      const artworkBonus = 1 + (attacker.resources.artworkTibiaStacks * 0.1);
-      damage *= artworkBonus;
-    }
-
-    // Defender status effects
-    if (this.hasStatus(defender, 'Fragile')) {
-      const fragileStatus = this.getStatus(defender, 'Fragile');
-      const fragileMultiplier = 1 + (0.1 * fragileStatus.potency);
-      damage *= fragileMultiplier;
-    }
-
-    if (this.hasStatus(defender, 'Protection')) {
-      const protectionStatus = this.getStatus(defender, 'Protection');
-      const protectionMultiplier = 1 - (0.1 * protectionStatus.potency);
-      damage *= protectionMultiplier;
-    }
-
-    // Sinking resistance penalty
-    if (this.hasStatus(defender, 'Sinking')) {
-      const sinkingStatus = this.getStatus(defender, 'Sinking');
-      const resistancePenalty = 1 - (0.05 * Math.floor(sinkingStatus.potency / 5));
-      damage *= Math.max(0.5, resistancePenalty);
-    }
-
-    // Round down
-    return Math.floor(damage);
+  applyKnockback(fighter, knockback, direction, attacker) {
+    if (knockback <= 0) return;
+    const mult = (attacker && attacker.knockbackMultiplier) || 1.0;
+    // Horizontal knockback only - NO vertical pop to prevent upward drifting at 20tps
+    // At 20tps, even tiny upward velocity creates visible drift before gravity catches it
+    fighter.velocity.x = direction * knockback * 8 * mult;
+    // Don't set onGround=false unless we actually pop up
+    // This keeps gravity working on the ground plane and prevents cumulative floating
+    fighter.position.x = Math.max(60, Math.min(ARENA_WIDTH - 60, fighter.position.x));
   }
 
-  /**
-   * Calculate knockback amount
-   */
-  calculateKnockback(baseKnockback, attacker) {
-    let knockback = baseKnockback || 0;
-    knockback *= (attacker.knockbackMultiplier || 1.0);
-    return Math.max(0, Math.floor(knockback));
-  }
-
-  /**
-   * Apply knockback to a fighter
-   */
-  applyKnockback(fighter, knockback, direction) {
-    fighter.velocity.x = knockback * direction;
-    fighter.velocity.y = -5; // Slight upward pop
-    
-    // Clamp to arena boundaries
-    fighter.position.x = Math.max(60, Math.min(ARENA_WIDTH - 60, fighter.position.x + knockback * direction));
-  }
-
-  // ============================
-  // STAGGER SYSTEM
-  // ============================
-
-  /**
-   * Apply stagger damage to a fighter
-   */
-  applyStagger(fighter, staggerAmount, config) {
-    const threshold = config.staggerThreshold || 1000;
-    const length = config.staggerLength || 5;
-    
-    fighter.stagger += staggerAmount;
-    
-    // Check if stagger threshold is reached
-    if (fighter.stagger >= threshold && fighter.state !== 'staggered') {
-      fighter.state = 'staggered';
-      fighter.staggerTimer = length;
-      fighter.stagger = threshold;
-      
-      return {
-        staggered: true,
-        duration: length
-      };
+  applyStagger(fighter, amount, config) {
+    fighter.stagger += amount;
+    if (fighter.stagger >= (config.staggerThreshold || 1000) && fighter.state !== 'staggered') {
+      fighter.state = 'staggered'; fighter.staggerTimer = config.staggerLength || 5; fighter.stagger = config.staggerThreshold || 1000;
+      return { staggered: true, duration: config.staggerLength || 5 };
     }
-    
     return { staggered: false, stagger: fighter.stagger };
   }
 
-  /**
-   * Update stagger state (called per tick)
-   */
   updateStagger(fighter, dt, config) {
-    const threshold = config.staggerThreshold || 1000;
-    const length = config.staggerLength || 5;
-    
+    const threshold = config.staggerThreshold || 1000, length = config.staggerLength || 5;
     if (fighter.state === 'staggered') {
       if (fighter.staggerTimer > 0) {
-        fighter.staggerTimer -= dt;
-        // Stagger bar decreases over time
-        fighter.stagger = (fighter.staggerTimer / length) * threshold;
-        
-        if (fighter.staggerTimer <= 0) {
-          // Enter recovery phase
-          fighter.staggerRecoveryTimer = length;
-          fighter.stagger = 0;
-          return { state: 'recovering', recoveryTimer: length };
-        }
+        fighter.staggerTimer -= dt; fighter.stagger = (fighter.staggerTimer / length) * threshold;
+        if (fighter.staggerTimer <= 0) { fighter.staggerRecoveryTimer = length; fighter.stagger = 0; return { state: 'recovering', recoveryTimer: length }; }
         return { state: 'staggered', timer: fighter.staggerTimer };
       }
     }
-    
     if (fighter.staggerRecoveryTimer > 0) {
       fighter.staggerRecoveryTimer -= dt;
-      if (fighter.staggerRecoveryTimer <= 0) {
-        fighter.state = 'idle';
-        fighter.stagger = 0;
-        return { state: 'idle' };
-      }
-      return { state: 'recovering', recoveryTimer: fighter.staggerRecoveryTimer };
+      if (fighter.staggerRecoveryTimer <= 0) { fighter.state = 'idle'; fighter.stagger = 0; return { state: 'idle' }; }
+      return { state: 'recovering' };
     }
-    
     return { state: fighter.state };
   }
 
-  // ============================
-  // STATUS EFFECT SYSTEM
-  // ============================
-
-  /**
-   * Apply a status effect to a fighter
-   */
-  applyStatus(target, statusType, count, potency) {
-    const existing = target.statuses.find(s => s.type === statusType);
-    
-    if (existing) {
-      existing.count = (existing.count || 0) + (count || 1);
-      existing.potency = (existing.potency || 0) + (potency || 0);
-      return {
-        applied: false,
-        updated: true,
-        count: existing.count,
-        potency: existing.potency
-      };
-    } else {
-      target.statuses.push({
-        type: statusType,
-        count: count || 1,
-        potency: potency || 0,
-        timer: 0
-      });
-      return {
-        applied: true,
-        updated: false,
-        count: count || 1,
-        potency: potency || 0
-      };
-    }
+  applyStatus(target, type, count, potency) {
+    const existing = target.statuses.find(s => s.type === type);
+    if (existing) { existing.count = (existing.count || 0) + (count || 1); existing.potency = (existing.potency || 0) + (potency || 0); return { applied: false, updated: true, count: existing.count, potency: existing.potency }; }
+    target.statuses.push({ type, count: count || 1, potency: potency || 0, timer: 0 });
+    return { applied: true };
   }
 
-  /**
-   * Process status effects for a tick
-   */
   processStatuses(fighter, dt) {
     const events = [];
-    
-    fighter.statuses = fighter.statuses.filter(status => {
-      switch (status.type) {
-        case 'Burn':
-          status.timer += dt;
-          if (status.timer >= 1) {
-            status.timer = 0;
-            status.count -= 1;
-            const burnDamage = status.potency;
-            fighter.hp = Math.max(0, fighter.hp - burnDamage);
-            events.push({ type: 'BURN_DAMAGE', damage: burnDamage, hp: fighter.hp });
-          }
-          return status.count > 0;
-
-        case 'Bleed':
-          status.timer += dt;
-          if (status.timer >= 1) {
-            status.timer = 0;
-            status.potency = Math.max(0, status.potency - 1);
-          }
-          return status.potency > 0 && status.count > 0;
-
-        case 'Tremor':
-          status.timer += dt;
-          if (status.count <= 0) {
-            fighter.stagger += status.potency;
-            events.push({ type: 'TREMOR_STAGGER', amount: status.potency });
-            return false;
-          }
-          return true;
-
-        case 'Haste':
-          return status.count > 0;
-
-        case 'Bind':
-          return status.count > 0;
-
-        case 'Sinking':
-          status.timer += dt;
-          return status.count > 0;
-
-        case 'Fragile':
-        case 'Protection':
-          return status.count > 0;
-
-        case 'Poise':
-          // Count decreases on crit
-          return status.count > 0;
-
-        default:
-          status.timer += dt;
-          return status.count > 0 && status.timer < 30;
+    fighter.statuses = fighter.statuses.filter(s => {
+      switch (s.type) {
+        case 'Burn': s.timer += dt; if (s.timer >= 1) { s.timer = 0; s.count -= 1; fighter.hp = Math.max(0, fighter.hp - s.potency); events.push({ type: 'BURN_DAMAGE', damage: s.potency, hp: fighter.hp }); } return s.count > 0;
+        case 'Bleed': s.timer += dt; if (s.timer >= 1) { s.timer = 0; s.potency = Math.max(0, s.potency - 1); } return s.potency > 0 && s.count > 0;
+        case 'Tremor': s.timer += dt; if (s.count <= 0) { fighter.stagger += s.potency; events.push({ type: 'TREMOR_STAGGER', amount: s.potency }); return false; } return true;
+        case 'Haste': case 'Bind': case 'Sinking': s.timer += dt; return s.count > 0;
+        case 'Fragile': case 'Protection': case 'Poise': return s.count > 0;
+        default: s.timer += dt; return s.count > 0 && s.timer < 30;
       }
     });
-    
-    // Check defeat from status damage
-    if (fighter.hp <= 0 && !fighter.isDefeated) {
-      fighter.isDefeated = true;
-      fighter.velocity.x = 0;
-      fighter.velocity.y = 0;
-      fighter.state = 'defeated';
-      events.push({ type: 'DEFEATED' });
-    }
-    
+    if (fighter.hp <= 0 && !fighter.isDefeated) { fighter.isDefeated = true; fighter.velocity.x = 0; fighter.velocity.y = 0; fighter.state = 'defeated'; events.push({ type: 'DEFEATED' }); }
     return events;
   }
 
-  /**
-   * Consume statuses when a fighter is hit
-   */
   consumeOnHit(fighter) {
     const events = [];
-    
-    // Bleed: lose 1 count, trigger damage if reaches 0
-    const bleedStatus = fighter.statuses.find(s => s.type === 'Bleed');
-    if (bleedStatus) {
-      bleedStatus.count -= 1;
-      if (bleedStatus.count <= 0) {
-        const damage = bleedStatus.potency;
-        if (damage > 0) {
-          fighter.hp = Math.max(0, fighter.hp - damage);
-          events.push({ type: 'BLEED_DAMAGE', damage });
-        }
-        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed');
-      }
-    }
-    
-    // Rupture: lose 1 count, trigger damage
-    const ruptureStatus = fighter.statuses.find(s => s.type === 'Rupture');
-    if (ruptureStatus) {
-      const ruptureDamage = ruptureStatus.potency;
-      fighter.hp = Math.max(0, fighter.hp - ruptureDamage);
-      events.push({ type: 'RUPTURE_DAMAGE', damage: ruptureDamage });
-      
-      ruptureStatus.count -= 1;
-      if (ruptureStatus.count <= 0) {
-        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Rupture');
-      }
-    }
-    
-    // Sinking: lose 1 count
-    const sinkingStatus = fighter.statuses.find(s => s.type === 'Sinking');
-    if (sinkingStatus) {
-      sinkingStatus.count -= 1;
-      if (sinkingStatus.count <= 0) {
-        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Sinking');
-      }
-    }
-    
+    const bleed = fighter.statuses.find(s => s.type === 'Bleed');
+    if (bleed) { bleed.count -= 1; if (bleed.count <= 0) { const d = bleed.potency; if (d > 0) { fighter.hp = Math.max(0, fighter.hp - d); events.push({ type: 'BLEED_DAMAGE', damage: d }); } fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed'); } }
+    const rupture = fighter.statuses.find(s => s.type === 'Rupture');
+    if (rupture) { const d = rupture.potency; fighter.hp = Math.max(0, fighter.hp - d); events.push({ type: 'RUPTURE_DAMAGE', damage: d }); rupture.count -= 1; if (rupture.count <= 0) fighter.statuses = fighter.statuses.filter(s => s.type !== 'Rupture'); }
+    const sink = fighter.statuses.find(s => s.type === 'Sinking');
+    if (sink) { sink.count -= 1; if (sink.count <= 0) fighter.statuses = fighter.statuses.filter(s => s.type !== 'Sinking'); }
     return events;
   }
 
-  /**
-   * Consume Bleed when the fighter attacks
-   */
   consumeBleedOnAttack(fighter) {
     const events = [];
-    
-    const bleedStatus = fighter.statuses.find(s => s.type === 'Bleed');
-    if (bleedStatus && bleedStatus.potency > 0) {
-      const damage = bleedStatus.potency;
-      fighter.hp = Math.max(0, fighter.hp - damage);
-      events.push({ type: 'BLEED_ATTACK_DAMAGE', damage });
-      
-      bleedStatus.count -= 1;
-      if (bleedStatus.count <= 0) {
-        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed');
-      }
-    }
-    
+    const bleed = fighter.statuses.find(s => s.type === 'Bleed');
+    if (bleed && bleed.potency > 0) { const d = bleed.potency; fighter.hp = Math.max(0, fighter.hp - d); events.push({ type: 'BLEED_ATTACK_DAMAGE', damage: d }); bleed.count -= 1; if (bleed.count <= 0) fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed'); }
     return events;
   }
 
-  // ============================
-  // COMBO SYSTEM
-  // ============================
+  addCombo(id) { const s = this.combatState[id]; if (!s) return 0; s.combo = (s.combo || 0) + 1; s.comboTimer = 1.4; return s.combo; }
+  updateCombos(dt) { Object.values(this.combatState).forEach(s => { if (s.comboTimer > 0) { s.comboTimer -= dt; if (s.comboTimer <= 0) s.combo = 0; } }); }
+  incrementAttackCounter(id) { const s = this.combatState[id]; if (!s) return 0; s.attackCounter = Math.min(3, (s.attackCounter || 0) + 1); return s.attackCounter; }
 
-  /**
-   * Add combo to attacker
-   */
-  addCombo(attackerId) {
-    const combatState = this.combatState[attackerId];
-    if (!combatState) return 0;
-    
-    combatState.combo = (combatState.combo || 0) + 1;
-    combatState.comboTimer = 1.4;
-    return combatState.combo;
-  }
-
-  /**
-   * Update combos (call per tick)
-   */
-  updateCombos(dt) {
-    Object.values(this.combatState).forEach(state => {
-      if (state.comboTimer > 0) {
-        state.comboTimer -= dt;
-        if (state.comboTimer <= 0) {
-          state.combo = 0;
-        }
-      }
-    });
-  }
-
-  // ============================
-  // ATTACK COUNTER SYSTEM
-  // ============================
-
-  /**
-   * Increment attack counter (1-3 rotation)
-   */
-  incrementAttackCounter(attackerId) {
-    const combatState = this.combatState[attackerId];
-    if (!combatState) return 0;
-    
-    combatState.attackCounter = Math.min(3, (combatState.attackCounter || 0) + 1);
-    return combatState.attackCounter;
-  }
-
-  // ============================
-  // MOVEMENT
-  // ============================
-
-  /**
-   * Apply gravity to a fighter
-   */
   applyGravity(fighter) {
-    if (fighter.position.y < this.groundY) {
-      fighter.velocity.y += GRAVITY;
-    }
-    
+    if (fighter.position.y < this.groundY) fighter.velocity.y += GRAVITY;
     fighter.position.y += fighter.velocity.y;
-    
-    // Ground clamp
-    if (fighter.position.y >= this.groundY) {
-      fighter.position.y = this.groundY;
-      fighter.velocity.y = 0;
-    }
+    if (fighter.position.y >= this.groundY) { fighter.position.y = this.groundY; fighter.velocity.y = 0; }
   }
 
-  /**
-   * Validate a movement request
-   */
-  validateMovement(fighter, velocity) {
-    const newX = fighter.position.x + velocity.x;
-    const newY = fighter.position.y + velocity.y;
-    
-    // Boundary check
-    if (newX < 60 || newX > ARENA_WIDTH - 60) {
-      return {
-        valid: false,
-        reason: 'BOUNDARY',
-        clampedX: Math.max(60, Math.min(ARENA_WIDTH - 60, newX))
-      };
-    }
-    
-    // Speed validation
-    const speed = Math.abs(velocity.x);
-    if (speed > (fighter.speed || 9) * 1.5) {
-      return {
-        valid: false,
-        reason: 'SPEED_EXCEEDED'
-      };
-    }
-    
-    return { valid: true, x: newX, y: newY };
+  validateMovement(fighter, v) {
+    const nx = fighter.position.x + v.x;
+    if (nx < 60 || nx > ARENA_WIDTH - 60) return { valid: false, reason: 'BOUNDARY', clampedX: Math.max(60, Math.min(ARENA_WIDTH - 60, nx)) };
+    if (Math.abs(v.x) > (fighter.speed || 9) * 1.5) return { valid: false, reason: 'SPEED_EXCEEDED' };
+    return { valid: true, x: nx, y: fighter.position.y + v.y };
   }
 
-  // ============================
-  // VALIDATE AND EXECUTE ABILITY
-  // ============================
-
-  /**
-   * Validate and execute an ability with full server authority
-   */
-  executeAbility(state, abilityName, targetId, targetState) {
+  executeAbility(state, name, targetId, targetState) {
     const config = this.getCharacterConfig(state.characterKey);
-    const abilityConfig = config.abilities[abilityName];
-
-    if (!abilityConfig) {
-      return { success: false, reason: 'Invalid ability' };
-    }
-
-    // CHECK COOLDOWN
-    if (state.abilityCooldowns[abilityName] > 0) {
-      return { 
-        success: false, 
-        reason: 'Ability on cooldown',
-        remainingCooldown: state.abilityCooldowns[abilityName]
-      };
-    }
-
-    // CHECK STATE (must not be staggered/defeated)
-    if (state.isDefeated || state.state === 'staggered') {
-      return { success: false, reason: 'Cannot act in current state' };
-    }
-
-    // CHARACTER-SPECIFIC VALIDATION
-    const validationResult = this.validateCharacterAbility(
-      state, 
-      abilityName, 
-      abilityConfig, 
-      config
-    );
-    if (!validationResult.success) {
-      return validationResult;
-    }
-
-    // EXECUTE CHARACTER-SPECIFIC ABILITY
-    const result = this.executeCharacterAbility(
-      state, 
-      abilityName, 
-      abilityConfig,
-      targetState,
-      config
-    );
-
-    if (result.success) {
-      // SET COOLDOWN
-      state.abilityCooldowns[abilityName] = abilityConfig.cooldown;
-    }
-
-    return result;
+    const ac = config.abilities[name];
+    if (!ac) return { success: false, reason: 'Invalid ability' };
+    if (state.abilityCooldowns[name] > 0) return { success: false, reason: 'Cooldown', remaining: state.abilityCooldowns[name] };
+    if (state.isDefeated || state.state === 'staggered') return { success: false, reason: 'Cannot act' };
+    const v = this.validateCharacterAbility(state, name, ac, config);
+    if (!v.success) return v;
+    const r = this.executeCharacterAbility(state, name, ac, targetState, config);
+    if (r.success) state.abilityCooldowns[name] = ac.cooldown;
+    return r;
   }
 
-  /**
-   * VALIDATE CHARACTER-SPECIFIC ABILITIES
-   */
-  validateCharacterAbility(state, abilityName, abilityConfig, config) {
-    if (state.characterKey === 'CALLISTO') {
-      if (abilityName === 'installationArt') {
-        const corpusCost = config.abilities.installationArt.corpusCost;
-        if (state.resources.corpusIngredient < corpusCost) {
-          return { 
-            success: false, 
-            reason: 'Not enough Corpus Ingredient',
-            current: state.resources.corpusIngredient,
-            required: corpusCost
-          };
-        }
-      }
-    } else if (state.characterKey === 'VALENCINA') {
-      if (abilityName === 'timeToHunt') {
-        if (state.resources.precognition <= 0) {
-          return { 
-            success: false, 
-            reason: 'No Precognition available'
-          };
-        }
-      }
+  validateCharacterAbility(state, name, ac, config) {
+    if (state.characterKey === 'CALLISTO' && name === 'installationArt') {
+      const cost = config.abilities.installationArt.corpusCost;
+      if (state.resources.corpusIngredient < cost) return { success: false, reason: 'Not enough Corpus', current: state.resources.corpusIngredient, required: cost };
     }
-
+    if (state.characterKey === 'VALENCINA' && name === 'timeToHunt' && state.resources.precognition <= 0) return { success: false, reason: 'No Precognition' };
     return { success: true };
   }
 
-  /**
-   * EXECUTE CHARACTER-SPECIFIC ABILITY
-   */
-  executeCharacterAbility(state, abilityName, abilityConfig, targetState, config) {
-    const handler = this.getCharacterAbilityHandler(state.characterKey, abilityName);
-    if (handler) {
-      return handler.call(this, state, abilityConfig, targetState, config);
-    }
-    
-    return { success: false, reason: 'No handler for ability' };
+  executeCharacterAbility(state, name, ac, targetState, config) {
+    try { const logic = require(`./characterLogic/${state.characterKey.toLowerCase()}`); const h = logic[name]; if (h) return h.call(this, state, ac, targetState, config); } catch(e) {}
+    return { success: false, reason: 'No handler' };
   }
 
-  /**
-   * GET CHARACTER-SPECIFIC ABILITY HANDLER
-   */
-  getCharacterAbilityHandler(characterKey, abilityName) {
-    try {
-      const logic = require(`./characterLogic/${characterKey.toLowerCase()}`);
-      return logic[abilityName];
-    } catch (e) {
-      return null;
-    }
-  }
-
-  // ============================
-  // DAMAGE APPLICATION
-  // ============================
-
-  /**
-   * Apply damage to a target (authoritative)
-   */
-  applyDamage(target, damage, attacker) {
-    if (target.isDefeated) {
-      return { success: false, reason: 'Target already defeated' };
-    }
-
+  applyDamage(target, damage) {
+    if (target.isDefeated) return { success: false, reason: 'Defeated' };
     target.hp = Math.max(0, target.hp - damage);
-
-    // CHECK FOR DEFEAT
-    if (target.hp <= 0) {
-      target.isDefeated = true;
-      target.velocity.x = 0;
-      target.velocity.y = 0;
-      return {
-        success: true,
-        damage: damage,
-        defeated: true,
-        finalHp: 0
-      };
-    }
-
-    return {
-      success: true,
-      damage: damage,
-      defeated: false,
-      finalHp: target.hp
-    };
+    if (target.hp <= 0) { target.isDefeated = true; target.velocity.x = 0; target.velocity.y = 0; return { success: true, damage, defeated: true, finalHp: 0 }; }
+    return { success: true, damage, defeated: false, finalHp: target.hp };
   }
 
-  // ============================
-  // FULL COMBAT RESOLUTION
-  // ============================
-
-  /**
-   * Fully resolve an attack with all systems
-   * This is the main entry point for combat resolution
-   */
   resolveAttack(attacker, defender, attackData, config) {
-    const result = {
-      success: false,
-      hit: false,
-      damage: 0,
-      knockback: 0,
-      staggerResult: null,
-      statuses: [],
-      defenderHp: defender.hp,
-      defeated: false
-    };
-
-    // Check hit
-    const attackRange = attackData.range || 100;
-    const hit = this.checkHit(
-      attacker.position,
-      defender.position,
-      attackRange,
-      attacker.facing
-    );
-
-    if (!hit) {
-      result.reason = 'Missed';
-      return result;
-    }
-
+    const result = { success: false, hit: false, damage: 0, knockback: 0, staggerResult: null, statuses: [], defenderHp: defender.hp, defeated: false, wasGuarded: false };
+    const range = attackData.range || 100;
+    const hit = this.checkAttackHit(attacker.position, defender.position, attackData.isDashAttack ? range * 1.5 : range, attacker.facing, defender.hitCooldown || 0);
+    if (!hit.hit) { result.reason = 'Missed'; return result; }
     result.hit = true;
 
-    // Base damage multiplier can be modified by guard
-    let baseDamage = attackData.baseDamage || attacker.baseDamage;
-    let knockbackAmount = attackData.knockback || 0;
-    let staggerAmount = attackData.staggerDamage || 0;
+    let base = attackData.baseDamage || attacker.baseDamage, knock = attackData.knockback || 0, stagger = attackData.staggerDamage || 0;
+    if (defender.isGuarding) { base *= 0.5; knock = Math.floor(knock * 0.5); stagger = 0; result.wasGuarded = true; }
 
-    if (defender.isGuarding) {
-      baseDamage = baseDamage * 0.5;
-      knockbackAmount = Math.floor(knockbackAmount * 0.5);
-      staggerAmount = 0;
-      result.wasGuarded = true;
-    }
+    const dmg = this.calculateDamage(base, attacker, defender);
+    const ap = this.applyDamage(defender, dmg);
+    result.damage = ap.damage; result.defenderHp = defender.hp; result.defeated = ap.defeated;
 
-    // Calculate damage
-    const finalDamage = this.calculateDamage(baseDamage, attacker, defender);
-    
-    // Apply damage
-    const applyResult = this.applyDamage(defender, finalDamage, attacker);
-    result.damage = applyResult.damage;
-    result.defenderHp = defender.hp;
-    result.defeated = applyResult.defeated;
-
-    // Apply knockback
-    if (knockbackAmount) {
-      const finalKnockback = this.calculateKnockback(knockbackAmount, attacker);
-      this.applyKnockback(defender, finalKnockback, attacker.facing);
-      result.knockback = finalKnockback;
-    }
-
-    // Apply stagger
-    if (staggerAmount) {
-      result.staggerResult = this.applyStagger(defender, staggerAmount, config);
-    }
-
-    // Apply attack status effects
-    if (attackData.statusEffects) {
-      attackData.statusEffects.forEach(statusConfig => {
-        this.applyStatus(defender, statusConfig.type, statusConfig.count, statusConfig.potency);
-        result.statuses.push(statusConfig.type);
-      });
-    }
-
-    // Consume on-hit statuses
-    const consumeEvents = this.consumeOnHit(defender);
-    result.consumeEvents = consumeEvents;
-
-    // Consume bleed effects when attacker hits
-    const bleedAttackEvents = this.consumeBleedOnAttack(attacker);
-    if (bleedAttackEvents.length) {
-      result.bleedAttackEvents = bleedAttackEvents;
-    }
-
-    // Track charge attack state for damage scaling
-    const combatState = this.combatState[attacker.id] || {};
-    combatState.chargeAttack = !!attackData.chargeAttack || !!attackData.heavy;
-    this.combatState[attacker.id] = combatState;
-
-    // Combo
-    this.addCombo(attacker.id);
-
-    // Attack counter
-    this.incrementAttackCounter(attacker.id);
-
-    result.chargeAttack = combatState.chargeAttack;
-    result.success = true;
+    if (defender.state !== 'staggered') { defender.state = 'hit'; defender.hitTimer = 0.18; }
+    if (knock) { const dir = defender.position.x < attacker.position.x ? -1 : 1; const fk = this.calculateKnockback(knock, attacker); this.applyKnockback(defender, fk, dir, attacker); result.knockback = fk; }
+    if (stagger && defender.state !== 'staggered') { defender.stagger += stagger; result.staggerResult = { staggered: false, stagger: defender.stagger }; if (defender.stagger >= (config.staggerThreshold || 1000)) { defender.state = 'staggered'; defender.staggerTimer = config.staggerLength || 5; defender.stagger = config.staggerThreshold || 1000; result.staggerResult = { staggered: true, duration: config.staggerLength || 5 }; } }
+    if (attackData.statusEffects) attackData.statusEffects.forEach(s => { this.applyStatus(defender, s.type, s.count, s.potency); result.statuses.push(s.type); });
+    const ce = this.consumeOnHit(defender); if (ce.length) result.consumeEvents = ce;
+    const be = this.consumeBleedOnAttack(attacker); if (be.length) result.bleedAttackEvents = be;
+    const cs = this.combatState[attacker.id] || {}; cs.chargeAttack = !!attackData.chargeAttack; this.combatState[attacker.id] = cs;
+    this.addCombo(attacker.id); this.incrementAttackCounter(attacker.id);
+    result.chargeAttack = cs.chargeAttack; result.success = true;
     return result;
   }
 
-  // ============================
-  // UPDATE FUNCTIONS
-  // ============================
+  updateCooldowns(state, dt) { Object.keys(state.abilityCooldowns).forEach(a => { if (state.abilityCooldowns[a] > 0) state.abilityCooldowns[a] -= dt; }); }
 
-  /**
-   * Update cooldowns (called per tick)
-   */
-  updateCooldowns(state, dt) {
-    Object.keys(state.abilityCooldowns).forEach(abilityName => {
-      if (state.abilityCooldowns[abilityName] > 0) {
-        state.abilityCooldowns[abilityName] -= dt;
-      }
-    });
-  }
-
-  /**
-   * Full update for a fighter each tick
-   */
   updateFighter(state, dt, config) {
     const events = [];
-
-    // Update cooldowns
     this.updateCooldowns(state, dt);
-
-    // Update stagger
-    const staggerUpdate = this.updateStagger(state, dt, config);
-    if (staggerUpdate.state !== state.state) {
-      events.push({ type: 'STATE_CHANGE', from: state.state, to: staggerUpdate.state });
-    }
-
-    // Process status effects
-    const statusEvents = this.processStatuses(state, dt);
-    events.push(...statusEvents);
-
-    // Update character-specific systems
-    const charEvents = this.updateCharacterSystems(state, dt);
-    events.push(...charEvents);
-
+    if (state.state === 'hit') { state.hitTimer = (state.hitTimer || 0) - dt; if (state.hitTimer <= 0) { state.state = 'idle'; state.hitTimer = 0; events.push({ type: 'STATE_CHANGE', from: 'hit', to: 'idle' }); } }
+    const su = this.updateStagger(state, dt, config);
+    if (su.state !== state.state) events.push({ type: 'STATE_CHANGE', from: state.state, to: su.state });
+    events.push(...this.processStatuses(state, dt));
+    events.push(...this.updateCharacterSystems(state, dt));
     return events;
   }
 
-  /**
-   * Update character-specific systems
-   */
   updateCharacterSystems(state, dt) {
-    if (state.characterKey === 'CALLISTO') {
-      return this.updateCallistoSystems(state, dt);
-    } else if (state.characterKey === 'VALENCINA') {
-      return this.updateValencinaSystems(state, dt);
-    }
+    if (state.characterKey === 'CALLISTO') return this.updateCallistoSystems(state, dt);
+    if (state.characterKey === 'VALENCINA') return this.updateValencinaSystems(state, dt);
     return [];
   }
 
-  /**
-   * Update Callisto-specific systems
-   */
   updateCallistoSystems(state, dt) {
-    const events = [];
-    
-    // Regenerate Corpus Ingredient slowly
-    if (state.resources.corpusIngredient < state.resources.maxCorpusIngredient) {
-      state.resources.corpusIngredient = Math.min(
-        state.resources.maxCorpusIngredient,
-        state.resources.corpusIngredient + (5 * dt)
-      );
-    }
-
-    // Handle slam buff expiry
-    if (state.resources.slamBuffActive) {
-      state.resources.slamBuffTimer -= dt;
-      if (state.resources.slamBuffTimer <= 0) {
-        state.resources.slamBuffActive = false;
-        events.push({ type: 'SLAM_BUFF_EXPIRED' });
-      }
-    }
-
-    return events;
+    const e = [];
+    if (state.resources.corpusIngredient < state.resources.maxCorpusIngredient) state.resources.corpusIngredient = Math.min(state.resources.maxCorpusIngredient, state.resources.corpusIngredient + 5 * dt);
+    if (state.resources.slamBuffActive) { state.resources.slamBuffTimer -= dt; if (state.resources.slamBuffTimer <= 0) { state.resources.slamBuffActive = false; e.push({ type: 'SLAM_BUFF_EXPIRED' }); } }
+    return e;
   }
 
-  /**
-   * Update Valencina-specific systems
-   */
   updateValencinaSystems(state, dt) {
-    const events = [];
-    
-    // Precognition decays when not gaining it
-    if (state.resources.precognition > 0) {
-      state.resources.precognition = Math.max(0, state.resources.precognition - (2 * dt));
-    }
-    
-    // Check for Shin activation
-    const hpPercent = state.hp / state.maxHp;
-    const valencinaConfig = this.getCharacterConfig('VALENCINA');
-    if (hpPercent < valencinaConfig.shin.activationThreshold && !state.resources.shinActive) {
-      state.resources.shinActive = true;
-      events.push({ type: 'SHIN_ACTIVATED' });
-    }
-
-    return events;
+    const e = [];
+    if (state.resources.precognition > 0) state.resources.precognition = Math.max(0, state.resources.precognition - 2 * dt);
+    if (state.hp / state.maxHp < this.getCharacterConfig('VALENCINA').shin.activationThreshold && !state.resources.shinActive) { state.resources.shinActive = true; e.push({ type: 'SHIN_ACTIVATED' }); }
+    return e;
   }
 
-  // ============================
-  // STATUS HELPERS
-  // ============================
+  hasStatus(f, t) { return f.statuses && f.statuses.some(s => s.type === t); }
+  getStatus(f, t) { return f.statuses && f.statuses.find(s => s.type === t); }
+  removeStatus(f, t) { f.statuses = f.statuses.filter(s => s.type !== t); }
+  isDefeated(s) { return s.hp <= 0; }
 
-  hasStatus(fighter, statusType) {
-    return fighter.statuses && fighter.statuses.some(s => s.type === statusType);
-  }
-
-  getStatus(fighter, statusType) {
-    return fighter.statuses && fighter.statuses.find(s => s.type === statusType);
-  }
-
-  removeStatus(fighter, statusType) {
-    fighter.statuses = fighter.statuses.filter(s => s.type !== statusType);
-  }
-
-  /**
-   * Check defeat
-   */
-  isDefeated(state) {
-    return state.hp <= 0;
-  }
-
-  /**
-   * Get state snapshot for broadcasting
-   */
   getStateSnapshot(state) {
-    return {
-      id: state.id,
-      characterKey: state.characterKey,
-      hp: state.hp,
-      maxHp: state.maxHp,
-      position: { ...state.position },
-      velocity: { ...state.velocity },
-      facing: state.facing,
-      state: state.state,
-      stagger: state.stagger,
-      isDefeated: state.isDefeated,
-      statuses: state.statuses.map(s => ({ ...s })),
-      resources: { ...state.resources },
-      abilityCooldowns: { ...state.abilityCooldowns }
-    };
+    return { id: state.id, characterKey: state.characterKey, hp: state.hp, maxHp: state.maxHp, position: { ...state.position }, velocity: { ...state.velocity }, facing: state.facing, state: state.state, stagger: state.stagger, isDefeated: state.isDefeated, statuses: state.statuses.map(s => ({ ...s })), resources: { ...state.resources }, abilityCooldowns: { ...state.abilityCooldowns } };
   }
 }
 
-// Export for server
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = GameplayEngine;
-}
+if (typeof module !== 'undefined' && module.exports) module.exports = GameplayEngine;

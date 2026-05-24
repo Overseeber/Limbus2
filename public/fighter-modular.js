@@ -606,8 +606,9 @@ class Fighter {
   /**
    * RESTORED: Update sprite based on state and attack phase
    * Driven by server snapshot values for synchronization
+   * @param {number} dt - Delta time in seconds for frame animation
    */
-  updateSprite() {
+  updateSprite(dt) {
     // Skip sprite updates during ultimate - ultimate controls its own sprites
     if (this.ultimateActive) {
       return;
@@ -625,11 +626,12 @@ class Fighter {
     // RESTORED: Map attack phase to animation frame for proper visual feedback
     if (this.state === 'attack' || this.state === 'attacking') {
       if (this.attackSequence > 0) {
-        this.updateAttackSprite();
+        const frameDt = dt !== undefined ? dt : (typeof deltaTime !== 'undefined' ? deltaTime / 1000 : 1 / 60);
+        this.updateAttackSprite(frameDt);
         return;
       }
     }
-    
+
     // State to sprite mapping for Callisto
     if (this.characterKey === 'CALLISTO') {
       const callistoStateMap = {
@@ -726,21 +728,31 @@ class Fighter {
   }
 
   /**
-   * RESTORED: Update attack sprite based on attack phase from server
-   * Maps server attack phase to visual animation frames
+   * RESTORED: Update attack sprite based on frame timing (client-side animation)
+   * Animates attack frames independently using frame duration timing.
+   * Server provides attackSequence (which attack) and attackPhase (startup/active/recovery),
+   * but the client advances through visual frames on its own timer for smooth animation.
+   * Slash effects are spawned at specific frames matching the reference game feel.
    */
-  updateAttackSprite() {
-    const dt = 0.016; // Assume 60fps frame timing for animation
-    
-    // Advance attack frame timer on client side for smooth animation
-    this.attackFrameTimer += dt;
-    
-    // Map server attack phases to animation frames for both characters
+  updateAttackSprite(dt) {
+    if (this.attackSequence <= 0) return;
+
+    // Use server-provided attack phase timing; the client may still smooth if dt is available.
+    if (typeof this.attackVisualTimer === 'undefined') {
+      this.attackVisualTimer = this.attackFrameTimer || 0;
+    }
+    this.attackVisualTimer = this.attackFrameTimer || this.attackVisualTimer;
+    if (dt !== undefined) {
+      this.attackVisualTimer += dt;
+    }
+
+    // Callisto uses its own attack sequence mapping and frame progression.
     if (this.characterKey === 'CALLISTO') {
       this.updateCallistoAttackSequence();
-    } else {
-      this.updateAttackSequence();
+      return;
     }
+
+    this.updateAttackSequence();
   }
 
   /**
@@ -748,79 +760,63 @@ class Fighter {
    * Frame timing driven by attackPhase from server
    */
   updateAttackSequence() {
-    // Attack 1 sequence: prepat > s1f1 > s1f2 > s1f3
+    const attackKey = this.attackSequence === 1 ? 'light' : this.attackSequence === 2 ? 'medium' : 'heavy';
+    const attackDef = CHARACTERS[this.characterKey] && CHARACTERS[this.characterKey].attacks ? CHARACTERS[this.characterKey].attacks[attackKey] : null;
+
     if (this.attackSequence === 1) {
       const sequence = ['prepat', 's1f1', 's1f2', 's1f3'];
-      
-      // Map server attack phase to visual frame
-      let visualFrame = this.attackFrame;
-      
-      // If we have an attack phase from server, use it for timing
+      let visualFrame = 0;
       if (this.attackPhase === 'startup') {
-        visualFrame = 0; // prepat during startup
+        visualFrame = 0;
       } else if (this.attackPhase === 'active') {
-        visualFrame = 1; // s1f1 during active
+        visualFrame = 1;
       } else if (this.attackPhase === 'recovery') {
-        visualFrame = 2; // s1f2 during recovery
+        const recoveryFrames = sequence.slice(2);
+        const recoveryDuration = attackDef ? attackDef.recovery : 0.32;
+        const perFrame = recoveryFrames.length > 0 ? recoveryDuration / recoveryFrames.length : recoveryDuration;
+        const index = Math.min(recoveryFrames.length - 1, Math.floor(this.attackFrameTimer / perFrame));
+        visualFrame = 2 + Math.max(0, index);
       }
-      
-      if (visualFrame < sequence.length) {
-        this.currentSprite = sequence[visualFrame];
-        
-        // Spawn slash effects on specific frames (only once per attack)
-        if (visualFrame === 1 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('s1s1', { x: 0, y: -10 });
-          this.spawnSlashEffect('s1s2', { x: 15, y: -5 });
-          this.slashEffectsSpawned = true;
-        }
+      this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
+
+      if (visualFrame === 1 && !this.slashEffectsSpawned) {
+        this.spawnSlashEffect('s1s1', { x: 0, y: -10 });
+        this.spawnSlashEffect('s1s2', { x: 15, y: -5 });
+        this.slashEffectsSpawned = true;
       }
-    }
-    // Attack 2 sequence: s2f1 > halt1 > halt2 > s3f1
-    else if (this.attackSequence === 2) {
+    } else if (this.attackSequence === 2) {
       const sequence = ['s2f1', 'halt1', 'halt2', 's3f1'];
-      
-      let visualFrame = this.attackFrame;
-      
-      if (this.attackPhase === 'startup') {
-        visualFrame = 0; // s2f1
-      } else if (this.attackPhase === 'active') {
-        visualFrame = 0; // s2f1 still (active frame)
+      let visualFrame = 0;
+      if (this.attackPhase === 'startup' || this.attackPhase === 'active') {
+        visualFrame = 0;
       } else if (this.attackPhase === 'recovery') {
-        visualFrame = 1; // halt1
+        const recoveryFrames = sequence.slice(1);
+        const recoveryDuration = attackDef ? attackDef.recovery : 0.40;
+        const perFrame = recoveryFrames.length > 0 ? recoveryDuration / recoveryFrames.length : recoveryDuration;
+        const index = Math.min(recoveryFrames.length - 1, Math.floor(this.attackFrameTimer / perFrame));
+        visualFrame = 1 + Math.max(0, index);
       }
-      
-      if (visualFrame < sequence.length) {
-        this.currentSprite = sequence[visualFrame];
-        
-        // Spawn slash effects on specific frames
-        if (visualFrame === 0 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('s1s3', { x: 0, y: -10 });
-          this.slashEffectsSpawned = true;
-        }
+      this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
+
+      if (visualFrame === 0 && !this.slashEffectsSpawned) {
+        this.spawnSlashEffect('s1s3', { x: 0, y: -10 });
+        this.slashEffectsSpawned = true;
       }
-    }
-    // Attack 3 sequence: s3f1 > s3f2 > s3f3 (0.5s hold)
-    else if (this.attackSequence === 3) {
+    } else if (this.attackSequence === 3) {
       const sequence = ['s3f1', 's3f2', 's3f3'];
-      
-      let visualFrame = this.attackFrame;
-      
+      let visualFrame = 0;
       if (this.attackPhase === 'startup') {
-        visualFrame = 0; // s3f1
+        visualFrame = 0;
       } else if (this.attackPhase === 'active') {
-        visualFrame = 1; // s3f2
+        visualFrame = 1;
       } else if (this.attackPhase === 'recovery') {
-        visualFrame = 2; // s3f3
+        visualFrame = 2;
       }
-      
-      if (visualFrame < sequence.length) {
-        this.currentSprite = sequence[visualFrame];
-        
-        // Spawn slash effects on specific frames
-        if (visualFrame === 1 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('s1s4', { x: 0, y: -10 });
-          this.slashEffectsSpawned = true;
-        }
+      this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
+
+      if (visualFrame === 1 && !this.slashEffectsSpawned) {
+        this.spawnSlashEffect('s1s4', { x: 0, y: -10 });
+        this.slashEffectsSpawned = true;
       }
     }
   }
@@ -947,7 +943,7 @@ class Fighter {
 
   updateCallistoHaltSequence() {
     // Halt sequence: chalt > cmove > cidle
-    const sequence = ['cmove', 'chalt'];
+    const sequence = ['chalt', 'cmove', 'cidle'];
     
     if (this.haltFrame < sequence.length) {
       this.currentSprite = sequence[this.haltFrame];
@@ -1711,7 +1707,7 @@ class Fighter {
     }
 
     // Update sprite based on current state
-    this.updateSprite();
+    this.updateSprite(dt);
   }
 
   updateAI(opponent) {
@@ -1894,7 +1890,7 @@ class Fighter {
       }
     }
 
-    if (this.state === 'idle' || this.state === 'run' || this.state === 'hit') {
+    if (this.state === 'idle' || this.state === 'run') {
       if (moveDir === 0) {
         this.setState('idle');
       } else {

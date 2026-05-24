@@ -250,7 +250,6 @@ function processSnapshot(snapshot) {
 
         fighter.hp = state.hp;
         fighter.maxHp = state.maxHp;
-        fighter.state = state.state;
         fighter.facing = state.facing;
 
         // Apply movement states
@@ -282,7 +281,65 @@ function processSnapshot(snapshot) {
         
         // Apply dash attack state
         fighter.dashAttackQueued = state.dashAttackQueued || false;
-        
+
+        // Track previous dash state to show halt end animation correctly
+        if (typeof fighter.prevIsDashing === 'undefined') {
+            fighter.prevIsDashing = fighter.isDashing;
+        }
+        const wasDashing = fighter.prevIsDashing;
+        fighter.prevIsDashing = fighter.isDashing;
+
+        // Derive local visual movement state from server snapshot
+        const serverState = state.state || 'idle';
+        const combatState = serverState === 'attacking' ? 'attack' : serverState;
+        const maxSpeed = (fighter.speed || 9) * 60;
+        const isMovingFast = Math.abs(fighter.vel.x) >= maxSpeed * 0.9;
+        const isLocalControlled = fighter.isLocalPlayer || fighter.isPlayerControlled;
+        const hasPlayerInput = isLocalControlled && (
+            keyState.left || keyState.right || keyState.up || keyState.down ||
+            keyState.attack || keyState.guard || keyState.dash || keyState.slam
+        );
+
+        if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate') {
+            fighter.state = combatState;
+            fighter.haltSequence = false;
+        } else if ((fighter.state === 'hit' || fighter.state === 'staggered') && isLocalControlled && !hasPlayerInput) {
+            // Preserve hurt/staggered visuals for the local player until they provide input.
+            fighter.haltSequence = false;
+        } else if (fighter.isAttacking || fighter.attackSequence > 0) {
+            fighter.state = 'attack';
+            fighter.haltSequence = false;
+        } else if (fighter.isDashing) {
+            fighter.state = 'dash';
+            fighter.haltSequence = false;
+        } else if (!fighter.onGround) {
+            fighter.state = 'jump';
+            fighter.haltSequence = false;
+        } else if (fighter.isGuarding) {
+            fighter.state = 'guard';
+            fighter.haltSequence = false;
+        } else if (isMovingFast) {
+            fighter.state = 'run';
+            fighter.haltSequence = false;
+        } else if (wasDashing && !fighter.isDashing && Math.abs(fighter.vel.x) > 10 && fighter.onGround) {
+            if (!fighter.haltSequence) {
+                fighter.haltSequence = true;
+                fighter.haltFrame = 0;
+                fighter.haltFrameTimer = 0;
+            }
+            fighter.state = 'idle';
+        } else if (Math.abs(fighter.vel.x) > 10 && fighter.onGround) {
+            if (!fighter.haltSequence) {
+                fighter.haltSequence = true;
+                fighter.haltFrame = 0;
+                fighter.haltFrameTimer = 0;
+            }
+            fighter.state = 'idle';
+        } else {
+            fighter.state = 'idle';
+            fighter.haltSequence = false;
+        }
+
         // Reset slash effects on new attack
         if (state.attackSequence > 0 && fighter.attackSequence !== state.attackSequence) {
             fighter.slashEffectsSpawned = false;

@@ -209,33 +209,27 @@ class Match {
         const state = player.gameState;
         const config = player.config;
         
-        // MOVEMENT INPUT - Acceleration-based for responsive feel
+        // MOVEMENT INPUT - RESTORED: Direct velocity setting like original game
+        // Original game used: vel.x = moveDir * speed (instant response, no acceleration)
+        // Speed is in pixels/frame; convert to pixels/second: speed * 60
         const maxSpeed = (config.speed || 9) * 60;
-        const acceleration = config.acceleration || 1800;
-        
-        let targetVelX = 0;
         
         // Don't allow movement input during hitstun or stagger active phase
         if (state.state !== 'hit' && !(state.state === 'staggered' && state.staggerTimer > 0)) {
             if (input.left) {
-                targetVelX = -maxSpeed;
+                state.velocity.x = -maxSpeed;
                 state.facing = -1;
             } else if (input.right) {
-                targetVelX = maxSpeed;
+                state.velocity.x = maxSpeed;
                 state.facing = 1;
+            } else {
+                // No directional input - decelerate with friction
+                const friction = config.friction || 0.85;
+                state.velocity.x *= friction;
+                if (Math.abs(state.velocity.x) < 0.1) state.velocity.x = 0;
             }
-        }
-        
-        // Accelerate/decelerate smoothly
-        const accelAmount = acceleration * dt;
-        if (targetVelX > state.velocity.x) {
-            state.velocity.x = Math.min(targetVelX, state.velocity.x + accelAmount);
-        } else if (targetVelX < state.velocity.x) {
-            state.velocity.x = Math.max(targetVelX, state.velocity.x - accelAmount);
-        }
-        
-        // Apply friction when no input (but not during dash)
-        if (targetVelX === 0 && state.onGround && !state.isDashing) {
+        } else {
+            // During hitstun/stagger, decelerate
             const friction = config.friction || 0.85;
             state.velocity.x *= friction;
             if (Math.abs(state.velocity.x) < 0.1) state.velocity.x = 0;
@@ -290,10 +284,15 @@ class Match {
         const attackPressed = input.attackPressed || (input.attack && !prevInput.attack);
         const attackReleased = input.attackReleased || (!input.attack && prevInput.attack && player.attackRequestActive);
 
+        // IMPORTANT: Only set attackHoldStart ONCE per press, not every tick.
+        // The client holds attackPressed sticky for 120ms. Without this check,
+        // attackHoldStart gets reset every tick, breaking the fallback timer.
         if (attackPressed && !state.isAttacking && state.state !== 'hit' && 
             state.state !== 'staggered' && state.state !== 'slam' && player.attackTimer <= 0) {
-            player.attackHoldStart = Date.now();
-            player.attackRequestActive = true;
+            if (!player.attackHoldStart) {
+                player.attackHoldStart = Date.now();
+                player.attackRequestActive = true;
+            }
         }
 
         // RESTORED: Start attack on release (like original game: press to charge, release to swing)
@@ -677,7 +676,12 @@ class Match {
     }
 
     /**
-     * Handle player input - stores current and previous input for edge detection
+     * Handle player input - stores current input state only
+     * prevInput is updated ONCE per tick in broadcastSnapshot to prevent
+     * edge detection failures when multiple packets arrive between ticks.
+     * At 20tps with 60fps client, 2-3 packets per tick all have the same
+     * sticky flags, which would cause handleInput to clobber prevInput
+     * and lose edge detection.
      */
     handleInput(playerId, input) {
         if (!this.running) return;
@@ -685,10 +689,9 @@ class Match {
         const player = this.players[playerId];
         if (!player || player.gameState.isDefeated) return;
 
-        // Store previous input state
-        player.prevInput = { ...player.input };
-        
         // Store current input state (merge with defaults)
+        // ONLY overwrite input, NOT prevInput here.
+        // prevInput will be set in broadcastSnapshot once per tick.
         player.input = { 
             left: !!input.left,
             right: !!input.right,

@@ -23,13 +23,9 @@ const VALENCINA_CONFIG = {
   staggerLength: 5,
   
   // MOVEMENT PHYSICS
-  acceleration: 1800,     // Acceleration rate (pixels/s²)
-  friction: 0.85,         // Friction multiplier (0-1)
-  // NOTE: values below use server-per-second units derived from the old client
-  // Old client used per-frame jumpStrength = -20 and gravity = 0.6 (per-frame increments).
-  // Convert to per-second units (≈60fps): jumpHeight = 20 * 60 = 1200, gravity = 0.6 * 3600 = 2160
-  jumpHeight: 1200,       // Jump initial velocity (pixels/s)
-  gravity: 2160,          // Gravity acceleration (pixels/s²)
+  friction: 0.85,         // Friction multiplier (0-1) - applied each tick
+  jumpHeight: 1200,       // Jump initial velocity (pixels/s) - OLD CLIENT: jumpStrength = -20 at 60fps
+  gravity: 2160,          // Gravity acceleration (pixels/s²) - OLD CLIENT: 0.6 pixels/frame²
   dashSpeed: 60,          // Dash movement speed (old client per-frame units)
   dashDuration: 0.2,      // Dash duration in seconds
   dashCooldown: 3.0,      // Dash recharge cooldown between dash charges

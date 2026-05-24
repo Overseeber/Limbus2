@@ -92,7 +92,6 @@ let cpuConfigButtons = [];
 
 // Reusable UI button class
 const DEBUG_UI = false;
-const SHOW_ATTACK_HITBOX_OVERLAY = true; // Always show attack hitbox/range overlays for debugging
 class UIButton {
   constructor(x, y, w, h, onClick) {
     this.x = x;
@@ -235,21 +234,12 @@ function applySnapshot(snapshot) {
 }
 
 function processSnapshot(snapshot) {
-    console.log('[Snapshot] Processing snapshot with', snapshot.players.length, 'players');
-    console.log('[Snapshot] My client ID:', Network.myClientId);
-    console.log('[Snapshot] Available fighter IDs:', allFighters.map(f => f.clientId));
-
     for (const state of snapshot.players) {
         const fighter = allFighters.find(
             f => f.clientId === state.id
-        );//note
+        );
 
-        if (!fighter) {
-            console.warn('[Snapshot] Fighter not found for clientId:', state.id, 'Available fighters:', allFighters.map(f => f.clientId));
-            continue;
-        }
-
-        console.log('[Snapshot] Updating fighter', fighter.clientId, 'at position', state.x, state.y);
+        if (!fighter) continue;
 
         // Apply authoritative state from server
         fighter.pos.x = state.x;
@@ -298,50 +288,121 @@ function processSnapshot(snapshot) {
             fighter.slashEffectsSpawned = false;
         }
     }
-
-    console.log('[Snapshot] Snapshot applied successfully');
 }
 
-// Track mouse/attack state for edge detection
-let mouseWasPressed = false;
-let attackInputSent = false;
-let networkAttackHeld = 0;
+// ============================================================
+// INPUT SYSTEM - RESTORED for reliable edge detection at 20tps
+// ============================================================
+// At 20tps (50ms ticks), quick key presses can be missed entirely
+// because the press and release happen between two server ticks.
+// Solution: Track input edges on the client and hold edge flags
+// for at least 100ms (2 ticks) so the server always catches them.
+// ============================================================
 
+// Input hold timestamps - keeps edge flags alive long enough for server
+let inputHoldTimers = {
+    up: 0,
+    down: 0,
+    left: 0,
+    right: 0,
+    dash: 0,
+    attackPressed: 0,
+    attackReleased: 0,
+    slam: 0
+};
+
+// Track actual key states
+let keyState = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    dash: false,
+    attack: false,
+    guard: false
+};
+
+// Previous frame key states for client-side edge detection
+let prevKeyState = {
+    up: false,
+    down: false,
+    left: false,
+    right: false,
+    dash: false
+};
+
+// The minimum duration (ms) to hold an edge flag
+const EDGE_HOLD_MS = 120; // >2 ticks at 50ms each
+
+/**
+ * RESTORED: Send input state with sticky edge detection
+ * Each edge-triggered input (up, dash, attackPressed) is held active
+ * for EDGE_HOLD_MS to ensure the 20tps server always detects it.
+ */
 function sendInputState() {
-    const controlledFighter = getPlayerControlledFighter();
-    if (!controlledFighter) return;
-
-    // Use the onGround property (set by server) not the method
-    const isOnGround = controlledFighter.onGround || 
-        (controlledFighter.pos && controlledFighter.pos.y >= (controlledFighter.spawnY || 600) - 0.01);
-
-    // Detect attack press/release edge for reliable detection at low tick rate
+    const now = performance.now();
+    
+    // Read raw input states
+    const rawUp = keyIsDown(87) || keyIsDown(UP_ARROW);
+    const rawDown = keyIsDown(83) || keyIsDown(DOWN_ARROW);
+    const rawLeft = keyIsDown(65) || keyIsDown(LEFT_ARROW);
+    const rawRight = keyIsDown(68) || keyIsDown(RIGHT_ARROW);
+    const rawDash = keyIsDown(32);
     const isLeftMouseDown = mouseIsPressed && mouseButton === LEFT;
+    const isRightMouseDown = mouseIsPressed && mouseButton === RIGHT;
     
-    // Attack is true only on the frame the mouse is first pressed (edge trigger)
-    // This ensures the server reliably detects attack input at 20tps
-    const attackPressed = isLeftMouseDown && !mouseWasPressed;
-    if (attackPressed) {
-        networkAttackHeld = performance.now();
+    // === JUMP (up) edge detection ===
+    if (rawUp && !prevKeyState.up) {
+        inputHoldTimers.up = now + EDGE_HOLD_MS;
     }
+    prevKeyState.up = rawUp;
+    const stickyUp = now < inputHoldTimers.up;
     
-    // Attack release - only when mouse goes up after being held
-    const attackReleased = !isLeftMouseDown && mouseWasPressed;
+    // === DASH (space) edge detection ===
+    if (rawDash && !prevKeyState.dash) {
+        inputHoldTimers.dash = now + EDGE_HOLD_MS;
+    }
+    prevKeyState.dash = rawDash;
+    const stickyDash = now < inputHoldTimers.dash;
     
-    mouseWasPressed = isLeftMouseDown;
+    // === ATTACK press/release edge detection ===
+    if (isLeftMouseDown && !keyState.attack) {
+        inputHoldTimers.attackPressed = now + EDGE_HOLD_MS;
+    }
+    if (!isLeftMouseDown && keyState.attack) {
+        inputHoldTimers.attackReleased = now + EDGE_HOLD_MS;
+    }
+    keyState.attack = isLeftMouseDown;
+    const stickyAttackPressed = now < inputHoldTimers.attackPressed;
+    const stickyAttackReleased = now < inputHoldTimers.attackReleased;
+    
+    // === GUARD (right click) ===
+    keyState.guard = isRightMouseDown;
+    
+    // === SLAM (S in air) ===
+    // Determine if airborne using onGround property from server
+    const controlledFighter = getPlayerControlledFighter();
+    const isOnGround = controlledFighter ? 
+        (controlledFighter.onGround || 
+         (controlledFighter.pos && controlledFighter.pos.y >= (controlledFighter.spawnY || 600) - 0.01)) : true;
+    
+    if (rawDown && !isOnGround) {
+        inputHoldTimers.slam = now + EDGE_HOLD_MS;
+    }
+    const stickySlam = now < inputHoldTimers.slam;
 
-    // Collect current input state
+    // Build input packet with sticky edge flags
     const input = {
-        left: keyIsDown(65) || keyIsDown(LEFT_ARROW), // A or Left
-        right: keyIsDown(68) || keyIsDown(RIGHT_ARROW), // D or Right
-        up: keyIsDown(87) || keyIsDown(UP_ARROW), // W or Up
-        down: keyIsDown(83) || keyIsDown(DOWN_ARROW), // S or Down
-        attack: isLeftMouseDown, // continuous hold state for server
-        attackPressed: attackPressed, // edge trigger for reliable detection
-        attackReleased: attackReleased, // release trigger
-        guard: mouseIsPressed && mouseButton === RIGHT,
-        dash: keyIsDown(32), // Space
-        slam: keyIsDown(83) && !isOnGround // S in air for slam
+        left: rawLeft,
+        right: rawRight,
+        up: rawUp || stickyUp,          // Keep up active for server
+        down: rawDown,
+        attack: isLeftMouseDown,
+        attackPressed: stickyAttackPressed,  // Held for 2+ ticks
+        attackReleased: stickyAttackReleased, // Held for 2+ ticks
+        guard: isRightMouseDown,
+        dash: rawDash || stickyDash,     // Keep dash active for server
+        slam: stickySlam                 // Held for 2+ ticks
     };
 
     Network.sendInput(input);
@@ -609,68 +670,51 @@ function triggerAbilityVisuals(fighter, abilityId, result) {
 function drawAttackHitbox(fighter) {
   if (!fighter || !fighter.pos) return;
 
+  // Get attack range from the attack state
+  const attackRange = fighter.attackRange || 120;
+  
+  // RESTORED: Calculate attack box using same formula as server (calcAttackBox)
   const facing = fighter.facing || 1;
-  const isSlam = fighter.isSlamAttacking || !!fighter.slamLandingHitbox;
-  const attackRange = (fighter.state === 'attack' && fighter.isDashing) ? (fighter.attackRange || 120) * 1.5 : (fighter.attackRange || 120);
-  const hitboxColor = fighter.strikeActive ? color(255, 50, 50, 120) : color(255, 255, 50, 80);
-  const outlineColor = fighter.strikeActive ? color(255, 0, 0) : color(255, 255, 0);
-
+  const atkBox = {
+    x: fighter.pos.x + facing * (attackRange / 2),
+    y: fighter.pos.y - 28,
+    w: attackRange,
+    h: 70
+  };
+  
+  // Draw the actual rect hitbox
+  const boxX = atkBox.x - atkBox.w / 2;
+  const boxY = atkBox.y;
+  const boxW = atkBox.w;
+  const boxH = atkBox.h;
+  
   push();
-  if (isSlam && fighter.slamLandingHitbox) {
-    const slam = fighter.slamLandingHitbox;
-    fill(255, 140, 0, 90);
-    stroke(255, 120, 0);
-    strokeWeight(2);
-    ellipse(slam.x, slam.y, slam.radius * 2, slam.radius * 2);
-
-    stroke(255, 255, 255, 130);
-    strokeWeight(1);
-    line(fighter.pos.x, fighter.pos.y, slam.x, slam.y);
-
-    fill(255);
-    noStroke();
-    textSize(10);
-    textAlign(CENTER, CENTER);
-    text(`SLAM AOE`, slam.x, slam.y - slam.radius - 10);
-    text(`R=${slam.radius}`, slam.x, slam.y + slam.radius + 10);
-  }
-
-  if (fighter.attackSequence > 0) {
-    const atkBox = {
-      x: fighter.pos.x + facing * (attackRange / 2),
-      y: fighter.pos.y - 28,
-      w: attackRange,
-      h: 70
-    };
-
-    const boxX = atkBox.x - atkBox.w / 2;
-    const boxY = atkBox.y;
-    const boxW = atkBox.w;
-    const boxH = atkBox.h;
-
-    fill(hitboxColor);
-    stroke(outlineColor);
-    strokeWeight(2);
-    rect(boxX, boxY, boxW, boxH);
-
-    const attackLabel = fighter.strikeActive ? 'HITBOX ACTIVE' : 
-                        fighter.attackPhase === 'startup' ? 'STARTUP' :
-                        fighter.attackPhase === 'recovery' ? 'RECOVERY' : 'ATTACK';
-    const rangeLabel = (fighter.state === 'attack' && fighter.isDashing) ? 'DASH ATTACK' : 'NORMAL ATTACK';
-    fill(255);
-    noStroke();
-    textSize(10);
-    textAlign(LEFT, BOTTOM);
-    text(`${rangeLabel} ${attackLabel} Seq:${fighter.attackSequence}`, boxX, boxY - 5);
-
-    stroke(255, 200, 0, 120);
-    strokeWeight(1);
-    line(fighter.pos.x, fighter.pos.y - 30, fighter.pos.x + facing * boxW, fighter.pos.y - 30);
-  }
-
+  // Attack hitbox - red when strike is active, yellow during startup/recovery
+  const hitboxColor = fighter.strikeActive ? color(255, 50, 50, 120) : color(255, 255, 50, 80);
+  fill(hitboxColor);
+  stroke(fighter.strikeActive ? color(255, 0, 0) : color(255, 255, 0));
+  strokeWeight(2);
+  rect(boxX, boxY, boxW, boxH);
+  
+  // Draw attack indicator label
+  const attackLabel = fighter.strikeActive ? 'HITBOX ACTIVE' : 
+                      fighter.attackPhase === 'startup' ? 'STARTUP' :
+                      fighter.attackPhase === 'recovery' ? 'RECOVERY' : 'ATTACK';
+  fill(255);
+  textSize(10);
+  textAlign(LEFT, BOTTOM);
+  text(`${attackLabel} Seq:${fighter.attackSequence} Ph:${fighter.attackPhase}`, boxX, boxY - 5);
+  
+  // Draw range line
+  stroke(255, 200, 0, 100);
+  strokeWeight(1);
+  line(fighter.pos.x, fighter.pos.y - 30, fighter.pos.x + facing * atkBox.w, fighter.pos.y - 30);
+  pop();
+  
   // Draw player hitbox for reference
+  push();
   noFill();
-  stroke(0, 255, 0, 120);
+  stroke(0, 255, 0, 100);
   strokeWeight(1);
   rect(fighter.pos.x - 25, fighter.pos.y - 36, 50, 72);
   pop();
@@ -719,8 +763,8 @@ function draw() {
       window.allFighters.forEach(fighter => {
         fighter.draw();
         
-        // Draw attack hitbox overlays for active attacks and slam attacks
-        if ((SHOW_ATTACK_HITBOX_OVERLAY || DEBUG) && (fighter.attackSequence > 0 || fighter.isSlamAttacking || fighter.slamLandingHitbox)) {
+        // Draw debug attack hitboxes when any attack is active
+        if (DEBUG && fighter.attackSequence > 0) {
           drawAttackHitbox(fighter);
         }
       });
@@ -908,11 +952,11 @@ function drawOpeningSequence() {
   // Draw all fighters
   if (window.allFighters) {
     window.allFighters.forEach(fighter => fighter.draw());
-
-    // Draw attack hitbox overlays for active attacks and slam attacks
-    if (SHOW_ATTACK_HITBOX_OVERLAY || DEBUG) {
+    
+    // Draw attack debug hitboxes
+    if (DEBUG) {
       window.allFighters.forEach(fighter => {
-        if (fighter.attackSequence > 0 || fighter.isSlamAttacking || fighter.slamLandingHitbox) {
+        if (fighter.strikeActive && fighter.attackSequence > 0) {
           drawAttackHitbox(fighter);
         }
       });
@@ -1004,27 +1048,6 @@ function drawArena() {
     text(`FPS: ${nf(frameRate(), 2, 1)}`, 12, 18);
   }
 }
-
-// function drawEdgeCovers() {
-//   // Draw black rectangles covering areas where the background image doesn't reach
-//   // (left and right edges if the scaled background width is less than the arena width)
-//   const bgWidth = window.bgScaledWidth || ARENA_WIDTH;
-  
-//   if (bgWidth >= ARENA_WIDTH) return; // No gaps to cover
-  
-//   const arenaCenterX = ARENA_WIDTH / 2;
-//   const bgLeftX = arenaCenterX - (bgWidth / 2);
-//   const bgRightX = arenaCenterX + (bgWidth / 2);
-  
-//   noStroke();
-//   fill(255);
-  
-//   // Left edge cover
-//   rect(0, 0, bgLeftX, ARENA_HEIGHT);
-  
-//   // Right edge cover
-//   rect(bgRightX, 0, ARENA_WIDTH - bgRightX, ARENA_HEIGHT);
-// }
 
 function drawVignette() {
   // Vignette width in pixels

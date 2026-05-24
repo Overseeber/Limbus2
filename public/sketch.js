@@ -92,6 +92,7 @@ let cpuConfigButtons = [];
 
 // Reusable UI button class
 const DEBUG_UI = false;
+const SHOW_ATTACK_HITBOX_OVERLAY = true; // Always show attack hitbox/range overlays for debugging
 class UIButton {
   constructor(x, y, w, h, onClick) {
     this.x = x;
@@ -608,51 +609,68 @@ function triggerAbilityVisuals(fighter, abilityId, result) {
 function drawAttackHitbox(fighter) {
   if (!fighter || !fighter.pos) return;
 
-  // Get attack range from the attack state
-  const attackRange = fighter.attackRange || 120;
-  
-  // RESTORED: Calculate attack box using same formula as server (calcAttackBox)
   const facing = fighter.facing || 1;
-  const atkBox = {
-    x: fighter.pos.x + facing * (attackRange / 2),
-    y: fighter.pos.y - 28,
-    w: attackRange,
-    h: 70
-  };
-  
-  // Draw the actual rect hitbox
-  const boxX = atkBox.x - atkBox.w / 2;
-  const boxY = atkBox.y;
-  const boxW = atkBox.w;
-  const boxH = atkBox.h;
-  
-  push();
-  // Attack hitbox - red when strike is active, yellow during startup/recovery
+  const isSlam = fighter.isSlamAttacking || !!fighter.slamLandingHitbox;
+  const attackRange = (fighter.state === 'attack' && fighter.isDashing) ? (fighter.attackRange || 120) * 1.5 : (fighter.attackRange || 120);
   const hitboxColor = fighter.strikeActive ? color(255, 50, 50, 120) : color(255, 255, 50, 80);
-  fill(hitboxColor);
-  stroke(fighter.strikeActive ? color(255, 0, 0) : color(255, 255, 0));
-  strokeWeight(2);
-  rect(boxX, boxY, boxW, boxH);
-  
-  // Draw attack indicator label
-  const attackLabel = fighter.strikeActive ? 'HITBOX ACTIVE' : 
-                      fighter.attackPhase === 'startup' ? 'STARTUP' :
-                      fighter.attackPhase === 'recovery' ? 'RECOVERY' : 'ATTACK';
-  fill(255);
-  textSize(10);
-  textAlign(LEFT, BOTTOM);
-  text(`${attackLabel} Seq:${fighter.attackSequence} Ph:${fighter.attackPhase}`, boxX, boxY - 5);
-  
-  // Draw range line
-  stroke(255, 200, 0, 100);
-  strokeWeight(1);
-  line(fighter.pos.x, fighter.pos.y - 30, fighter.pos.x + facing * atkBox.w, fighter.pos.y - 30);
-  pop();
-  
-  // Draw player hitbox for reference
+  const outlineColor = fighter.strikeActive ? color(255, 0, 0) : color(255, 255, 0);
+
   push();
+  if (isSlam && fighter.slamLandingHitbox) {
+    const slam = fighter.slamLandingHitbox;
+    fill(255, 140, 0, 90);
+    stroke(255, 120, 0);
+    strokeWeight(2);
+    ellipse(slam.x, slam.y, slam.radius * 2, slam.radius * 2);
+
+    stroke(255, 255, 255, 130);
+    strokeWeight(1);
+    line(fighter.pos.x, fighter.pos.y, slam.x, slam.y);
+
+    fill(255);
+    noStroke();
+    textSize(10);
+    textAlign(CENTER, CENTER);
+    text(`SLAM AOE`, slam.x, slam.y - slam.radius - 10);
+    text(`R=${slam.radius}`, slam.x, slam.y + slam.radius + 10);
+  }
+
+  if (fighter.attackSequence > 0) {
+    const atkBox = {
+      x: fighter.pos.x + facing * (attackRange / 2),
+      y: fighter.pos.y - 28,
+      w: attackRange,
+      h: 70
+    };
+
+    const boxX = atkBox.x - atkBox.w / 2;
+    const boxY = atkBox.y;
+    const boxW = atkBox.w;
+    const boxH = atkBox.h;
+
+    fill(hitboxColor);
+    stroke(outlineColor);
+    strokeWeight(2);
+    rect(boxX, boxY, boxW, boxH);
+
+    const attackLabel = fighter.strikeActive ? 'HITBOX ACTIVE' : 
+                        fighter.attackPhase === 'startup' ? 'STARTUP' :
+                        fighter.attackPhase === 'recovery' ? 'RECOVERY' : 'ATTACK';
+    const rangeLabel = (fighter.state === 'attack' && fighter.isDashing) ? 'DASH ATTACK' : 'NORMAL ATTACK';
+    fill(255);
+    noStroke();
+    textSize(10);
+    textAlign(LEFT, BOTTOM);
+    text(`${rangeLabel} ${attackLabel} Seq:${fighter.attackSequence}`, boxX, boxY - 5);
+
+    stroke(255, 200, 0, 120);
+    strokeWeight(1);
+    line(fighter.pos.x, fighter.pos.y - 30, fighter.pos.x + facing * boxW, fighter.pos.y - 30);
+  }
+
+  // Draw player hitbox for reference
   noFill();
-  stroke(0, 255, 0, 100);
+  stroke(0, 255, 0, 120);
   strokeWeight(1);
   rect(fighter.pos.x - 25, fighter.pos.y - 36, 50, 72);
   pop();
@@ -701,8 +719,8 @@ function draw() {
       window.allFighters.forEach(fighter => {
         fighter.draw();
         
-        // Draw debug attack hitboxes when any attack is active
-        if (DEBUG && fighter.attackSequence > 0) {
+        // Draw attack hitbox overlays for active attacks and slam attacks
+        if ((SHOW_ATTACK_HITBOX_OVERLAY || DEBUG) && (fighter.attackSequence > 0 || fighter.isSlamAttacking || fighter.slamLandingHitbox)) {
           drawAttackHitbox(fighter);
         }
       });
@@ -890,11 +908,11 @@ function drawOpeningSequence() {
   // Draw all fighters
   if (window.allFighters) {
     window.allFighters.forEach(fighter => fighter.draw());
-    
-    // Draw attack debug hitboxes
-    if (DEBUG) {
+
+    // Draw attack hitbox overlays for active attacks and slam attacks
+    if (SHOW_ATTACK_HITBOX_OVERLAY || DEBUG) {
       window.allFighters.forEach(fighter => {
-        if (fighter.strikeActive && fighter.attackSequence > 0) {
+        if (fighter.attackSequence > 0 || fighter.isSlamAttacking || fighter.slamLandingHitbox) {
           drawAttackHitbox(fighter);
         }
       });

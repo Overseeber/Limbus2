@@ -56,6 +56,7 @@ class Match {
             const gameState = this.engine.initializeCharacter(config.clientId, charKey);
             gameState.dashCharges = charConfig.dashCharges || 3;
             gameState.dashTimer = 0;
+            gameState.dashDurationTimer = 0;
             gameState.isDashing = false;
             gameState.canDash = true;
             gameState.hitTimer = 0; // hitstun timer
@@ -270,10 +271,12 @@ class Match {
             state.velocity.x = dashDir * dashSpeed;
             state.isDashing = true;
             state.dashTimer = 0;
+            state.dashDurationTimer = 0;
             state.dashCharges -= 1;
             state.canDash = state.dashCharges > 0;
             player.dashAttackQueued = false;
             player.dashAttackInitiated = false;
+            player.dashAttackResolved = false;
         }
         
         // DASH ATTACK - When attacking during dash
@@ -421,8 +424,8 @@ class Match {
 
         // SLAM GRAVITY - Override velocity for fast descent
         if (player.isSlamAttacking && !state.onGround) {
-            state.velocity.y += 50 * dt; // Strong slam gravity (was 30 per-frame, now per-second)
-            if (state.velocity.y < 30) state.velocity.y = 30; // Minimum slam speed
+            const slamTerminalSpeed = 30 * 60; // emulate old client 30 units/frame at 60fps
+            state.velocity.y = Math.max(state.velocity.y, slamTerminalSpeed);
             state.velocity.x *= 0.9; // Slow horizontal movement during slam
         }
         // NORMAL GRAVITY
@@ -475,26 +478,35 @@ class Match {
         }
 
         if (hitBoundary) {
+            if (player.dashAttackInitiated && !player.dashAttackResolved) {
+                player.dashAttackResolved = true;
+                player.dashAttackQueued = false;
+                player.dashAttackInitiated = false;
+                this.resolveDashAttack(player);
+            }
             state.velocity.x = 0;
             if (state.isDashing) {
                 state.isDashing = false;
             }
         }
 
-        // DASH TIMER / RECHARGE
+        // DASH TIMER / DURATION
         if (state.isDashing) {
-            state.dashTimer += dt;
+            state.dashDurationTimer += dt;
             const dashDuration = config.dashDuration || 0.2;
-            if (state.dashTimer >= dashDuration) {
+            if (state.dashDurationTimer >= dashDuration) {
                 state.isDashing = false;
                 state.velocity.x *= 0.3; // Slow down after dash
+                state.dashDurationTimer = 0;
                 player.dashAttackInitiated = false;
                 player.dashAttackResolved = false;
+                player.dashAttackQueued = false;
             }
             
             // RESOLVE DASH ATTACK if triggered during dash
             if (player.dashAttackInitiated && !player.dashAttackResolved) {
                 player.dashAttackResolved = true;
+                player.dashAttackQueued = false;
                 this.resolveDashAttack(player);
             }
         }
@@ -587,8 +599,17 @@ class Match {
 
             if (distance < minDistance) {
                 const overlap = minDistance - distance;
-                const pushX = (dx / distance) * overlap / 2;
-                const pushY = (dy / distance) * overlap / 2;
+                let pushX;
+                let pushY;
+
+                if (distance <= 0.0001) {
+                    // Perfect overlap guard: separate evenly along X axis to avoid NaN and invalid state
+                    pushX = overlap / 2 * (player.gameState.position.x <= other.gameState.position.x ? -1 : 1);
+                    pushY = 0;
+                } else {
+                    pushX = (dx / distance) * overlap / 2;
+                    pushY = (dy / distance) * overlap / 2;
+                }
 
                 player.gameState.position.x += pushX;
                 player.gameState.position.y += pushY;

@@ -1518,9 +1518,9 @@ class Fighter {
       this.combo = 0;
     }
 
-    // Attack sequence system - reset after 3 hits to create 1-3 rotation
-    if (this.attackCounter >= 3) {
-      this.attackCounter = 0; // Reset after completing 3-hit sequence
+    // Attack sequence system - preserve the current cycle step until the display timer expires
+    if (this.attackCounterTimer <= 0 && this.attackCounter > 0) {
+      this.attackCounter = 0;
     }
     
     // 🎨 Callisto slam buff duration management
@@ -2026,14 +2026,7 @@ class Fighter {
     }
 
     // Update attack sequence counter for 1-3 rotation
-    this.attackCounter = min(3, this.attackCounter + 1);
-    this.attackCounterDisplay = this.attackCounter;
-    this.attackCounterTimer = 1.0; // Show for 1 second
-
-    // Start attack sequence based on attack counter
-    this.attackSequence = this.attackCounter;
-    this.attackFrame = 0;
-    this.attackFrameTimer = 0;
+    this.attackCounter = (this.attackCounter % 3) + 1;
     
     // Combo is handled when the attack actually lands (in addCombo)
     this.attackDamageDealt = false;
@@ -2210,7 +2203,7 @@ class Fighter {
     
     // Ground slams build attack sequence counter (1-3 rotation) if any target was hit
     if (hitAnyTarget) {
-      this.attackCounter = min(3, this.attackCounter + 1);
+      this.attackCounter = (this.attackCounter % 3) + 1;
       this.attackCounterDisplay = this.attackCounter;
       this.attackCounterTimer = 1.0; // Show for 1 second
     }
@@ -3165,7 +3158,7 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
       pop();
     }
 
-    // Draw attack counter display
+    // Draw attack cycle debug display
     if (this.attackCounterTimer > 0 && this.attackCounterDisplay > 0) {
       push();
       textAlign(CENTER, CENTER);
@@ -3173,7 +3166,7 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
       fill(255, 255, 100, map(this.attackCounterTimer, 0, 1, 0, 255));
       stroke(0, map(this.attackCounterTimer, 0, 1, 0, 255));
       strokeWeight(2);
-      text(`Attack ${this.attackCounterDisplay}`, this.pos.x, this.pos.y - 100);
+      text(`Attack Cycle ${this.attackCounterDisplay}/3`, this.pos.x, this.pos.y - 100);
       pop();
     }
 

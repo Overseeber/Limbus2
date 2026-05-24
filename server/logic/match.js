@@ -339,7 +339,7 @@ class Match {
                 let sequence = 1;
 
                 if (!isCharged && timeSinceLastAttack < comboWindow && player.attackCounter > 0) {
-                    sequence = Math.min(3, player.attackCounter + 1);
+                    sequence = (player.attackCounter % 3) + 1;
                 } else if (isCharged) {
                     sequence = 3;
                 } else {
@@ -362,7 +362,7 @@ class Match {
                     let sequence = 1;
                     
                     if (!isCharged && timeSinceLastAttack < comboWindow && player.attackCounter > 0) {
-                        sequence = Math.min(3, player.attackCounter + 1);
+                        sequence = (player.attackCounter % 3) + 1;
                     } else if (isCharged) {
                         sequence = 3;
                     }

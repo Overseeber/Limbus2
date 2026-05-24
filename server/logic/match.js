@@ -174,6 +174,14 @@ class Match {
                 // Resolve collisions
                 this.resolveCollisions(player);
 
+                // After collision resolution, check ground snap to prevent floating
+                // Collision pushes can lift players above ground, causing them to hover
+                if (player.gameState.position.y >= 595) {
+                    player.gameState.position.y = 600;
+                    player.gameState.velocity.y = 0;
+                    player.gameState.onGround = true;
+                }
+
                 // Check attacks during active frame (RESTORED rect-based detection)
                 if (player.strikeActive && player.attackSequence > 0) {
                     this.checkAttackHits(player);
@@ -216,7 +224,18 @@ class Match {
         
         // Don't allow movement input during hitstun or stagger active phase
         if (state.state !== 'hit' && !(state.state === 'staggered' && state.staggerTimer > 0)) {
-            if (input.left) {
+            // DASHING: Skip movement input and friction - dash maintains its own velocity
+            // Reference: during dash, movement input is skipped entirely
+            if (state.isDashing) {
+                // Still update facing direction based on input for dash attack direction
+                if (input.left) {
+                    state.facing = -1;
+                } else if (input.right) {
+                    state.facing = 1;
+                }
+                // Don't apply friction or override velocity during dash
+                // Dash velocity stays at full dashSpeed * 60
+            } else if (input.left) {
                 state.velocity.x = -maxSpeed;
                 state.facing = -1;
             } else if (input.right) {
@@ -830,8 +849,10 @@ class Match {
         const config = player.config;
         
         // Dash attacks use enhanced stats
+        // Reference: base dash range = 168 (40% over base 120) with 50% bonus for dash = 252 center distance
+        // Rect-adjusted: 252 - 25 (half player box) ≈ 227
         const attackData = {
-            range: 168,           // 40% increased range
+            range: 227,           // Rect-adjusted for 252 center distance reference
             baseDamage: 1.5,      // 1.5x base damage multiplier
             knockback: 80,        // Moderate knockback
             staggerDamage: 60,    // Stagger damage
@@ -851,7 +872,7 @@ class Match {
             const hitResult = this.engine.checkAttackHit(
                 state.position,
                 defender.gameState.position,
-                attackData.range * 1.5, // 50% increased range for dash
+                attackData.range,  // Range already includes dash bonus
                 state.facing,
                 defender.gameState.hitCooldown || 0
             );

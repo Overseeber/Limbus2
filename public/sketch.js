@@ -670,8 +670,21 @@ function triggerAbilityVisuals(fighter, abilityId, result) {
 function drawAttackHitbox(fighter) {
   if (!fighter || !fighter.pos) return;
 
-  // Get attack range from the attack state
-  const attackRange = fighter.attackRange || 120;
+  // Get the character config to look up actual attack range for display
+  const charKey = fighter.characterKey || (fighter.constructor && fighter.constructor.name);
+  const charConfig = (typeof CHARACTERS !== 'undefined' && CHARACTERS[charKey]) || 
+                     (window.CHARACTERS && window.CHARACTERS[charKey]) || null;
+  
+  // Determine attack range from the current attack sequence
+  let attackRange = 120; // fallback
+  if (fighter.attackSequence > 0 && charConfig && charConfig.attacks) {
+    const attackKey = fighter.attackSequence === 1 ? 'light' :
+                      fighter.attackSequence === 2 ? 'medium' : 'heavy';
+    const attackDef = charConfig.attacks[attackKey];
+    if (attackDef && attackDef.range) {
+      attackRange = attackDef.range;
+    }
+  }
   
   // RESTORED: Calculate attack box using same formula as server (calcAttackBox)
   const facing = fighter.facing || 1;
@@ -696,22 +709,22 @@ function drawAttackHitbox(fighter) {
   strokeWeight(2);
   rect(boxX, boxY, boxW, boxH);
   
-  // Draw attack indicator label
+  // Draw attack indicator label with actual range info
   const attackLabel = fighter.strikeActive ? 'HITBOX ACTIVE' : 
                       fighter.attackPhase === 'startup' ? 'STARTUP' :
                       fighter.attackPhase === 'recovery' ? 'RECOVERY' : 'ATTACK';
   fill(255);
   textSize(10);
   textAlign(LEFT, BOTTOM);
-  text(`${attackLabel} Seq:${fighter.attackSequence} Ph:${fighter.attackPhase}`, boxX, boxY - 5);
+  text(`${attackLabel} Seq:${fighter.attackSequence} Rng:${attackRange} Ph:${fighter.attackPhase}`, boxX, boxY - 5);
   
-  // Draw range line
+  // Draw range line from fighter center to edge of hitbox
   stroke(255, 200, 0, 100);
   strokeWeight(1);
-  line(fighter.pos.x, fighter.pos.y - 30, fighter.pos.x + facing * atkBox.w, fighter.pos.y - 30);
+  line(fighter.pos.x, fighter.pos.y - 30, fighter.pos.x + facing * attackRange, fighter.pos.y - 30);
   pop();
   
-  // Draw player hitbox for reference
+  // Draw player hitbox for reference (green outline)
   push();
   noFill();
   stroke(0, 255, 0, 100);

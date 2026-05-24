@@ -39,12 +39,19 @@ const CALLISTO_CONFIG = {
   defaultSprite: 'cidle',
   
   // ATTACK SEQUENCES - Frame-based timing for responsive combat
+  // Ranges adjusted for server rect-based hit detection.
+  // Rect overlap max distance = range + 25 (half player box width).
+  // Reference center-to-center: light=154, heavy=196 (Callisto no 2x bonus).
+  // Rect-adjusted range = ref_distance - 25:
+  //   light: 154 - 25 = 129 → 130
+  //   medium: interpolate → 160
+  //   heavy: 196 - 25 = 171 → 170
   attacks: {
     light: {
       startup: 0.06,        // Faster startup for aggressive feel
       active: 0.12,
       recovery: 0.28,       // Shorter recovery for combos
-      range: 120,           // Longer reach
+      range: 130,           // Rect-adjusted (~154 center distance)
       damage: 1.0,
       knockback: 40,        // More knockback
       staggerDamage: 60,
@@ -54,7 +61,7 @@ const CALLISTO_CONFIG = {
       startup: 0.10,
       active: 0.16,
       recovery: 0.36,
-      range: 140,           // Extended reach
+      range: 160,           // Rect-adjusted (~185 center distance)
       damage: 1.25,
       knockback: 65,        // Higher knockback
       staggerDamage: 90,
@@ -64,7 +71,7 @@ const CALLISTO_CONFIG = {
       startup: 0.18,
       active: 0.18,
       recovery: 0.45,
-      range: 180,           // Long range heavy
+      range: 200,           // Rect-adjusted (~225 center distance)
       damage: 1.8,          // High damage
       knockback: 100,       // Significant knockback
       staggerDamage: 150,   // Heavy stagger damage

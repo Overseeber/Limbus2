@@ -39,12 +39,20 @@ const VALENCINA_CONFIG = {
   defaultSprite: 'idle',
   
   // ATTACK SEQUENCES - Frame-based timing for responsive combat
+  // Ranges adjusted for server rect-based hit detection:
+  // Reference uses center-to-center distance (dist), server uses rect overlap.
+  // Rect overlap requires ~25px more range to match same center distance.
+  // Reference Valencina: light=231, heavy=294 (after character 2x bonus).
+  // Base ranges (before Valencina 2x bonus): ~115-147.
+  // Rect-adjusted: need ~206 base to match 231 center distance.
+  // Since Valencina gets 100% range bonus via charge mechanic, base ranges
+  // are doubled for Valencina. Other characters use these as-is.
   attacks: {
     light: {
       startup: 0.08,        // Time before hitbox activates
       active: 0.12,         // Hitbox active duration
       recovery: 0.32,       // Recovery time after attack
-      range: 100,           // Attack range in pixels
+      range: 200,           // Rect-adjusted range (~231 center distance with player box)
       damage: 1.0,          // Damage multiplier
       knockback: 30,        // Knockback amount
       staggerDamage: 50,    // Stagger damage
@@ -54,7 +62,7 @@ const VALENCINA_CONFIG = {
       startup: 0.12,
       active: 0.16,
       recovery: 0.40,
-      range: 120,
+      range: 240,           // Rect-adjusted (~269 center distance)
       damage: 1.2,
       knockback: 50,
       staggerDamage: 75,
@@ -64,7 +72,7 @@ const VALENCINA_CONFIG = {
       startup: 0.20,
       active: 0.20,
       recovery: 0.50,
-      range: 150,
+      range: 300,           // Rect-adjusted (~325 center distance)
       damage: 1.6,
       knockback: 80,
       staggerDamage: 120,

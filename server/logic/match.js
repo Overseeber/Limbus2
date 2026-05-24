@@ -292,10 +292,20 @@ class Match {
             player.dashAttackResolved = false;
         }
         
-        // DASH ATTACK - When attacking during dash
-        if (input.attack && state.isDashing && !player.dashAttackQueued) {
-            player.dashAttackQueued = true;
-            player.dashAttackInitiated = true;
+        // DASH ATTACK - Auto-triggers when opponent is within range during dash
+        // Reference: checks if ANY opponent is within 80px X distance during dash
+        // No attack button required - dash attack triggers automatically on proximity
+        if (state.isDashing && !player.dashAttackResolved) {
+            const defenders = Object.values(this.players).filter(p => 
+                p.clientId !== player.clientId && !p.gameState.isDefeated
+            );
+            const hasTargetInRange = defenders.some(d => 
+                Math.abs(state.position.x - d.gameState.position.x) < 80
+            );
+            if (hasTargetInRange) {
+                player.dashAttackInitiated = true;
+                player.dashAttackQueued = true;
+            }
         }
 
         // ATTACK INPUT - Use explicit edge-triggered flags from client for reliable detection
@@ -516,9 +526,21 @@ class Match {
                 state.isDashing = false;
                 state.velocity.x *= 0.3; // Slow down after dash
                 state.dashDurationTimer = 0;
+                // Clear dash attack state
                 player.dashAttackInitiated = false;
                 player.dashAttackResolved = false;
                 player.dashAttackQueued = false;
+                // IMPORTANT: Clear attacking state if this was a dash attack (sequence=0)
+                // Dash attacks set isAttacking=true with attackSequence=0 (special marker).
+                // Normal attacks with sequence 1-3 use the phase timing system to auto-clear.
+                // But sequence=0 has no phase transitions, so we must clear it when dash ends.
+                // Clear dash attack state markers when dash ends
+                if (player.attackSequence === 0) {
+                    player.attackSequence = 0;
+                    player.attackPhase = 'none';
+                    player.strikeActive = false;
+                    player.attackFrame = 0;
+                }
             }
             
             // RESOLVE DASH ATTACK if triggered during dash
@@ -841,12 +863,60 @@ class Match {
     }
 
     /**
-     * Resolve dash attack - RESTORED with proper rect-based detection
+     * Resolve dash attack - RESTORED with reference behavior
+     * Reference flow:
+     * 1. Set state='attack' + strikeActive (for animation/damage)
+     * 2. Apply dash velocity in ORIGINAL direction (continue dashing through opponent)
+     * 3. Set facing towards opponent for attack animation (sprite direction only)
+     * 4. Extend dash duration by 0.16s to let the attack animation play
+     * 5. Immediately resolve damage against all targets in range
+     * 6. Set a short attack timer to auto-clear isAttacking when dash ends
+     * 7. Spawn slash effect (client handles this via snapshot)
      */
     resolveDashAttack(player) {
         const attacker = player;
         const state = player.gameState;
         const config = player.config;
+        
+        // PRESERVE original dash direction for velocity through opponent
+        const originalDir = state.velocity.x >= 0 ? 1 : -1;
+        
+        // Set facing towards closest opponent for ATTACK SPRITE only (not velocity)
+        // The fighter's sprite should face the opponent during the attack animation,
+        // but the dash continues in the original direction through them
+        let facing = state.facing;
+        let closestDist = Infinity;
+        Object.values(this.players).forEach(d => {
+            if (d.clientId !== attacker.clientId && !d.gameState.isDefeated) {
+                const dx = d.gameState.position.x - state.position.x;
+                if (Math.abs(dx) < closestDist) {
+                    closestDist = Math.abs(dx);
+                    facing = dx > 0 ? 1 : -1;
+                }
+            }
+        });
+        state.facing = facing; // Sprite faces opponent for attack animation
+        
+        // Set attack state for CLIENT ANIMATION only (not real isAttacking).
+        // IMPORTANT: Do NOT set state.isAttacking = true here because that blocks
+        // jump, dash, and guard input processing. Dash attacks resolve damage
+        // immediately in this function, so there's no need to block inputs.
+        // The client fighter-modular checks `state === 'attack' && isDashing`
+        // to determine the dash attack sprite, so we use attackSequence=0 for that.
+        // state.state stays as-is so movement/input is not blocked.
+        attacker.strikeActive = true;
+        attacker.attackSequence = 0; // Special: 0 means dash attack for client
+        attacker.attackPhase = 'active';
+        // Keep state.isAttacking false so the player can jump/dash/guard
+        // during the dash attack animation
+        
+        // RE-APPLY dash velocity in ORIGINAL direction to continue through opponent
+        // Reference: vel.x = facing * 60 (per frame), but we preserve original dash dir
+        state.velocity.x = originalDir * 60 * 60;
+        
+        // REFERENCE: Extend dash duration by 0.16s to allow full attack animation
+        // Reset duration timer so dash continues through opponent
+        state.dashDurationTimer = 0;
         
         // Dash attacks use enhanced stats
         // Reference: base dash range = 168 (40% over base 120) with 50% bonus for dash = 252 center distance

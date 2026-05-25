@@ -292,7 +292,8 @@ class Fighter {
     this.attackSequence = 0;             // Attack combo counter (legacy)
     this.attackFrame = 0;                // Animation frame counter (legacy)
     this.attackFrameTimer = 0;           // Frame timing counter (legacy)
-    
+    this.attackPhase = 'none';          // Attack phase for startup/active/recovery
+
     // COMBAT MECHANICS PROPERTIES
     this.kbResist = 0.08;                // Knockback resistance multiplier
     this.dashCharges = 3;               // Number of available dash charges
@@ -1541,34 +1542,60 @@ class Fighter {
     const opponent = Array.isArray(opponents) ? (opponents.length > 0 ? opponents[0] : null) : opponents;
     
     if (this.state === 'attack') {
-      // Handle attack sequence frame timing
       if (this.attackSequence > 0) {
-        this.attackFrameTimer += dt;
-        
-        if (this.attackFrameTimer >= this.attackFrameDuration) {
-          this.attackFrameTimer = 0;
-          this.attackFrame++;
-          this.attackDamageDealt = false; // Reset damage flag for next frame
-          
-          // Check if sequence is complete
-          if (this.attackSequence === 1 && this.attackFrame >= 4) { // Attack 1: 4 frames
-            this.setState('idle');
-            this.strikeActive = false;
-            this.attackSequence = 0;
-          } else if (this.attackSequence === 2 && this.attackFrame >= 4) { // Attack 2: 4 frames
-            this.setState('idle');
-            this.strikeActive = false;
-            this.attackSequence = 0;
-          } else if (this.attackSequence === 3 && this.attackFrame >= 4) { // Attack 3: 4 frames
-            this.setState('idle');
-            this.strikeActive = false;
-            this.attackSequence = 0;
+        if (this.attackPhase && this.attackPhase !== 'none') {
+          const attackKey = this.attackSequence === 1 ? 'light' : this.attackSequence === 2 ? 'medium' : 'heavy';
+          const attackDef = CHARACTERS[this.characterKey]?.attacks?.[attackKey];
+
+          if (attackDef) {
+            this.attackFrameTimer += dt;
+
+            if (this.attackPhase === 'startup' && this.attackFrameTimer >= attackDef.startup) {
+              this.attackPhase = 'active';
+              this.attackFrameTimer = 0;
+              this.strikeActive = true;
+            } else if (this.attackPhase === 'active' && this.attackFrameTimer >= attackDef.active) {
+              this.attackPhase = 'recovery';
+              this.attackFrameTimer = 0;
+              this.strikeActive = false;
+            } else if (this.attackPhase === 'recovery' && this.attackFrameTimer >= attackDef.recovery) {
+              this.setState('idle');
+              this.attackSequence = 0;
+              this.attackPhase = 'none';
+              this.attackFrame = 0;
+              this.attackFrameTimer = 0;
+              this.strikeActive = false;
+            }
+          }
+        } else {
+          // Legacy attack frame progression when no phase data is available
+          this.attackFrameTimer += dt;
+
+          if (this.attackFrameTimer >= this.attackFrameDuration) {
+            this.attackFrameTimer = 0;
+            this.attackFrame++;
+            this.attackDamageDealt = false; // Reset damage flag for next frame
+
+            // Check if sequence is complete
+            if (this.attackSequence === 1 && this.attackFrame >= 4) { // Attack 1: 4 frames
+              this.setState('idle');
+              this.strikeActive = false;
+              this.attackSequence = 0;
+            } else if (this.attackSequence === 2 && this.attackFrame >= 4) { // Attack 2: 4 frames
+              this.setState('idle');
+              this.strikeActive = false;
+              this.attackSequence = 0;
+            } else if (this.attackSequence === 3 && this.attackFrame >= 4) { // Attack 3: 4 frames
+              this.setState('idle');
+              this.strikeActive = false;
+              this.attackSequence = 0;
+            }
           }
         }
       }
-      
+
       // Handle attack timer expiration for non-sequence attacks
-      if (this.state === 'attack' && this.attackTimer <= 0) {
+      if (this.state === 'attack' && this.attackTimer <= 0 && this.attackSequence === 0) {
         if (!this.attackHitResolved) {
           this.resolveAttackForMultipleOpponents(opponents);
         }
@@ -2025,8 +2052,16 @@ class Fighter {
       return;
     }
 
-    // Update attack sequence counter for 1-3 rotation
-    this.attackCounter = (this.attackCounter % 3) + 1;
+    // Update attack sequence counter for 1-3 rotation. Charged attacks always use the heavy sequence.
+    if (this.chargeAttack) {
+      this.attackCounter = 3;
+    } else {
+      this.attackCounter = (this.attackCounter % 3) + 1;
+    }
+    this.attackSequence = this.attackCounter;
+    this.attackPhase = 'startup';
+    this.attackFrame = 0;
+    this.attackFrameTimer = 0;
     
     // Combo is handled when the attack actually lands (in addCombo)
     this.attackDamageDealt = false;
@@ -2039,7 +2074,7 @@ class Fighter {
     this.statusEffectsApplied = false;
     this.slashEffectsSpawned = false;
     this.lastAttackHit = false;
-    this.strikeActive = true; // Set strikeActive for normal attacks
+    this.strikeActive = false; // Activate strike during the active phase
 
     // Valencina's charged attack mechanics
     if (this.characterKey === 'VALENCINA' && this.chargeAttack) {
@@ -3276,6 +3311,7 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
       attackState: {
         attackTimer: this.attackTimer,
         attackSequence: this.attackSequence,
+        attackPhase: this.attackPhase,
         attackFrame: this.attackFrame,
         strikeActive: this.strikeActive,
         attackDamage: this.attackDamage,
@@ -3338,6 +3374,7 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
     // Attack state
     this.attackTimer = snapshot.attackState.attackTimer;
     this.attackSequence = snapshot.attackState.attackSequence;
+    this.attackPhase = snapshot.attackState.attackPhase || 'none';
     this.attackFrame = snapshot.attackState.attackFrame;
     this.strikeActive = snapshot.attackState.strikeActive;
     this.attackDamage = snapshot.attackState.attackDamage;

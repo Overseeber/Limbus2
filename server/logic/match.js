@@ -313,13 +313,20 @@ class Match {
         const attackPressed = input.attackPressed || (input.attack && !prevInput.attack);
         const attackReleased = input.attackReleased || (!input.attack && prevInput.attack && player.attackRequestActive);
 
+        // Determine whether we can start another attack now.
+        // Allow chaining if the last attack started recently enough, even if normal cooldown remains.
+        const now = Date.now();
+        const comboWindow = 750;
+        const canChainAttack = !player.attackCharge && player.attackCounter > 0 && (now - player.lastAttackTime) < comboWindow;
+        const canAttackNow = player.attackTimer <= 0 || canChainAttack;
+
         // IMPORTANT: Only set attackHoldStart ONCE per press, not every tick.
         // The client holds attackPressed sticky for 120ms. Without this check,
         // attackHoldStart gets reset every tick, breaking the fallback timer.
         if (attackPressed && !state.isAttacking && state.state !== 'hit' && 
-            state.state !== 'staggered' && state.state !== 'slam' && player.attackTimer <= 0) {
+            state.state !== 'staggered' && state.state !== 'slam' && canAttackNow) {
             if (!player.attackHoldStart) {
-                player.attackHoldStart = Date.now();
+                player.attackHoldStart = now;
                 player.attackRequestActive = true;
             }
         }
@@ -617,10 +624,8 @@ class Match {
         player.attackFrame = 0;
         player.attackCharge = false;
         player.strikeActive = false;
-        // Don't reset attackTimer - let it expire naturally for cooldown
-        if (player.attackTimer <= 0) {
-            player.attackTimer = player.config.attackInterval || 0.75;
-        }
+        player.lastAttackTime = Date.now();
+        // Don't reset attackTimer here; preserve any remaining cooldown so the combo timing is correct.
         console.log(`[Attack] ${player.clientId} attack complete`);
     }
 

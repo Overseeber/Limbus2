@@ -16,37 +16,8 @@ const abilityHandler = require('./server/logic/abilityHandler');
 const Match = require('./server/logic/match');
 
 // Create authoritative gameplay engine for all matches
-const gameplayEngine = new GameplayEngine();
+//const gameplayEngine = new GameplayEngine();
 
-// Minimal server-side Vector2 implementation for position/velocity math.
-class Vector2 {
-    constructor(x = 0, y = 0) {
-        this.x = x;
-        this.y = y;
-    }
-
-    set(x, y) {
-        this.x = x;
-        this.y = y;
-        return this;
-    }
-
-    copy() {
-        return new Vector2(this.x, this.y);
-    }
-
-    add(v) {
-        this.x += v.x;
-        this.y += v.y;
-        return this;
-    }
-
-    sub(v) {
-        this.x -= v.x;
-        this.y -= v.y;
-        return this;
-    }
-}
 
 console.log("Server is Running");
 
@@ -161,18 +132,7 @@ function broadcastEvent(event, excludeSocketId = null, roomId = null) {
     }
 }
 
-// =====================
-// OLD COMBAT FUNCTIONS REMOVED
-// These are now handled by Match class
-// - runGameTick -> Match.tick()
-// - detectcollision -> removed (duplicate logic)
-// - detectHit -> Match.resolveAttack()
-// - resolveHit -> Match.resolveAttack()
-// - updateStagger -> GameplayEngine handles stagger
-// - processDeath -> GameplayEngine handles defeat
-// - updateMatch -> Match.tick()
-// - endBattle -> Match.endMatch()
-// =====================
+
 
 const EVENT_TYPES = {
   INPUT_MOVE: 'INPUT_MOVE',
@@ -270,7 +230,7 @@ io.sockets.on('connection', (socket) => {
     socket.on('joinRoom', (roomId) => {
         const room = roomList[roomId];
         if (!room) {
-            socket.emit('error', { message: 'ROOM_NOT_FOUND' });
+            socket.emit('error', { message: 'noroomie' });
             return;
         }
         if (client.room) {

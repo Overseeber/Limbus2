@@ -832,112 +832,104 @@ class Fighter {
   }
 
   updateCallistoAttackSequence() {
-    // Attack 1: cs1f1 (windup when receiving attack and before hitting), (when hitting) switch to cs1f2 with cs1s1 (deal an instance of damage) (inflict 1 bind, gain 1 haste) > cs1f3
+    if (this.attackSequence <= 0) return;
+
+    const attackPhase = this.attackPhase || 'startup';
+    const sequence1 = ['cs1f1', 'cs1f2', 'cs1f3'];
+    const sequence2 = ['cs1f3', 'cs2f1'];
+    const sequence3 = ['cs3f1', 'cs3f2', 'cs3f3', 'cs3f4'];
+    let visualFrame = 0;
+
     if (this.attackSequence === 1) {
-      const sequence = ['cs1f1', 'cs1f2', 'cs1f3'];
-      const damageFrames = [false, true, false]; // cs1f2 deals damage
-      
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
-        
-        // Spawn slash effects on specific frames (only once per frame)
-        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
-          this.slashEffectsSpawned = true;
+      const damageFrames = [false, true, false];
+      if (attackPhase === 'startup') {
+        visualFrame = 0;
+      } else if (attackPhase === 'active') {
+        visualFrame = 1;
+      } else if (attackPhase === 'recovery') {
+        visualFrame = 2;
+      }
+      this.currentSprite = sequence1[Math.min(visualFrame, sequence1.length - 1)];
+
+      if (visualFrame === 1 && !this.slashEffectsSpawned) {
+        this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
+        this.slashEffectsSpawned = true;
+      }
+
+      if (damageFrames[visualFrame] && !this.attackDamageDealt) {
+        this.dealAttackDamage();
+        this.attackDamageDealt = true;
+        if (this.target) {
+          this.requestApplyStatus(this.target, { type: 'Bind', count: 1, potency: 1 });
+          console.log('🔗 Callisto inflicted Bind on enemy!');
         }
-        
-        // Deal damage and apply effects on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
-          this.dealAttackDamage();
-          this.attackDamageDealt = true;
-          
-          // Apply Attack 1 effects: inflict 1 bind on enemy, gain 1 haste
-          if (this.target) {
-            this.requestApplyStatus(this.target, { type: 'Bind', count: 1, potency: 1 });
-            console.log('🔗 Callisto inflicted Bind on enemy!');
+        this.requestApplyStatus(this, { type: 'Haste', count: 1, potency: 1 });
+        console.log('⚡ Callisto gained Haste!');
+      }
+    } else if (this.attackSequence === 2) {
+      const damageFrames = [false, true];
+      if (attackPhase === 'startup' || attackPhase === 'active') {
+        visualFrame = 0;
+      } else if (attackPhase === 'recovery') {
+        visualFrame = 1;
+      }
+      this.currentSprite = sequence2[Math.min(visualFrame, sequence2.length - 1)];
+
+      if (visualFrame === 1 && !this.slashEffectsSpawned) {
+        this.spawnSlashEffect('cs2s1', { x: 0, y: -10 });
+        this.slashEffectsSpawned = true;
+      }
+
+      if (damageFrames[visualFrame] && !this.attackDamageDealt) {
+        this.dealAttackDamage();
+        this.attackDamageDealt = true;
+        if (this.target) {
+          const fragileStatus = this.target.statuses.find(s => s.type === 'Fragile');
+          const currentFragileStacks = fragileStatus ? fragileStatus.potency : 0;
+          if (currentFragileStacks < 5) {
+            this.requestApplyStatus(this.target, { type: 'Fragile', count: 1, potency: 1 });
+            console.log('💔 Callisto inflicted Fragile on enemy!');
           }
-          this.requestApplyStatus(this, { type: 'Haste', count: 1, potency: 1 });
-          console.log('⚡ Callisto gained Haste!');
+        }
+        const protectionStatus = this.statuses.find(s => s.type === 'Protection');
+        const currentProtectionStacks = protectionStatus ? protectionStatus.potency : 0;
+        if (currentProtectionStacks < 5) {
+          this.requestApplyStatus(this, { type: 'Protection', count: 1, potency: 1 });
+          console.log('🛡️ Callisto gained Protection!');
         }
       }
-    }
-    // Attack 2: cs1f3 (windup) > s2f1 with s2s1 (deal an instance of damage) (inflict 1 fragile (max stack 5), gain 1 protection (max stack 5))
-    else if (this.attackSequence === 2) {
-      const sequence = ['cs1f3', 'cs2f1'];
-      const damageFrames = [false, true]; // s2f1 deals damage
-      
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
-        
-        // Spawn slash effects on specific frames (only once per frame)
-        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('cs2s1', { x: 0, y: -10 });
-          this.slashEffectsSpawned = true;
-        }
-        
-        // Deal damage and apply effects on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
-          this.dealAttackDamage();
-          this.attackDamageDealt = true;
-          
-          // Apply Attack 2 effects: inflict 1 fragile (max stack 5), gain 1 protection (max stack 5)
-          if (this.target) {
-            const fragileStatus = this.target.statuses.find(s => s.type === 'Fragile');
-            const currentFragileStacks = fragileStatus ? fragileStatus.potency : 0;
-            if (currentFragileStacks < 5) {
-              this.requestApplyStatus(this.target, { type: 'Fragile', count: 1, potency: 1 });
-              console.log('💔 Callisto inflicted Fragile on enemy!');
-            }
-          }
-          
-          const protectionStatus = this.statuses.find(s => s.type === 'Protection');
-          const currentProtectionStacks = protectionStatus ? protectionStatus.potency : 0;
-          if (currentProtectionStacks < 5) {
-            this.requestApplyStatus(this, { type: 'Protection', count: 1, potency: 1 });
-            console.log('🛡️ Callisto gained Protection!');
-          }
-        }
+    } else if (this.attackSequence === 3) {
+      const damageFrames = [false, true, true, false];
+      if (attackPhase === 'startup') {
+        visualFrame = 0;
+      } else if (attackPhase === 'active') {
+        visualFrame = 1;
+      } else if (attackPhase === 'recovery') {
+        const recoveryTime = this.attackFrameTimer || 0;
+        visualFrame = recoveryTime < 0.2 ? 2 : 3;
       }
-    }
-    // Attack 3: cs3f1 > cs3f2 with cs3s1 (deal an instance of damage) hold for 0.5 seconds, switch to cs3f3 with cs3s2 (deal +5% more damage for every negative effect on enemy (max 25%)) switch to cs3s4
-    else if (this.attackSequence === 3) {
-      const sequence = ['cs3f1', 'cs3f2', 'cs3f3', 'cs3f4'];
-      const damageFrames = [false, true, true, false]; // cs3f2 and cs3f3 deal damage
-      const holdTimes = [0.2, 0.5, 0.2, 0.5]; 
-      
-      if (this.attackFrame < sequence.length) {
-        this.currentSprite = sequence[this.attackFrame];
-        
-   
-        
-        // Spawn slash effects on specific frames (only once per frame)
-        if (this.attackFrame === 1 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('cs3s1', { x: 0, y: -10 });
-          this.slashEffectsSpawned = true;
-        } else if (this.attackFrame === 2 && !this.slashEffectsSpawned) {
-          this.spawnSlashEffect('cs3s2', { x: 0, y: -10 });
-        }
-        
-        // Deal damage and apply effects on damage frames
-        if (damageFrames[this.attackFrame] && !this.attackDamageDealt) {
-          // Calculate damage with negative effect bonus for cs3f3
-          let damageMultiplier = 1.0;
-          if (this.attackFrame === 2 && this.target) {
-            // Count negative effects on enemy
-            const negativeEffects = ['Bind', 'Fragile', 'Burn', 'Bleed', 'Tremor', 'Sinking'];
-            const negativeCount = negativeEffects.filter(effect => this.target.hasStatus(effect)).length;
-            const bonusDamage = Math.min(negativeCount * 0.05, 0.25); // Max 25% bonus
-            damageMultiplier = 1.0 + bonusDamage;
-            
-            if (bonusDamage > 0) {
-              console.log(`⚡ Callisto gained ${Math.round(bonusDamage * 100)}% damage bonus from ${negativeCount} negative effects!`);
-            }
+      this.currentSprite = sequence3[Math.min(visualFrame, sequence3.length - 1)];
+
+      if (visualFrame === 1 && !this.slashEffectsSpawned) {
+        this.spawnSlashEffect('cs3s1', { x: 0, y: -10 });
+        this.slashEffectsSpawned = true;
+      } else if (visualFrame === 2 && !this.slashEffectsSpawned) {
+        this.spawnSlashEffect('cs3s2', { x: 0, y: -10 });
+      }
+
+      if (damageFrames[visualFrame] && !this.attackDamageDealt) {
+        let damageMultiplier = 1.0;
+        if (visualFrame === 2 && this.target) {
+          const negativeEffects = ['Bind', 'Fragile', 'Burn', 'Bleed', 'Tremor', 'Sinking'];
+          const negativeCount = negativeEffects.filter(effect => this.target.hasStatus(effect)).length;
+          const bonusDamage = Math.min(negativeCount * 0.05, 0.25);
+          damageMultiplier = 1.0 + bonusDamage;
+          if (bonusDamage > 0) {
+            console.log(`⚡ Callisto gained ${Math.round(bonusDamage * 100)}% damage bonus from ${negativeCount} negative effects!`);
           }
-          
-          // Deal damage with multiplier
-          this.dealAttackDamage(damageMultiplier);
-          this.attackDamageDealt = true;
         }
+        this.dealAttackDamage(damageMultiplier);
+        this.attackDamageDealt = true;
       }
     }
   }

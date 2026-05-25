@@ -276,6 +276,20 @@ function processSnapshot(snapshot) {
         fighter.chargeAttack = state.chargeAttack || false;
         fighter.attackCounter = state.attackCounter || 0;
         
+        // Apply remote input state for non-local players
+        fighter.remoteInput = {
+            left: !!state.input?.left,
+            right: !!state.input?.right,
+            up: !!state.input?.up,
+            down: !!state.input?.down,
+            attack: !!state.input?.attack,
+            guard: !!state.input?.guard,
+            dash: !!state.input?.dash,
+            slam: !!state.input?.slam,
+            attackPressed: !!state.input?.attackPressed,
+            attackReleased: !!state.input?.attackReleased
+        };
+        
         // Apply slam state
         fighter.isSlamAttacking = state.isSlamAttacking || false;
         
@@ -295,16 +309,23 @@ function processSnapshot(snapshot) {
         const maxSpeed = (fighter.speed || 9) * 60;
         const isMovingFast = Math.abs(fighter.vel.x) >= maxSpeed * 0.9;
         const isLocalControlled = fighter.isLocalPlayer || fighter.isPlayerControlled;
-        const hasPlayerInput = isLocalControlled && (
+        const hasLocalInput = isLocalControlled && (
             keyState.left || keyState.right || keyState.up || keyState.down ||
             keyState.attack || keyState.guard || keyState.dash || keyState.slam
         );
+        const hasRemoteInput = !isLocalControlled && (
+            fighter.remoteInput.left || fighter.remoteInput.right || fighter.remoteInput.up || fighter.remoteInput.down ||
+            fighter.remoteInput.attack || fighter.remoteInput.guard || fighter.remoteInput.dash || fighter.remoteInput.slam ||
+            fighter.remoteInput.attackPressed || fighter.remoteInput.attackReleased
+        );
+        const hasPlayerInput = hasLocalInput || hasRemoteInput;
 
         if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate') {
             fighter.state = combatState;
             fighter.haltSequence = false;
-        } else if ((fighter.state === 'hit' || fighter.state === 'staggered') && isLocalControlled && !hasPlayerInput) {
-            // Preserve hurt/staggered visuals for the local player until they provide input.
+        } else if (isLocalControlled && (fighter.state === 'hit' || fighter.state === 'staggered') && !hasLocalInput) {
+            // Preserve hurt/staggered visuals for LOCAL player only, until they provide input.
+            // Remote players always accept server state transitions.
             fighter.haltSequence = false;
         } else if (fighter.isAttacking || fighter.attackSequence > 0) {
             fighter.state = 'attack';

@@ -193,7 +193,7 @@ class Match {
                     staggerLength: player.config.staggerLength
                 };
 
-                const events = this.engine.updateFighter(player.gameState, dt, config);
+                const events = this.engine.updateFighter(player.gameState, dt, config, player.input);
 
                 // Handle events from GameplayEngine
                 this.handleEvents(player, events);
@@ -1111,6 +1111,19 @@ class Match {
                 isDashing: player.gameState.isDashing || false,
                 dashCharges: player.gameState.dashCharges || 0,
                 onGround: player.gameState.onGround || false,
+                // Input state for remote player hold logic
+                input: {
+                    left: !!player.input?.left,
+                    right: !!player.input?.right,
+                    up: !!player.input?.up,
+                    down: !!player.input?.down,
+                    attack: !!player.input?.attack,
+                    guard: !!player.input?.guard,
+                    dash: !!player.input?.dash,
+                    slam: !!player.input?.slam,
+                    attackPressed: !!player.input?.attackPressed,
+                    attackReleased: !!player.input?.attackReleased
+                },
                 // Attack state for client animation
                 attackSequence: player.attackSequence || 0,
                 attackPhase: player.attackPhase || 'none',

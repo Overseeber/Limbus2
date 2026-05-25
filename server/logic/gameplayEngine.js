@@ -238,10 +238,20 @@ class GameplayEngine {
 
   updateCooldowns(state, dt) { Object.keys(state.abilityCooldowns).forEach(a => { if (state.abilityCooldowns[a] > 0) state.abilityCooldowns[a] -= dt; }); }
 
-  updateFighter(state, dt, config) {
+  updateFighter(state, dt, config, playerInput) {
     const events = [];
     this.updateCooldowns(state, dt);
-    if (state.state === 'hit') { state.hitTimer = (state.hitTimer || 0) - dt; if (state.hitTimer <= 0) { state.state = 'idle'; state.hitTimer = 0; events.push({ type: 'STATE_CHANGE', from: 'hit', to: 'idle' }); } }
+    // Handle hurt/stun state: decrement timer, but exit early if player provides movement input
+    if (state.state === 'hit') {
+      state.hitTimer = (state.hitTimer || 0) - dt;
+      // Check if player has provided movement input to exit hurt state early
+      const hasMovementInput = playerInput && (playerInput.left || playerInput.right || playerInput.up || playerInput.down);
+      if (state.hitTimer <= 0 || hasMovementInput) {
+        state.state = 'idle';
+        state.hitTimer = 0;
+        events.push({ type: 'STATE_CHANGE', from: 'hit', to: 'idle' });
+      }
+    }
     const su = this.updateStagger(state, dt, config);
     if (su.state !== state.state) events.push({ type: 'STATE_CHANGE', from: state.state, to: su.state });
     events.push(...this.processStatuses(state, dt));

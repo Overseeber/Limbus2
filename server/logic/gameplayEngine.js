@@ -241,12 +241,12 @@ class GameplayEngine {
   updateFighter(state, dt, config, playerInput) {
     const events = [];
     this.updateCooldowns(state, dt);
-    // Handle hurt/stun state: decrement timer, but exit early if player provides movement input
+    // Handle hurt/stun state: decrement timer until it expires
+    // Hitstun always lasts the full duration regardless of input.
+    // The "exit early on input" behavior is purely client-side visual for the local player.
     if (state.state === 'hit') {
       state.hitTimer = (state.hitTimer || 0) - dt;
-      // Check if player has provided movement input to exit hurt state early
-      const hasMovementInput = playerInput && (playerInput.left || playerInput.right || playerInput.up || playerInput.down);
-      if (state.hitTimer <= 0 || hasMovementInput) {
+      if (state.hitTimer <= 0) {
         state.state = 'idle';
         state.hitTimer = 0;
         events.push({ type: 'STATE_CHANGE', from: 'hit', to: 'idle' });

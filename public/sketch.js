@@ -313,19 +313,30 @@ function processSnapshot(snapshot) {
             keyState.left || keyState.right || keyState.up || keyState.down ||
             keyState.attack || keyState.guard || keyState.dash || keyState.slam
         );
-        const hasRemoteInput = !isLocalControlled && (
+        // Remote input determination: for non-local fighters, check their input from the snapshot.
+        // We use !fighter.isLocalPlayer instead of !isLocalControlled because in room mode,
+        // ALL fighters have isPlayerControlled=true, making isLocalControlled true for everyone.
+        // The isLocalControlled guard would incorrectly prevent remote input detection.
+        const hasRemoteInput = !fighter.isLocalPlayer && (
             fighter.remoteInput.left || fighter.remoteInput.right || fighter.remoteInput.up || fighter.remoteInput.down ||
             fighter.remoteInput.attack || fighter.remoteInput.guard || fighter.remoteInput.dash || fighter.remoteInput.slam ||
             fighter.remoteInput.attackPressed || fighter.remoteInput.attackReleased
         );
         const hasPlayerInput = hasLocalInput || hasRemoteInput;
 
+        // Determine whether the OWNER of this fighter is providing input.
+        // For local fighters: check the local keyboard (keyState).
+        // For remote fighters: check their remote input from the snapshot.
+        const fighterHasInput = fighter.isLocalPlayer ? hasLocalInput : hasRemoteInput;
+
         if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate') {
             fighter.state = combatState;
             fighter.haltSequence = false;
-        } else if (isLocalControlled && (fighter.state === 'hit' || fighter.state === 'staggered') && !hasLocalInput) {
-            // Preserve hurt/staggered visuals for LOCAL player only, until they provide input.
-            // Remote players always accept server state transitions.
+        } else if ((fighter.state === 'hit' || fighter.state === 'staggered') && !fighterHasInput) {
+            // Preserve hurt/staggered visuals until the fighter's OWNER provides input.
+            // Each player's controller (local keyboard for local player, remote input for enemy)
+            // determines when they exit hitstun visually. The server guarantees a minimum
+            // hitstun duration (0.18s) regardless of input.
             fighter.haltSequence = false;
         } else if (fighter.isAttacking || fighter.attackSequence > 0) {
             fighter.state = 'attack';

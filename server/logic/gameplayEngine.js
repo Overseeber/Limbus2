@@ -60,7 +60,14 @@ class GameplayEngine {
     return inFront || (!inFront && Math.abs(aPos.x - tPos.x) < range * 0.3);
   }
 
-  checkAttackHit(aPos, dPos, range, facing, cd) {
+  checkCircleHit(aPos, dPos, radius, cd) {
+    return Math.hypot(aPos.x - dPos.x, aPos.y - dPos.y) <= radius && !cd;
+  }
+
+  checkAttackHit(aPos, dPos, range, facing, cd, hitArea = 'box') {
+    if (hitArea === 'circle') {
+      return { hit: this.checkCircleHit(aPos, dPos, range, cd > 0), distance: Math.hypot(aPos.x - dPos.x, aPos.y - dPos.y) };
+    }
     return { hit: this.hitOpponent(this.calcAttackBox(aPos, facing, range), dPos, cd > 0), distance: Math.hypot(aPos.x - dPos.x, 0) };
   }
 
@@ -213,7 +220,8 @@ class GameplayEngine {
   resolveAttack(attacker, defender, attackData, config) {
     const result = { success: false, hit: false, damage: 0, knockback: 0, staggerResult: null, statuses: [], defenderHp: defender.hp, defeated: false, wasGuarded: false };
     const range = attackData.range || 100;
-    const hit = this.checkAttackHit(attacker.position, defender.position, attackData.isDashAttack ? range * 1.5 : range, attacker.facing, defender.hitCooldown || 0);
+    const attackRange = attackData.hitArea === 'circle' ? range : (attackData.isDashAttack ? range * 1.5 : range);
+    const hit = this.checkAttackHit(attacker.position, defender.position, attackRange, attacker.facing, defender.hitCooldown || 0, attackData.hitArea);
     if (!hit.hit) { result.reason = 'Missed'; return result; }
     result.hit = true;
 

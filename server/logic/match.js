@@ -117,6 +117,8 @@ class Match {
                 dashAttackActive: false,  // Whether dash attack animation is playing
                 // Slam state
                 isSlamAttacking: false,
+                // Visual-only slam hold flag: shows slam sprite after landing
+                slamHoldVisual: false,
                 slamLandingHitbox: null,
                 // Dash attack state
                 dashAttackQueued: false,  // Whether dash attack is pending
@@ -228,6 +230,31 @@ class Match {
                                 input.attackPressed;
             if (hasAnyInput) {
                 player.dashAttackActive = false;
+            }
+        }
+
+        // If fighter is in landed slam visual hold, any valid input should exit the visual
+        // immediately so the player is responsive after the slam sequence. This keeps
+        // the gameplay state idle (inputs accepted) while preserving the slam sprite
+        // until the player provides input — mimics 'hurt' visual persistence.
+        if (player.slamHoldVisual && state.onGround) {
+            // Only treat new input presses (edges) as clearing the slam visual.
+            // Use prevInput to detect edges so held keys don't clear the visual.
+            const prev = player.prevInput || {};
+            const leftEdge = input.left && !prev.left;
+            const rightEdge = input.right && !prev.right;
+            const upEdge = input.up && !prev.up;
+            const downEdge = input.down && !prev.down;
+            const attackEdge = input.attackPressed || (input.attack && !prev.attack);
+            const guardEdge = input.guard && !prev.guard;
+            const dashEdge = input.dash && !prev.dash;
+            const slamEdge = input.slam && !prev.slam;
+
+            const slamExitInput = leftEdge || rightEdge || upEdge || downEdge || attackEdge || guardEdge || dashEdge || slamEdge;
+            if (slamExitInput) {
+                player.slamHoldVisual = false;
+                state.isAttacking = false;
+                state.state = 'idle';
             }
         }
         
@@ -397,9 +424,11 @@ class Match {
             }
         }
 
-        // SLAM ATTACK - When in air and pressing S (down) key
-        // Slam triggers while in air and down is pressed (not on ground, not attacking)
-        if (input.down && !input.up && !state.onGround && !state.isAttacking && 
+        // SLAM ATTACK - Require sticky slam input from client (down+attack)
+        // Only trigger slam when the client explicitly sent the slam sticky flag
+        // and the fighter is airborne. This prevents down-only inputs from
+        // accidentally starting a slam on the server.
+        if (input.slam && !input.up && !state.onGround && !state.isAttacking && 
             state.state !== 'hit' && state.state !== 'staggered' && !player.isSlamAttacking) {
             this.startSlamAttack(player);
         }
@@ -498,10 +527,13 @@ class Match {
             state.velocity.y = 0;
             state.onGround = true;
             state.isAttacking = false;
-            // Keep state as 'slam' after landing so the client shows the slam sprite.
-            // The player must provide input to stand back up (cleared in processInput).
-            state.state = 'slam';
+            // Do NOT keep gameplay in an 'attack' blocking state. Instead set the
+            // gameplay state back to 'idle' and set a visual-only flag so clients
+            // can show the slam sprite until the player provides input. This
+            // prevents the player from being locked out of inputs after landing.
+            state.state = 'idle';
             player.isSlamAttacking = false;
+            player.slamHoldVisual = true;
             player.slamLandingHitbox = null;
             player.attackTimer = 1.0; // Slam cooldown
             this.resolveSlamLanding(player);
@@ -514,10 +546,11 @@ class Match {
             state.velocity.y = 0;
             state.onGround = true;
             
-            // Reset state from slam when landing naturally
+            // If any stray 'slam' state remained, clear it and visual flag
             if (state.state === 'slam') {
                 state.state = 'idle';
                 player.isSlamAttacking = false;
+                player.slamHoldVisual = false;
             }
         }
 
@@ -1053,7 +1086,8 @@ class Match {
                     staggerDamage: config.baseDamage * 100,
                     statusEffects: [],
                     chargeAttack: false,
-                    isDashAttack: false
+                    isDashAttack: false,
+                    hitArea: 'circle'
                 };
                 
                 const result = this.engine.resolveAttack(
@@ -1173,6 +1207,8 @@ class Match {
                 chargeAttack: player.attackCharge || false,
                 // Slam state
                 isSlamAttacking: player.isSlamAttacking || false,
+                // Visual-only flag: client should hold slam sprite until player input
+                slamHold: !!player.slamHoldVisual,
                 // Dash attack state
                 dashAttackQueued: player.dashAttackQueued || false,
                 dashAttackActive: player.dashAttackActive || false

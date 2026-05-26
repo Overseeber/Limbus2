@@ -168,6 +168,7 @@ class Fighter {
       this.isDefeated = stateUpdate.isDefeated;
       if (stateUpdate.isDefeated && this.hp <= 0) this.defeat();
     }
+    if (stateUpdate.slamHold !== undefined) this.slamHoldPosition = !!stateUpdate.slamHold;
     if (stateUpdate.statuses) {
       this.statuses = stateUpdate.statuses;
     }
@@ -180,6 +181,13 @@ class Fighter {
   applyAuthoritativeDamage(amount, attacker, knockback = 0, ev = {}) {
     // Apply damage - this is AUTHORITATIVE from the server
     this.hp = Math.max(0, (this.hp || 0) - amount);
+    
+    // Clear slam state when hit — ensures sprite updates to hurt/knockback correctly
+    if (this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition) {
+      this.isSlamAttacking = false;
+      this.slamHoldPosition = false;
+      this.slamLandingHitbox = null;
+    }
     
     // Visual effects only (no gameplay impact)
     if (typeof spawnDamageNumber === 'function') {
@@ -655,7 +663,10 @@ class Fighter {
       };
 
       // Handle special states for Callisto
-      if (this.state === 'slam' || this.isSlamAttacking) {
+      // Hurt/hit states take priority over slam to ensure correct hurt sprite when hit during slam
+      if (this.state === 'hit' || this.state === 'hurt') {
+        this.currentSprite = 'churt';
+      } else if (this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition) {
         this.currentSprite = 'cs1f2';
         if (!this.slashEffectsSpawned) {
           this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
@@ -717,7 +728,10 @@ class Fighter {
     }
 
     // Handle special states
-    if (this.state === 'slam' || this.isSlamAttacking) {
+    // Hurt/hit states take priority over slam to ensure correct hurt sprite when hit during slam
+    if (this.state === 'hit' || this.state === 'hurt') {
+      this.currentSprite = 'hurt';
+    } else if (this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition) {
       if (this.characterKey === 'CALLISTO') {
         this.currentSprite = 'cs1f2';
       } else {
@@ -796,7 +810,7 @@ class Fighter {
       }
       this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
 
-      if (visualFrame === 1 && this.lastSlashSpawnFrame !== 1) {
+      if (this.attackFrame === 1 && this.lastSlashSpawnFrame !== 1) {
         this.spawnSlashEffect('s1s1', { x: 0, y: -10 });
         this.spawnSlashEffect('s1s2', { x: 15, y: -5 });
         this.lastSlashSpawnFrame = 1;
@@ -815,7 +829,7 @@ class Fighter {
       }
       this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
 
-      if (visualFrame === 0 && this.lastSlashSpawnFrame !== 0) {
+      if (this.attackFrame === 0 && this.lastSlashSpawnFrame !== 0) {
         this.spawnSlashEffect('s1s3', { x: 0, y: -10 });
         this.lastSlashSpawnFrame = 0;
       }
@@ -831,7 +845,7 @@ class Fighter {
       }
       this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
 
-      if (visualFrame === 1 && this.lastSlashSpawnFrame !== 1) {
+      if (this.attackFrame === 1 && this.lastSlashSpawnFrame !== 1) {
         this.spawnSlashEffect('s1s4', { x: 0, y: -10 });
         this.lastSlashSpawnFrame = 1;
       }
@@ -867,7 +881,7 @@ class Fighter {
       }
       this.currentSprite = sequence1[Math.min(visualFrame, sequence1.length - 1)];
 
-      if (visualFrame === 1 && this.lastSlashSpawnFrame !== 1) {
+      if (this.attackFrame === 1 && this.lastSlashSpawnFrame !== 1) {
         this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
         this.lastSlashSpawnFrame = 1;
       }
@@ -891,7 +905,7 @@ class Fighter {
       }
       this.currentSprite = sequence2[Math.min(visualFrame, sequence2.length - 1)];
 
-      if (visualFrame === 1 && this.lastSlashSpawnFrame !== 1) {
+      if (this.attackFrame === 1 && this.lastSlashSpawnFrame !== 1) {
         this.spawnSlashEffect('cs2s1', { x: 0, y: -10 });
         this.lastSlashSpawnFrame = 1;
       }
@@ -926,10 +940,10 @@ class Fighter {
       }
       this.currentSprite = sequence3[Math.min(visualFrame, sequence3.length - 1)];
 
-      if (visualFrame === 1 && this.lastSlashSpawnFrame !== 1) {
+      if (this.attackFrame === 1 && this.lastSlashSpawnFrame !== 1) {
         this.spawnSlashEffect('cs3s1', { x: 0, y: -10 });
         this.lastSlashSpawnFrame = 1;
-      } else if (visualFrame === 2 && this.lastSlashSpawnFrame !== 2) {
+      } else if (this.attackFrame === 2 && this.lastSlashSpawnFrame !== 2) {
         this.spawnSlashEffect('cs3s2', { x: 0, y: -10 });
         this.lastSlashSpawnFrame = 2;
       }
@@ -1018,7 +1032,7 @@ class Fighter {
       // Pre-calculate positions to avoid push/pop
       const baseX = owner.pos.x;
       const baseY = owner.pos.y;
-        const flip = (owner.facing === 1) ? 1 : -1;
+      const facing = owner.facing === 1 ? -1 : 1;
       
       // Apply same scaling as character sprites
       if (owner.spriteType === 'atlas') {
@@ -1048,7 +1062,7 @@ class Fighter {
             // Position at ground level (0 pixels from ground) with only horizontal inheritance
             // Use the effect owner's spawnY for ground level
             const groundY = effect.owner.spawnY;
-              translate(effect.pos.x + offsetX * flip, groundY);
+            translate(effect.pos.x + offsetX * facing, groundY);
             
             // Random rotation between -45 to 45 degrees
             if (!effect.rotation) {
@@ -1058,7 +1072,7 @@ class Fighter {
             
             // Apply same scaling as character sprites
             const scaleFactor = 144 / 512;
-            scale(scaleFactor * flip, 1);
+            scale(scaleFactor * facing, 1);
             
             // Draw the sprite
             drawSpriteScaled(effect.type, 0, 0, scaleFactor);
@@ -1070,17 +1084,17 @@ class Fighter {
             push();
             // Apply alpha fade only and facing transformation
             tint(255, 255, 255, alpha);
-              translate(baseX + offsetX * flip, baseY + offsetY + 50);
-            if (flip === -1) {
+            translate(baseX + offsetX * facing, baseY + offsetY + 50);
+            if (facing === -1) {
               scale(-1, 1); // Flip horizontally when facing right
             }
-            drawSpriteScaled(effect.type, 0, 0, scaleFactor); 
+            drawSpriteScaled(effect.type, 0, 0, scaleFactor);
             pop();
           }
         } else {
           // Fallback: draw scaled slash effect
           push();
-          scale(scaleFactor * flip, 1);
+          scale(scaleFactor * facing, 1);
           noStroke();
           ellipse(baseX + offsetX, baseY + offsetY + 50, 15, 15);
           pop();
@@ -1099,8 +1113,8 @@ class Fighter {
           push();
           // Apply alpha fade only and facing transformation
           tint(255, 255, 255, alpha);
-            translate(baseX + offsetX * flip, baseY + offsetY - 30);
-          if (flip === -1) {
+          translate(baseX + offsetX * facing, baseY + offsetY - 30);
+          if (facing === -1) {
             scale(-1, 1); // Flip horizontally when facing right
           }
           drawSpriteScaled(effect.type, 0, 0, scaleFactor);
@@ -1108,7 +1122,7 @@ class Fighter {
         } else {
           // Fallback: draw scaled slash effect
           push();
-          scale(scaleFactor * flip, 1);
+          scale(scaleFactor * facing, 1);
           noStroke();
           ellipse(baseX + offsetX, baseY + offsetY, 15, 15);
           pop();
@@ -1683,6 +1697,11 @@ class Fighter {
   }
 
   updateStateTransitions() {
+    // Exit slam state when hold or attack flags are cleared (by input or being hit)
+    if (this.state === 'slam' && !this.slamHoldPosition && !this.isSlamAttacking) {
+      this.setState('idle');
+    }
+
     // Make stagger bar lower as visual timer during stagger period
     if (this.state === 'staggered') {
       if (this.staggerTimer > 0) {
@@ -2357,6 +2376,14 @@ class Fighter {
   receiveHit(amount, attacker, knockback) {
     // Convert immediate hit resolution into a networked request/event.
     if (this.isDefeated) return;
+
+    // Clear slam state when hit by an outside influence
+    if (this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition) {
+      this.isSlamAttacking = false;
+      this.slamHoldPosition = false;
+      this.slamLandingHitbox = null;
+      this.setState('hurt');
+    }
 
     // Local guard/evade handling remains visual, but actual HP reduction is authoritative
     if (this.isGuarding) {
@@ -3392,6 +3419,9 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
     this.isEvading = snapshot.movementState.isEvading;
     this.isGuarding = snapshot.movementState.isGuarding;
     this.isGrounded = snapshot.movementState.isGrounded;
+
+    // Slam visual hold (server can request client to hold slam sprite after landing)
+    this.slamHoldPosition = snapshot.slamHold || false;
     
     // Timers and cooldowns
     this.evadeTimer = snapshot.timers.evadeTimer;

@@ -362,6 +362,9 @@ function processSnapshot(snapshot) {
         
         // Apply slam state
         fighter.isSlamAttacking = state.isSlamAttacking || false;
+        // Visual-only slam hold sent by server when landing; client uses this to
+        // preserve slam sprite until the owner provides input.
+        fighter.slamHoldPosition = state.slamHold || false;
         
         // Apply dash attack state
         fighter.dashAttackQueued = state.dashAttackQueued || false;
@@ -414,10 +417,14 @@ function processSnapshot(snapshot) {
         // For remote fighters: check their remote input from the snapshot.
         const fighterHasInput = fighter.isLocalPlayer ? hasLocalInput : hasRemoteInput;
 
-        if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate' || combatState === 'slam') {
-            fighter.state = combatState;
-            fighter.haltSequence = false;
-        } else if ((fighter.state === 'hit' || fighter.state === 'staggered' || fighter.state === 'slam') && !fighterHasInput) {
+        if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate' || fighter.slamHoldPosition || fighter.isSlamAttacking) {
+          // Use the server combatState for hit/stagger/ultimate, but for slam
+          // we prefer the client-side visual flag `slamHoldPosition` or server
+          // provided `isSlamAttacking`. This prevents gameplay-state 'slam'
+          // from blocking input while still showing the slam sprite.
+          fighter.state = combatState === 'slam' ? 'idle' : combatState;
+          fighter.haltSequence = false;
+        } else if ((fighter.state === 'hit' || fighter.state === 'staggered' || fighter.slamHoldPosition || fighter.isSlamAttacking) && !fighterHasInput) {
             // Preserve hurt/staggered/slam visuals until the fighter's OWNER provides input.
             // Each player's controller (local keyboard for local player, remote input for enemy)
             // determines when they exit these states visually. The server guarantees state
@@ -553,15 +560,17 @@ function sendInputState() {
     // === GUARD (right click) ===
     keyState.guard = isRightMouseDown;
     
-    // === SLAM (S in air) ===
+    // === SLAM (S + attack in air) ===
     // Determine if airborne using onGround property from server
     const controlledFighter = getPlayerControlledFighter();
     const isOnGround = controlledFighter ? 
-        (controlledFighter.onGround || 
-         (controlledFighter.pos && controlledFighter.pos.y >= (controlledFighter.spawnY || 600) - 0.01)) : true;
-    
-    if (rawDown && !isOnGround) {
-        inputHoldTimers.slam = now + EDGE_HOLD_MS;
+      (controlledFighter.onGround || 
+       (controlledFighter.pos && controlledFighter.pos.y >= (controlledFighter.spawnY || 600) - 0.01)) : true;
+
+    // Only set the slam sticky flag when the player is airborne AND
+    // both down and attack are pressed (or attack edge is sticky).
+    if (!isOnGround && rawDown && (isLeftMouseDown || stickyAttackPressed)) {
+      inputHoldTimers.slam = now + EDGE_HOLD_MS;
     }
     const stickySlam = now < inputHoldTimers.slam;
 

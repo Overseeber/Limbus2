@@ -256,6 +256,7 @@ class Fighter {
     this.attackHitResolved = false;      // Reset damage resolution flag
     this.statusEffectsApplied = false;   // Reset status effect application flag
     this.slashEffectsSpawned = false;    // Reset visual effect spawning flag
+    this.lastSlashSpawnFrame = null;     // Track last visual frame that spawned slashes
     
     // ULTIMATE ATTACK SYSTEM RESET
     this.ultimateActive = false;         // Clear ultimate activation state
@@ -495,6 +496,7 @@ class Fighter {
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
     this.slashEffectsSpawned = false;
+    this.lastSlashSpawnFrame = null;
     this.attackSequence = 0;
     this.attackFrame = 0;
     this.attackFrameTimer = 0;
@@ -794,10 +796,10 @@ class Fighter {
       }
       this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
 
-      if (visualFrame === 1 && !this.slashEffectsSpawned) {
+      if (visualFrame === 1 && this.lastSlashSpawnFrame !== 1) {
         this.spawnSlashEffect('s1s1', { x: 0, y: -10 });
         this.spawnSlashEffect('s1s2', { x: 15, y: -5 });
-        this.slashEffectsSpawned = true;
+        this.lastSlashSpawnFrame = 1;
       }
     } else if (this.attackSequence === 2) {
       const sequence = ['s2f1', 'halt1', 'halt2', 's3f1'];
@@ -813,9 +815,9 @@ class Fighter {
       }
       this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
 
-      if (visualFrame === 0 && !this.slashEffectsSpawned) {
+      if (visualFrame === 0 && this.lastSlashSpawnFrame !== 0) {
         this.spawnSlashEffect('s1s3', { x: 0, y: -10 });
-        this.slashEffectsSpawned = true;
+        this.lastSlashSpawnFrame = 0;
       }
     } else if (this.attackSequence === 3) {
       const sequence = ['s3f1', 's3f2', 's3f3'];
@@ -829,9 +831,9 @@ class Fighter {
       }
       this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
 
-      if (visualFrame === 1 && !this.slashEffectsSpawned) {
+      if (visualFrame === 1 && this.lastSlashSpawnFrame !== 1) {
         this.spawnSlashEffect('s1s4', { x: 0, y: -10 });
-        this.slashEffectsSpawned = true;
+        this.lastSlashSpawnFrame = 1;
       }
     }
   }
@@ -865,9 +867,9 @@ class Fighter {
       }
       this.currentSprite = sequence1[Math.min(visualFrame, sequence1.length - 1)];
 
-      if (visualFrame === 1 && !this.slashEffectsSpawned) {
+      if (visualFrame === 1 && this.lastSlashSpawnFrame !== 1) {
         this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
-        this.slashEffectsSpawned = true;
+        this.lastSlashSpawnFrame = 1;
       }
 
       if (damageFrames[visualFrame] && !this.attackDamageDealt) {
@@ -889,9 +891,9 @@ class Fighter {
       }
       this.currentSprite = sequence2[Math.min(visualFrame, sequence2.length - 1)];
 
-      if (visualFrame === 1 && !this.slashEffectsSpawned) {
+      if (visualFrame === 1 && this.lastSlashSpawnFrame !== 1) {
         this.spawnSlashEffect('cs2s1', { x: 0, y: -10 });
-        this.slashEffectsSpawned = true;
+        this.lastSlashSpawnFrame = 1;
       }
 
       if (damageFrames[visualFrame] && !this.attackDamageDealt) {
@@ -924,11 +926,12 @@ class Fighter {
       }
       this.currentSprite = sequence3[Math.min(visualFrame, sequence3.length - 1)];
 
-      if (visualFrame === 1 && !this.slashEffectsSpawned) {
+      if (visualFrame === 1 && this.lastSlashSpawnFrame !== 1) {
         this.spawnSlashEffect('cs3s1', { x: 0, y: -10 });
-        this.slashEffectsSpawned = true;
-      } else if (visualFrame === 2 && !this.slashEffectsSpawned) {
+        this.lastSlashSpawnFrame = 1;
+      } else if (visualFrame === 2 && this.lastSlashSpawnFrame !== 2) {
         this.spawnSlashEffect('cs3s2', { x: 0, y: -10 });
+        this.lastSlashSpawnFrame = 2;
       }
 
       if (damageFrames[visualFrame] && !this.attackDamageDealt) {
@@ -1015,7 +1018,7 @@ class Fighter {
       // Pre-calculate positions to avoid push/pop
       const baseX = owner.pos.x;
       const baseY = owner.pos.y;
-      const facing = owner.facing === 1 ? -1 : 1;
+        const flip = (owner.facing === 1) ? 1 : -1;
       
       // Apply same scaling as character sprites
       if (owner.spriteType === 'atlas') {
@@ -1045,7 +1048,7 @@ class Fighter {
             // Position at ground level (0 pixels from ground) with only horizontal inheritance
             // Use the effect owner's spawnY for ground level
             const groundY = effect.owner.spawnY;
-            translate(effect.pos.x + offsetX * facing, groundY);
+              translate(effect.pos.x + offsetX * flip, groundY);
             
             // Random rotation between -45 to 45 degrees
             if (!effect.rotation) {
@@ -1055,7 +1058,7 @@ class Fighter {
             
             // Apply same scaling as character sprites
             const scaleFactor = 144 / 512;
-            scale(scaleFactor * facing, 1);
+            scale(scaleFactor * flip, 1);
             
             // Draw the sprite
             drawSpriteScaled(effect.type, 0, 0, scaleFactor);
@@ -1067,8 +1070,8 @@ class Fighter {
             push();
             // Apply alpha fade only and facing transformation
             tint(255, 255, 255, alpha);
-            translate(baseX + offsetX * facing, baseY + offsetY + 50);
-            if (facing === -1) {
+              translate(baseX + offsetX * flip, baseY + offsetY + 50);
+            if (flip === -1) {
               scale(-1, 1); // Flip horizontally when facing right
             }
             drawSpriteScaled(effect.type, 0, 0, scaleFactor); 
@@ -1077,7 +1080,7 @@ class Fighter {
         } else {
           // Fallback: draw scaled slash effect
           push();
-          scale(scaleFactor * facing, 1);
+          scale(scaleFactor * flip, 1);
           noStroke();
           ellipse(baseX + offsetX, baseY + offsetY + 50, 15, 15);
           pop();
@@ -1096,8 +1099,8 @@ class Fighter {
           push();
           // Apply alpha fade only and facing transformation
           tint(255, 255, 255, alpha);
-          translate(baseX + offsetX * facing, baseY + offsetY - 30);
-          if (facing === -1) {
+            translate(baseX + offsetX * flip, baseY + offsetY - 30);
+          if (flip === -1) {
             scale(-1, 1); // Flip horizontally when facing right
           }
           drawSpriteScaled(effect.type, 0, 0, scaleFactor);
@@ -1105,7 +1108,7 @@ class Fighter {
         } else {
           // Fallback: draw scaled slash effect
           push();
-          scale(scaleFactor * facing, 1);
+          scale(scaleFactor * flip, 1);
           noStroke();
           ellipse(baseX + offsetX, baseY + offsetY, 15, 15);
           pop();
@@ -2076,6 +2079,7 @@ class Fighter {
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
     this.slashEffectsSpawned = false;
+    this.lastSlashSpawnFrame = null;
     this.lastAttackHit = false;
     this.strikeActive = false; // Activate strike during the active phase
 
@@ -2156,6 +2160,7 @@ class Fighter {
     this.attackHitResolved = false;  // Track whether damage has been applied
     this.statusEffectsApplied = false; // Track status effect application
     this.slashEffectsSpawned = false;  // Track visual effect spawning
+    this.lastSlashSpawnFrame = null;
     this.lastAttackHit = false;       // Track if this attack hit (for combo system)
 
     // Auto-face towards closest opponent when dash attacking

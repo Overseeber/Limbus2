@@ -24,6 +24,7 @@
  */
 
 const GameplayEngine = require('./gameplayEngine');
+const SLAM_ATTACK_RADIUS = 80;
 
 class Match {
     constructor(room, io) {
@@ -459,7 +460,7 @@ class Match {
         player.slamLandingHitbox = {
             x: state.position.x,
             y: 600, // Ground level
-            radius: 80,
+            radius: SLAM_ATTACK_RADIUS,
             damage: player.config.baseDamage * 2
         };
         
@@ -1031,7 +1032,7 @@ class Match {
         
         // Slam position (at ground level)
         const slamPos = { x: state.position.x, y: 600 };
-        const slamRadius = 80;
+        const slamRadius = SLAM_ATTACK_RADIUS;
         
         const defenders = Object.values(this.players).filter(p => 
             p.clientId !== player.clientId && !p.gameState.isDefeated

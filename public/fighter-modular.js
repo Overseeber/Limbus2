@@ -21,6 +21,8 @@
  * @param {string} characterKey - Character type from CHARACTERS roster (default: null)
  * @param {boolean} isPlayerControlled - Whether this fighter is human-controlled (default: false)
  */
+const SLAM_ATTACK_RADIUS = 80;
+
 class Fighter {
   constructor(isAI = false, name = 'Enemy', characterKey = null, isPlayerControlled = false) {
     // CORE IDENTITY PROPERTIES
@@ -640,6 +642,7 @@ class Fighter {
         run: 'cmove',
         jump: 'cs1f1',
         attack: 'cs1f2',
+        slam: 'cs1f2',
         guard: 'cguard',
         dash: 'cmove',
         evade: 'cevade',
@@ -650,7 +653,7 @@ class Fighter {
       };
 
       // Handle special states for Callisto
-      if (this.isSlamAttacking) {
+      if (this.state === 'slam' || this.isSlamAttacking) {
         this.currentSprite = 'cs1f2';
         if (!this.slashEffectsSpawned) {
           this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
@@ -696,6 +699,7 @@ class Fighter {
       run: 'moving',
       jump: 's4f3',
       attack: 'prepat',
+      slam: 's4f4',
       guard: 'guard',
       dash: 'joust',
       evade: 'evade',
@@ -711,7 +715,7 @@ class Fighter {
     }
 
     // Handle special states
-    if (this.isSlamAttacking) {
+    if (this.state === 'slam' || this.isSlamAttacking) {
       if (this.characterKey === 'CALLISTO') {
         this.currentSprite = 'cs1f2';
       } else {
@@ -1177,7 +1181,6 @@ class Fighter {
     if (this.slamHoldPosition) {
       this.slamHoldPosition = false;
       this.isSlamAttacking = false;
-      this.setState('idle');
     }
     
     if (keyLower === this.controls.left) {
@@ -1243,7 +1246,6 @@ class Fighter {
     if (this.slamHoldPosition) {
       this.slamHoldPosition = false;
       this.isSlamAttacking = false;
-      this.setState('idle');
     }
     this.attackRequest = true;
   }
@@ -1260,7 +1262,6 @@ class Fighter {
     if (this.slamHoldPosition) {
       this.slamHoldPosition = false;
       this.isSlamAttacking = false;
-      this.setState('idle');
     }
     
     this.guardRequest = true;
@@ -2203,7 +2204,7 @@ class Fighter {
     this.slamLandingHitbox = {
       x: this.pos.x,
       y: this.spawnY, // Ground level
-      radius: 80, // AOE radius
+      radius: SLAM_ATTACK_RADIUS, // AOE radius
       damage: this.baseDamage * 2, // Base damage
       staggerDamage: 0 // Will be calculated on landing
     };
@@ -3189,9 +3190,6 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
       strokeWeight(3);
       noFill();
       ellipse(this.slamLandingHitbox.x, this.slamLandingHitbox.y, this.slamLandingHitbox.radius * 2);
-      stroke(255, 150, 255, 100);
-      strokeWeight(2);
-      ellipse(this.slamLandingHitbox.x, this.slamLandingHitbox.y, this.slamLandingHitbox.radius * 1.5);
       pop();
     }
 

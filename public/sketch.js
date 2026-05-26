@@ -902,9 +902,6 @@ function drawSlamLandingOverlays() {
     strokeWeight(3);
     noFill();
     ellipse(overlay.x, overlay.y, overlay.radius * 2);
-    stroke(255, 150, 255, overlay.alpha * 0.7);
-    strokeWeight(2);
-    ellipse(overlay.x, overlay.y, overlay.radius * 1.5);
     fill(255, 180, 255, overlay.alpha);
     noStroke();
     textAlign(CENTER, CENTER);

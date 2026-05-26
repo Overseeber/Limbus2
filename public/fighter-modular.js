@@ -656,6 +656,13 @@ class Fighter {
           this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
           this.slashEffectsSpawned = true;
         }
+      } else if (this.dashAttackActive) {
+        // Dash attack deceleration - show cjoust sprite while slowing down
+        this.currentSprite = 'cjoust';
+        if (!this.slashEffectsSpawned) {
+          this.spawnSlashEffect('cjs1', { x: 0, y: -10 });
+          this.slashEffectsSpawned = true;
+        }
       } else if (this.isDashing) {
         if (this.state === 'attack' || this.state === 'attacking') {
           this.currentSprite = 'cjoust';
@@ -710,8 +717,11 @@ class Fighter {
       } else {
         this.currentSprite = 's4f4';
       }
+    } else if (this.dashAttackActive) {
+      // Dash attack deceleration - show joust sprite while slowing down
+      this.currentSprite = 'joust';
     } else if (this.isDashing) {
-      if (this.state === 'attack' || this.state === 'attacking') {
+      if (this.state === 'attack' || this.state === 'attacking' || this.dashAttackActive) {
         this.currentSprite = 'joust';
       } else if (this.usePostDashSprite) {
         this.currentSprite = 's2f1';

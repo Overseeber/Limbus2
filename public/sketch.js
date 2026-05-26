@@ -295,6 +295,21 @@ function processSnapshot(snapshot) {
         
         // Apply dash attack state
         fighter.dashAttackQueued = state.dashAttackQueued || false;
+        fighter.dashAttackActive = state.dashAttackActive || false;
+        
+        // Clear dashAttackActive when fighter stops decelerating
+        // (velocity drops below threshold, not dashing, or player provides input)
+        const hasFighterInput = fighter.isLocalPlayer ? (
+            keyState.left || keyState.right || keyState.up || keyState.down ||
+            keyState.attack || keyState.guard || keyState.dash || keyState.slam
+        ) : (
+            fighter.remoteInput.left || fighter.remoteInput.right || fighter.remoteInput.up || fighter.remoteInput.down ||
+            fighter.remoteInput.attack || fighter.remoteInput.guard || fighter.remoteInput.dash || fighter.remoteInput.slam ||
+            fighter.remoteInput.attackPressed || fighter.remoteInput.attackReleased
+        );
+        if (!state.isDashing && fighter.dashAttackActive && (Math.abs(state.vx) < 100 || hasFighterInput)) {
+            fighter.dashAttackActive = false;
+        }
 
         // Track previous dash state to show halt end animation correctly
         if (typeof fighter.prevIsDashing === 'undefined') {

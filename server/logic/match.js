@@ -497,11 +497,13 @@ class Match {
             state.velocity.y = 0;
             state.onGround = true;
             state.isAttacking = false;
-            state.state = 'idle';
-            this.resolveSlamLanding(player);
+            // Keep state as 'slam' after landing so the client shows the slam sprite.
+            // The player must provide input to stand back up (cleared in processInput).
+            state.state = 'slam';
             player.isSlamAttacking = false;
             player.slamLandingHitbox = null;
             player.attackTimer = 1.0; // Slam cooldown
+            this.resolveSlamLanding(player);
             return;
         }
 

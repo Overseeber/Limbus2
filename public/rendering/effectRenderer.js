@@ -8,108 +8,278 @@
 let damageNumbers = [];
 const MAX_DAMAGE_NUMBERS = 50;
 
-/**
- * Spawn a damage number floating text
- */
-function spawnDamageNumber(amount, position, facing = 1, isCharged = false, effectType = 'normal', isCounter = false, subType = 'normal', textOverride = null) {
+const DAMAGE_CONSTANTS = {
+  BASE_Y_OFFSET: -50,
+  BASE_SIZE: 16,
+  LIFE_DURATION: 1.0,
+  DAMPING: 0.98,
+  GRAVITY: 0.06,
+  EVADE_GRAVITY: 0.08,
+  STROKE_WEIGHT: 2,
+  DEPOWERED_TEXT_SIZE: 10,
+  EVADE_SIZE: 20,
+  CRITICAL_TEXT_SIZE: 12,
+  ICON_SIZE: 16,
+  COLOR: {
+    NORMAL_DAMAGE: { fill: [255, 255, 255], stroke: [0, 0, 0] },
+    BLOCKED_DAMAGE: { fill: [100, 200, 255], stroke: [70, 150, 220] },
+    EVADE: { fill: [150, 255, 150], stroke: [100, 200, 100] },
+    CRITICAL_DAMAGE: { fill: [255, 255, 0], stroke: [200, 200, 0] },
+    BURN_DAMAGE: { fill: [255, 140, 0], stroke: [200, 100, 0] },
+    BLEED_DAMAGE: { fill: [255, 50, 50], stroke: [200, 0, 0] },
+    TREMOR_DAMAGE: { fill: [255, 255, 0], stroke: [200, 200, 0] },
+    RUPTURE_DAMAGE: { fill: [50, 255, 50], stroke: [0, 200, 0] }
+  }
+};
+
+function spawnDamageNumber(amount, position, facing = 1, isBlocked = false, damageType = 'normal', isCritical = false, attackType = 'normal', textOverride = null) {
   if (damageNumbers.length >= MAX_DAMAGE_NUMBERS) {
     damageNumbers.shift(); // Remove oldest
   }
-  
-  // Categorize damage types
-  let category = 'normal';
-  if (effectType === 'bleed' || effectType === 'burn' || effectType === 'rupture' || effectType === 'tremor') {
-    category = 'status';
-  }
-  
-  damageNumbers.push({
-    amount: amount,
-    x: position.x + random(-30, 30),
-    y: position.y - 20 + random(-20, 0),
-    vy: -3 - random(0, 2),
-    vx: random(-20, 20),
-    timer: 1.2,
-    maxTimer: 1.2,
-    effectType: effectType,
-    category: category,
-    isCharged: isCharged,
-    isCounter: isCounter,
-    subType: subType,
-    textOverride: textOverride,
-    facing: facing
-  });
+
+  damageNumbers.push(new DamageNumber(
+    amount,
+    position.x,
+    position.y + DAMAGE_CONSTANTS.BASE_Y_OFFSET,
+    facing,
+    isBlocked,
+    damageType,
+    isCritical,
+    attackType,
+    textOverride
+  ));
 }
 
 function updateDamageNumbers(dt) {
   for (let i = damageNumbers.length - 1; i >= 0; i--) {
-    const dn = damageNumbers[i];
-    dn.timer -= dt;
-    if (dn.timer <= 0) {
+    damageNumbers[i].update(dt);
+    if (damageNumbers[i].finished) {
       damageNumbers.splice(i, 1);
-      continue;
     }
-    dn.y += dn.vy;
-    dn.vy *= 0.98;
-    dn.x += dn.vx * dt;
-    dn.vx *= 0.95;
   }
 }
 
 function drawDamageNumbers() {
-  for (let i = damageNumbers.length - 1; i >= 0; i--) {
-    const dn = damageNumbers[i];
-    if (dn.timer <= 0) continue;
-    
-    push();
-    const alpha = map(dn.timer, 0, dn.maxTimer, 0, 255);
-    const yOffset = map(dn.timer, 0, dn.maxTimer, -30, 0);
-    const scale = map(dn.timer, 0, dn.maxTimer, 0.5, 1);
-    
-    // Determine color based on effect type
-    let textColor;
-    if (dn.effectType === 'bleed') {
-      textColor = color(200, 50, 50, alpha); // Red for bleed
-    } else if (dn.effectType === 'burn') {
-      textColor = color(255, 150, 50, alpha); // Orange for burn
-    } else if (dn.effectType === 'rupture') {
-      textColor = color(150, 50, 200, alpha); // Purple for rupture
-    } else if (dn.effectType === 'tremor' || dn.subType === 'slam') {
-      textColor = color(150, 100, 255, alpha); // Purple for tremor/slam
-    } else if (dn.isCounter) {
-      textColor = color(100, 200, 255, alpha); // Blue for counter
-    } else if (dn.isCharged) {
-      textColor = color(255, 220, 50, alpha); // Gold for charged
+  for (let i = 0, len = damageNumbers.length; i < len; i++) {
+    damageNumbers[i].draw();
+  }
+}
+
+class FloatingIndicator {
+  constructor(x, y) {
+    this.pos = createVector(x, y);
+    this.vel = createVector(0, 0);
+    this.alpha = 255;
+    this.life = DAMAGE_CONSTANTS.LIFE_DURATION;
+    this.finished = false;
+  }
+
+  update(dt) {
+    this.life -= dt;
+    this.alpha = map(this.life, 1, 0, 255, 0);
+    this.pos.add(this.vel);
+    this.vel.mult(DAMAGE_CONSTANTS.DAMPING);
+    this.finished = this.life <= 0;
+  }
+
+  draw() {
+    throw new Error('draw() method must be implemented by subclass');
+  }
+}
+
+class DamageNumber extends FloatingIndicator {
+  constructor(value, x, y, facing, isBlocked = false, damageType = 'normal', isCritical = false, attackType = 'normal', textOverride = null) {
+    super(x, y);
+    this.value = value;
+    this.vel = createVector(
+      facing * 1.5 + random(-0.5, 0.5),
+      random(-2.4, -1.4)
+    );
+    this.size = this.computeSize(value);
+    this.isBlocked = isBlocked;
+    this.damageType = damageType;
+    this.isCritical = isCritical;
+    this.attackType = attackType;
+    this.textOverride = textOverride;
+  }
+
+  computeSize(value) {
+    let baseSize;
+    if (value <= 70) {
+      baseSize = DAMAGE_CONSTANTS.BASE_SIZE + value * 0.35;
+    } else if (value <= 500) {
+      baseSize = DAMAGE_CONSTANTS.BASE_SIZE + 70 * 0.35 + (value - 70) * 0.1;
     } else {
-      textColor = color(255, 255, 255, alpha); // White for normal
+      baseSize = DAMAGE_CONSTANTS.BASE_SIZE + 70 * 0.35 + 430 * 0.1 + log(value - 499) * 4;
     }
-    
-    fill(textColor);
-    stroke(0, 0, 0, alpha);
-    strokeWeight(3);
+    if (this.isCritical) {
+      baseSize *= 1.3;
+    }
+    return baseSize;
+  }
+
+  update(dt) {
+    super.update(dt);
+    this.vel.y -= DAMAGE_CONSTANTS.GRAVITY;
+  }
+
+  draw() {
+    push();
+    textAlign(CENTER, TOP);
+
+    let colors;
+    if (this.isCritical) {
+      colors = DAMAGE_CONSTANTS.COLOR.CRITICAL_DAMAGE;
+    } else if (this.isBlocked) {
+      colors = DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE;
+    } else {
+      switch (this.damageType) {
+        case 'burn':
+          colors = DAMAGE_CONSTANTS.COLOR.BURN_DAMAGE;
+          break;
+        case 'bleed':
+          colors = DAMAGE_CONSTANTS.COLOR.BLEED_DAMAGE;
+          break;
+        case 'tremor':
+          colors = DAMAGE_CONSTANTS.COLOR.TREMOR_DAMAGE;
+          break;
+        case 'rupture':
+          colors = DAMAGE_CONSTANTS.COLOR.RUPTURE_DAMAGE;
+          break;
+        default:
+          colors = DAMAGE_CONSTANTS.COLOR.NORMAL_DAMAGE;
+      }
+    }
+
+    this.drawAttackIcon(colors);
+
+    textSize(this.size);
+    fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
+    stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
+    strokeWeight(DAMAGE_CONSTANTS.STROKE_WEIGHT);
+
+    const damageTextX = this.pos.x - (DAMAGE_CONSTANTS.ICON_SIZE / 2);
+    text(`${floor(this.value)}`, damageTextX, this.pos.y);
+
+    if (this.isCritical) {
+      fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
+      textSize(DAMAGE_CONSTANTS.CRITICAL_TEXT_SIZE);
+      text('CRITICAL!', damageTextX, this.pos.y + this.size * 0.8);
+    }
+
+    if (this.isBlocked) {
+      fill(
+        DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE.fill[0],
+        DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE.fill[1],
+        DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE.fill[2],
+        this.alpha
+      );
+      textSize(DAMAGE_CONSTANTS.DEPOWERED_TEXT_SIZE);
+      text('depowered', damageTextX, this.pos.y + this.size * 0.8);
+    }
+
+    pop();
+  }
+
+  drawAttackIcon(colors) {
+    push();
+    const iconX = this.pos.x + (this.size / 2) + 5;
+    const iconY = this.pos.y + (this.size / 2) - (DAMAGE_CONSTANTS.ICON_SIZE / 2);
+
+    fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
+    stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
+    strokeWeight(1);
+
+    switch (this.attackType) {
+      case 'normal':
+        rect(iconX, iconY, DAMAGE_CONSTANTS.ICON_SIZE, DAMAGE_CONSTANTS.ICON_SIZE, 2);
+        break;
+      case 'slam':
+        triangle(
+          iconX + DAMAGE_CONSTANTS.ICON_SIZE / 2, iconY,
+          iconX, iconY + DAMAGE_CONSTANTS.ICON_SIZE,
+          iconX + DAMAGE_CONSTANTS.ICON_SIZE, iconY + DAMAGE_CONSTANTS.ICON_SIZE
+        );
+        break;
+      case 'dash':
+        ellipse(
+          iconX + DAMAGE_CONSTANTS.ICON_SIZE / 2,
+          iconY + DAMAGE_CONSTANTS.ICON_SIZE / 2,
+          DAMAGE_CONSTANTS.ICON_SIZE
+        );
+        break;
+      case 'ultimate':
+        push();
+        translate(
+          iconX + DAMAGE_CONSTANTS.ICON_SIZE / 2,
+          iconY + DAMAGE_CONSTANTS.ICON_SIZE / 2
+        );
+        rotate(PI / 4);
+        rect(
+          -DAMAGE_CONSTANTS.ICON_SIZE / 2,
+          -DAMAGE_CONSTANTS.ICON_SIZE / 2,
+          DAMAGE_CONSTANTS.ICON_SIZE,
+          DAMAGE_CONSTANTS.ICON_SIZE,
+          2
+        );
+        pop();
+        break;
+      default:
+        rect(iconX, iconY, DAMAGE_CONSTANTS.ICON_SIZE, DAMAGE_CONSTANTS.ICON_SIZE, 2);
+    }
+
+    pop();
+  }
+}
+
+class EvadeIndicator extends FloatingIndicator {
+  constructor(x, y) {
+    super(x, y);
+    this.vel = createVector(random(-0.5, 0.5), -2.8);
+    this.size = DAMAGE_CONSTANTS.EVADE_SIZE;
+  }
+
+  update(dt) {
+    super.update(dt);
+    this.vel.y -= DAMAGE_CONSTANTS.EVADE_GRAVITY;
+  }
+
+  draw() {
+    push();
     textAlign(CENTER, CENTER);
-    
-    // Size based on damage amount
-    let textSize = 20;
-    if (dn.amount >= 100) textSize = 32;
-    else if (dn.amount >= 50) textSize = 26;
-    else textSize = 20;
-    
-    textSize(textSize);
-    
-    const displayText = dn.textOverride || Math.round(dn.amount).toString();
-    text(displayText, dn.x, dn.y + yOffset);
-    
-    // Draw element icon for status effects
-    if (dn.category === 'status') {
-      noStroke();
-      fill(textColor);
-      textSize(12);
-      const iconText = dn.effectType === 'bleed' ? '💧' : 
-                       dn.effectType === 'burn' ? '🔥' : 
-                       dn.effectType === 'rupture' ? '💥' : '🌀';
-      text(iconText, dn.x, dn.y + yOffset - 22);
-    }
-    
+    textSize(this.size);
+
+    const colors = DAMAGE_CONSTANTS.COLOR.EVADE;
+    fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
+    stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
+    strokeWeight(DAMAGE_CONSTANTS.STROKE_WEIGHT);
+
+    text('evade', this.pos.x, this.pos.y);
+    pop();
+  }
+}
+
+class TremorIndicator extends FloatingIndicator {
+  constructor(x, y) {
+    super(x, y);
+    this.vel = createVector(random(-0.5, 0.5), -2.8);
+    this.size = DAMAGE_CONSTANTS.EVADE_SIZE;
+  }
+
+  update(dt) {
+    super.update(dt);
+    this.vel.y -= DAMAGE_CONSTANTS.EVADE_GRAVITY;
+  }
+
+  draw() {
+    push();
+    textAlign(CENTER, CENTER);
+    textSize(this.size);
+
+    fill(255, 100, 50, this.alpha);
+    stroke(255, 50, 0, this.alpha);
+    strokeWeight(DAMAGE_CONSTANTS.STROKE_WEIGHT);
+    text('Tremor', this.pos.x, this.pos.y);
     pop();
   }
 }
@@ -205,37 +375,23 @@ function spawnGuardSparks(x, y, count = 8) {
 }
 
 function spawnEvadeIndicator(position) {
-  if (particles.length >= MAX_PARTICLES) {
-    particles.shift();
+  if (damageNumbers.length >= MAX_DAMAGE_NUMBERS) {
+    damageNumbers.shift();
   }
-  particles.push({
-    x: position.x,
-    y: position.y,
-    vx: 0,
-    vy: 0,
-    life: 0.3,
-    maxLife: 0.3,
-    size: 20,
-    type: 'evade'
-  });
+  damageNumbers.push(new EvadeIndicator(
+    position.x,
+    position.y + DAMAGE_CONSTANTS.BASE_Y_OFFSET
+  ));
 }
 
 function spawnTremorIndicator(position) {
-  for (let i = 0; i < 5; i++) {
-    if (particles.length >= MAX_PARTICLES) {
-      particles.shift();
-    }
-    particles.push({
-      x: position.x + random(-20, 20),
-      y: position.y + random(-20, 20),
-      vx: random(-50, 50),
-      vy: random(-100, -50),
-      life: 0.5,
-      maxLife: 0.5,
-      size: random(3, 6),
-      type: 'tremor'
-    });
+  if (damageNumbers.length >= MAX_DAMAGE_NUMBERS) {
+    damageNumbers.shift();
   }
+  damageNumbers.push(new TremorIndicator(
+    position.x,
+    position.y + DAMAGE_CONSTANTS.BASE_Y_OFFSET
+  ));
 }
 
 function spawnBurnParticle(x, y) {

@@ -198,6 +198,9 @@ function setup() {//test
     Network.on('abilityResult', (result) => {
       handleAbilityResult(result);
     });
+    Network.on('event', (event) => {
+      handleNetworkEvent(event);
+    });
     Network.on('snapshot', snapshot => {
     applySnapshot(snapshot);
     console.log('snapshot received', snapshot);
@@ -344,14 +347,14 @@ function processSnapshot(snapshot) {
         // For remote fighters: check their remote input from the snapshot.
         const fighterHasInput = fighter.isLocalPlayer ? hasLocalInput : hasRemoteInput;
 
-        if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate') {
+        if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate' || combatState === 'slam') {
             fighter.state = combatState;
             fighter.haltSequence = false;
-        } else if ((fighter.state === 'hit' || fighter.state === 'staggered') && !fighterHasInput) {
-            // Preserve hurt/staggered visuals until the fighter's OWNER provides input.
+        } else if ((fighter.state === 'hit' || fighter.state === 'staggered' || fighter.state === 'slam') && !fighterHasInput) {
+            // Preserve hurt/staggered/slam visuals until the fighter's OWNER provides input.
             // Each player's controller (local keyboard for local player, remote input for enemy)
-            // determines when they exit hitstun visually. The server guarantees a minimum
-            // hitstun duration (0.18s) regardless of input.
+            // determines when they exit these states visually. The server guarantees state
+            // transitions independently but clients hold the sprite for game feel.
             fighter.haltSequence = false;
         } else if (fighter.isAttacking || fighter.attackSequence > 0) {
             fighter.state = 'attack';
@@ -767,6 +770,150 @@ function triggerAbilityVisuals(fighter, abilityId, result) {
   }
 }
 
+function handleNetworkEvent(event) {
+  if (!event || !window.allFighters) return;
+
+  switch (event.type) {
+    case 'HIT':
+      handleHitNetworkEvent(event);
+      break;
+    case 'slamHit':
+      handleSlamHitNetworkEvent(event);
+      break;
+    case 'STATUS_DAMAGE':
+      handleStatusDamageNetworkEvent(event);
+      break;
+    case 'FIGHTER_DEFEATED':
+      handleFighterDefeatedEvent(event);
+      break;
+    case 'slamLanding':
+      handleSlamLandingEvent(event);
+      break;
+    default:
+      // Ignore unhandled server event types here
+      break;
+  }
+}
+
+function handleHitNetworkEvent(event) {
+  const target = window.allFighters.find(f => f.clientId === event.targetId);
+  const attacker = window.allFighters.find(f => f.clientId === event.attackerId);
+  if (!target) return;
+
+  if (event.hp !== undefined) {
+    target.hp = event.hp;
+  }
+
+  const facing = attacker ? attacker.facing : 1;
+  if (event.damage && typeof spawnDamageNumber === 'function') {
+    spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'normal');
+  }
+  if (typeof addScreenShake === 'function') {
+    addScreenShake(event.damage);
+  }
+
+  if (event.statuses && Array.isArray(event.statuses) && target.addStatus) {
+    event.statuses.forEach(statusType => target.addStatus(statusType, 1, 1));
+  }
+
+  if (event.defeated && !target.isDefeated) {
+    target.isDefeated = true;
+    target.hp = target.hp || 0;
+  }
+}
+
+function handleSlamHitNetworkEvent(event) {
+  const target = window.allFighters.find(f => f.clientId === event.targetId);
+  const attacker = window.allFighters.find(f => f.clientId === event.attackerId);
+  if (!target) return;
+
+  if (event.defenderHp !== undefined) {
+    target.hp = event.defenderHp;
+  }
+
+  const facing = attacker ? attacker.facing : 1;
+  if (event.damage && typeof spawnDamageNumber === 'function') {
+    spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'slam');
+  }
+  if (typeof addScreenShake === 'function') {
+    addScreenShake(event.damage);
+  }
+
+  if (event.defeated && !target.isDefeated) {
+    target.isDefeated = true;
+    target.hp = target.hp || 0;
+  }
+}
+
+function handleStatusDamageNetworkEvent(event) {
+  const target = window.allFighters.find(f => f.clientId === event.fighterId);
+  if (!target) return;
+
+  if (event.hp !== undefined) {
+    target.hp = event.hp;
+  }
+
+  let damageType = 'normal';
+  if (event.eventType === 'BURN_DAMAGE') damageType = 'burn';
+  else if (event.eventType === 'BLEED_DAMAGE' || event.eventType === 'BLEED_ATTACK_DAMAGE') damageType = 'bleed';
+  else if (event.eventType === 'RUPTURE_DAMAGE') damageType = 'rupture';
+
+  if (event.damage && typeof spawnDamageNumber === 'function') {
+    spawnDamageNumber(event.damage, target.pos.copy(), target.facing || 1, false, damageType, false, 'normal');
+  }
+}
+
+function handleFighterDefeatedEvent(event) {
+  const target = window.allFighters.find(f => f.clientId === event.fighterId);
+  if (!target) return;
+  target.isDefeated = true;
+  target.hp = 0;
+}
+
+const slamLandingOverlays = [];
+function handleSlamLandingEvent(event) {
+  if (!event || !event.slamPos || event.radius === undefined) return;
+  slamLandingOverlays.push({
+    x: event.slamPos.x,
+    y: event.slamPos.y,
+    radius: event.radius,
+    timer: 0.35,
+    alpha: 255
+  });
+}
+
+function updateSlamLandingOverlays(dt) {
+  for (let i = slamLandingOverlays.length - 1; i >= 0; i--) {
+    const overlay = slamLandingOverlays[i];
+    overlay.timer -= dt;
+    overlay.alpha = map(overlay.timer, 0, 0.35, 0, 255);
+    if (overlay.timer <= 0) {
+      slamLandingOverlays.splice(i, 1);
+    }
+  }
+}
+
+function drawSlamLandingOverlays() {
+  if (slamLandingOverlays.length === 0) return;
+
+  slamLandingOverlays.forEach(overlay => {
+    push();
+    stroke(255, 100, 255, overlay.alpha);
+    strokeWeight(3);
+    noFill();
+    ellipse(overlay.x, overlay.y, overlay.radius * 2);
+    stroke(255, 150, 255, overlay.alpha * 0.7);
+    strokeWeight(2);
+    ellipse(overlay.x, overlay.y, overlay.radius * 1.5);
+    fill(255, 180, 255, overlay.alpha);
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(12);
+    text('SLAM RANGE', overlay.x, overlay.y - overlay.radius - 10);
+    pop();
+  });
+}
+
 /**
  * RESTORED: Draw debug hitbox for active attack using rect-based detection
  * Draws the actual rect hitbox like the original game's debug overlay
@@ -879,14 +1026,16 @@ function draw() {
     if (window.allFighters) {
       window.allFighters.forEach(fighter => {
         fighter.draw();
-        
-        // Draw debug attack hitboxes when any attack is active
-        if (DEBUG && fighter.attackSequence > 0) {
+        fighter.drawOverlays && fighter.drawOverlays();
+
+        // Draw attack hitboxes during active attacks or when the fighter is currently striking
+        if (fighter.attackSequence > 0 && fighter.attackPhase && fighter.attackPhase !== 'none') {
           drawAttackHitbox(fighter);
         }
       });
     }
     
+    drawSlamLandingOverlays();
     drawDamageNumbers();
     drawParticles();
     
@@ -1265,6 +1414,7 @@ function updateBattle() {
 
   updateDamageNumbers(dt);
   updateParticles(dt);
+  updateSlamLandingOverlays(dt);
 }
 
 function getPlayerControlledFighter() {

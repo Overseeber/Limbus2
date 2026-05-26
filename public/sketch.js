@@ -52,6 +52,8 @@ let endingFadeAlpha = 0;
 let endingReturnToLobby = false;
 let combatOverOutcome = '';
 let combatOverLine = '';
+// Client-side snapshot interpolation (ms)
+const SNAPSHOT_INTERVAL_MS = 50; // server tick at 50ms
 
 // Character intro animation sequences
 const INTRO_ANIMATIONS = {
@@ -298,10 +300,21 @@ function processSnapshot(snapshot) {
 
         if (!fighter) continue;
 
-        // Apply authoritative state from server
-        fighter.pos.x = state.x;
-        fighter.pos.y = state.y;
+        // Apply authoritative state targets from server (interpolate visually)
+        if (typeof fighter.targetServerPos === 'undefined') {
+          fighter.targetServerPos = { x: state.x, y: state.y };
+          fighter.prevServerPos = { x: fighter.pos.x || state.x, y: fighter.pos.y || state.y };
+          fighter.snapshotStart = (typeof millis !== 'undefined') ? millis() : Date.now();
+          fighter.snapshotDuration = SNAPSHOT_INTERVAL_MS;
+        } else {
+          // shift previous to current displayed pos to avoid pops
+          fighter.prevServerPos = { x: fighter.pos.x, y: fighter.pos.y };
+          fighter.targetServerPos = { x: state.x, y: state.y };
+          fighter.snapshotStart = (typeof millis !== 'undefined') ? millis() : Date.now();
+          fighter.snapshotDuration = SNAPSHOT_INTERVAL_MS;
+        }
 
+        // Update authoritative velocity immediately (used for prediction/animations)
         fighter.vel.x = state.vx;
         fighter.vel.y = state.vy;
 
@@ -1084,6 +1097,8 @@ function draw() {
       drawUltimateName(ultimateFighters[0]);
     }
     
+    // Update interpolation targets before rendering
+    updateClientInterpolation();
     // Draw all fighters
     if (window.allFighters) {
       window.allFighters.forEach(fighter => {
@@ -1127,6 +1142,8 @@ function draw() {
     beginCamera();
     drawArena();
     
+    // Update interpolation targets before rendering
+    updateClientInterpolation();
     // Draw all fighters in summary
     if (window.allFighters) {
       window.allFighters.forEach(fighter => fighter.draw());
@@ -1280,6 +1297,8 @@ function drawOpeningSequence() {
   beginCamera();
   drawArena();
   
+  // Update interpolation targets before rendering
+  updateClientInterpolation();
   // Draw all fighters
   if (window.allFighters) {
     window.allFighters.forEach(fighter => fighter.draw());
@@ -1541,6 +1560,25 @@ function drawArena() {
     fill(255);
     textSize(12);
     text(`FPS: ${nf(frameRate(), 2, 1)}`, 12, 18);
+  }
+}
+
+// Update client-side interpolation for smooth visuals between server snapshots
+function updateClientInterpolation() {
+  if (!window.allFighters) return;
+  const now = (typeof millis !== 'undefined') ? millis() : Date.now();
+  for (const f of window.allFighters) {
+    if (!f) continue;
+    if (!f.targetServerPos || !f.prevServerPos) continue;
+    const start = f.snapshotStart || now;
+    const dur = Math.max(1, f.snapshotDuration || SNAPSHOT_INTERVAL_MS);
+    const t = constrain((now - start) / dur, 0, 1);
+    // ease out cubic
+    const eased = 1 - Math.pow(1 - t, 3);
+    const nx = lerp(f.prevServerPos.x, f.targetServerPos.x, eased);
+    const ny = lerp(f.prevServerPos.y, f.targetServerPos.y, eased);
+    f.pos.x = nx;
+    f.pos.y = ny;
   }
 }
 

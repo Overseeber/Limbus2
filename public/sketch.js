@@ -9,7 +9,8 @@ const BATTLE_STATES = {
   READY: 'ready',
   OPENING: 'opening',
   BATTLE: 'battle',
-  SUMMARY: 'summary'
+  SUMMARY: 'summary',
+  COMBAT_OVER: 'combatOver'
 };
 
 let gameMode = null; // 'multiplayer' or 'cpu'
@@ -32,6 +33,24 @@ let openingFadeAlpha = 255;
 let openingZoom = 5; // Start zoomed in
 let openingTextAlpha = 0;
 let introAnimationsStarted = false;
+
+// Ending sequence variables
+let endingSequenceActive = false;
+let endingSequenceTimer = 0;
+let endingStartZoom = 1;
+let endingTargetZoom = 1;
+let endingZoomDuration = 1.6; // seconds to zoom out
+let endingHoldDuration = 2.0; // hold arena view
+let endingTextAlpha = 0;
+let endingWinnerId = null;
+let endingWinnerCharacter = null;
+let showCombatOverMenu = false;
+let endingFading = false;
+let endingFadeDuration = 0.6;
+let endingFadeTimer = 0;
+let endingFadeAlpha = 0;
+let combatOverOutcome = '';
+let combatOverLine = '';
 
 // Character intro animation sequences
 const INTRO_ANIMATIONS = {
@@ -106,17 +125,50 @@ class UIButton {
 
   draw(label, style = {}) {
     this.label = label;
+
+    const hovered = this.enabled && this.contains(mouseX, mouseY);
+    const active = hovered && mouseIsPressed;
+    const baseFill = style.fill ?? 80;
+    const baseStroke = style.stroke ?? 0;
+
+    let fillColor = this._brightenColor(baseFill, hovered ? 30 : 0);
+    let strokeColor = this._brightenColor(baseStroke, hovered ? 50 : 0);
+    let strokeWeightVal = style.strokeWeight != null ? style.strokeWeight : 2;
+
+    if (active) {
+      fillColor = this._brightenColor(fillColor, 40);
+      strokeColor = this._brightenColor(strokeColor, 80);
+      strokeWeightVal += 1;
+    }
+
     push();
-    stroke(style.stroke || 0);
-    strokeWeight(style.strokeWeight || 2);
-    fill(style.fill || 80);
-    rect(this.x, this.y, this.w, this.h, 6);
+    stroke(strokeColor);
+    strokeWeight(strokeWeightVal);
+    fill(fillColor);
+    rect(this.x, this.y, this.w, this.h, style.radius || 6);
     fill(style.text || 255);
     noStroke();
     textAlign(CENTER, CENTER);
     textSize(style.textSize || 14);
     text(label, this.x + this.w / 2, this.y + this.h / 2);
     pop();
+  }
+
+  _brightenColor(base, amount) {
+    let col;
+    if (base instanceof p5.Color) {
+      col = base;
+    } else if (Array.isArray(base)) {
+      col = color(...base);
+    } else {
+      col = color(base);
+    }
+    return color(
+      constrain(red(col) + amount, 0, 255),
+      constrain(green(col) + amount, 0, 255),
+      constrain(blue(col) + amount, 0, 255),
+      alpha(col)
+    );
   }
 
   contains(mx, my) {
@@ -147,6 +199,7 @@ const BTN_READY_H = 30;
 
 // Room slot buttons (rebuilt each frame)
 let roomSlotButtons = [];
+let combatOverButtons = [];
 
 function preload() {
   // Load sprite atlases for character sprites
@@ -789,6 +842,10 @@ function handleNetworkEvent(event) {
     case 'slamLanding':
       handleSlamLandingEvent(event);
       break;
+    case 'MATCH_END':
+      // Server signaled match end — start ending sequence
+      startEndingSequence(event.winnerId, event.winnerCharacter);
+      break;
     default:
       // Ignore unhandled server event types here
       break;
@@ -982,6 +1039,11 @@ function drawAttackHitbox(fighter) {
 }
 
 function draw() {
+  // If an ending sequence is active, render it instead of normal state flow
+  if (endingSequenceActive) {
+    drawEndingSequence();
+    return;
+  }
   // Process pending scene transitions (safely delayed to next frame)
   // This prevents same-frame UI destruction from breaking button click context
 
@@ -1073,9 +1135,12 @@ function draw() {
     drawDamageNumbers();
     endCamera();
     drawSummary();
+  } else if (battleState === BATTLE_STATES.COMBAT_OVER) {
+    // Dedicated combat over screen — do not draw arena
+    drawCombatOver();
   }
 
-  if (battleState !== BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.OPENING) {
+  if (battleState !== BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.OPENING && battleState !== BATTLE_STATES.COMBAT_OVER) {
     drawHud();
   }
 }
@@ -1257,6 +1322,160 @@ function drawOpeningSequence() {
   }
 }
 
+function startEndingSequence(winnerId, winnerCharacter) {
+  if (endingSequenceActive) return;
+  endingSequenceActive = true;
+  endingSequenceTimer = 0;
+  endingStartZoom = typeof cameraZoom !== 'undefined' ? cameraZoom : 1;
+  // targetZoom should fit entire arena horizontally — default to 1 (full view)
+  endingTargetZoom = Math.min(1, width / (ARENA_WIDTH || width));
+  endingWinnerId = winnerId || null;
+  endingWinnerCharacter = winnerCharacter || null;
+  showCombatOverMenu = false;
+  resetLobbyReadyState();
+}
+
+function resetLobbyReadyState() {
+  if (!players) return;
+  players.forEach(player => {
+    if (player) player.ready = false;
+  });
+}
+
+function drawEndingSequence() {
+  const dt = deltaTime / 1000;
+  endingSequenceTimer += dt;
+
+  // Phases: zooming -> hold -> show 'combat end' -> transition to summary/menu
+  const zoomDur = endingZoomDuration;
+  const holdDur = endingHoldDuration;
+  const textDur = 0.6;
+  const total = zoomDur + holdDur + textDur;
+
+  // Compute zoom (ease out: fast -> slow)
+  const zp = constrain(endingSequenceTimer / zoomDur, 0, 1);
+  const eased = 1 - Math.pow(1 - zp, 3);
+  const currentZoom = lerp(endingStartZoom, endingTargetZoom, eased);
+
+  // Save original camera
+  const originalZoom = typeof cameraZoom !== 'undefined' ? cameraZoom : 1;
+  const originalX = typeof cameraX !== 'undefined' ? cameraX : 0;
+  const originalY = typeof cameraY !== 'undefined' ? cameraY : 0;
+
+  // Override camera for ending sequence: keep zoom-out behavior but center on fighters
+  cameraZoom = currentZoom;
+  // Compute center from active fighters (match combat centering)
+  if (window.allFighters && window.allFighters.length > 0) {
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    window.allFighters.forEach(f => {
+      if (f.isDefeated) return;
+      const x = (f.pos && typeof f.pos.x !== 'undefined') ? f.pos.x : (f.x || 0);
+      const y = (f.pos && typeof f.pos.y !== 'undefined') ? f.pos.y : (f.y || 0);
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    });
+    if (!isFinite(minX)) {
+      cameraX = ARENA_WIDTH / 2;
+      cameraY = ARENA_HEIGHT / 2;
+    } else {
+      const centerX = (minX + maxX) / 2;
+      const centerY = (minY + maxY) / 2;
+      cameraX = centerX;
+      // Keep vertical centering similar to combat: bias toward arena center to show ground
+      cameraY = lerp(centerY, ARENA_HEIGHT / 2, 0.35);
+    }
+  } else {
+    cameraX = ARENA_WIDTH / 2;
+    cameraY = ARENA_HEIGHT / 2;
+  }
+
+  // Render arena and fighters under overridden camera
+  background(0);
+  beginCamera();
+  drawArena();
+  if (window.allFighters) {
+    window.allFighters.forEach(f => f.draw());
+  }
+  endCamera();
+
+  // Draw vignette / overlays
+  drawDamageNumbers();
+
+  // Draw 'COMBAT END' text after zoom completes
+  if (endingSequenceTimer >= zoomDur) {
+    const tProgress = constrain((endingSequenceTimer - zoomDur) / textDur, 0, 1);
+    endingTextAlpha = lerp(0, 255, tProgress);
+    push();
+    resetMatrix();
+    textAlign(CENTER, CENTER);
+    textSize(96);
+    fill(255, 255, 255, endingTextAlpha);
+    stroke(0, 0, 0, endingTextAlpha);
+    strokeWeight(6);
+    text('COMBAT END', width / 2, height / 2);
+    pop();
+  }
+
+  // Restore camera
+  cameraZoom = originalZoom;
+  cameraX = originalX;
+  cameraY = originalY;
+
+  // After full sequence duration, begin fade to black then transition to COMBAT_OVER
+  if (endingSequenceTimer >= total && !endingFading) {
+    endingFading = true;
+    endingFadeTimer = 0;
+    endingFadeAlpha = 0;
+  }
+
+  if (endingFading) {
+    endingFadeTimer += dt;
+    endingFadeAlpha = constrain((endingFadeTimer / endingFadeDuration) * 255, 0, 255);
+    // Draw fullscreen fade overlay
+    push();
+    resetMatrix();
+    fill(0, endingFadeAlpha);
+    noStroke();
+    rect(0, 0, width, height);
+    pop();
+
+    if (endingFadeTimer >= endingFadeDuration) {
+      // Finalize transition to COMBAT_OVER
+      endingFading = false;
+      endingSequenceActive = false;
+      setBattleState(BATTLE_STATES.COMBAT_OVER);
+      if (endingWinnerId) {
+        winner = window.allFighters ? window.allFighters.find(f => f.clientId === endingWinnerId) : null;
+        summaryText = winner ? `${winner.name} wins!` : `${endingWinnerCharacter || 'Player'} wins!`;
+        const localFighter = player || (window.allFighters ? window.allFighters.find(f => f.isPlayerControlled) : null);
+        if (localFighter) {
+          if (localFighter.clientId === endingWinnerId) {
+            combatOverOutcome = 'VICTORY';
+            combatOverLine = 'You won the combat!';
+          } else {
+            combatOverOutcome = 'DEFEAT';
+            combatOverLine = 'You were defeated.';
+          }
+        } else {
+          combatOverOutcome = 'COMBAT OVER';
+          combatOverLine = summaryText;
+        }
+      } else {
+        winner = null;
+        summaryText = 'Draw!';
+        combatOverOutcome = 'DRAW';
+        combatOverLine = 'Neither fighter emerged victorious.';
+      }
+      showCombatOverMenu = true;
+      // Reset fade timer
+      endingFadeTimer = 0;
+      endingFadeAlpha = 0;
+    }
+  }
+}
+
 function drawArena() {
   // Use scaled background dimensions to maintain aspect ratio
   const bgWidth = window.bgScaledWidth || ARENA_WIDTH;
@@ -1402,7 +1621,7 @@ function updateBattle() {
     
     // Check for battle end (only one fighter not defeated)
     const activeFighters = window.allFighters.filter(f => !f.isDefeated);
-    if (activeFighters.length <= 1) {
+    if (activeFighters.length <= 1 && !endingSequenceActive) {
       setBattleState(BATTLE_STATES.SUMMARY);
       winner = activeFighters[0] || null;
       summaryText = winner ? `${winner.name} wins!` : 'Draw!';
@@ -1808,6 +2027,14 @@ if (
     }
     
     return;
+  }
+  // Combat over screen button handling
+  if (battleState === BATTLE_STATES.COMBAT_OVER && showCombatOverMenu) {
+    const mx = mouseX;
+    const my = mouseY;
+    for (const btn of combatOverButtons) {
+      if (btn.click(mx, my)) return;
+    }
   }
   
   if (battleState !== BATTLE_STATES.BATTLE) {

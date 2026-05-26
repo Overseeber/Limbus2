@@ -14,11 +14,62 @@ function drawSummary() {
   push();
   fill(255);
   textAlign(CENTER, CENTER);
-  textSize(32);
-  text(summaryText, width / 2, height / 2 - 40);
-  textSize(18);
-  text('Press ENTER to restart the duel.', width / 2, height / 2 + 0);
-  text(`Time: ${battleTimer.toFixed(1)}s`, width / 2, height / 2 + 40);
+  textSize(36);
+  text(summaryText, width / 2, height / 2 - 80);
+
+  // If ending sequence transitioned to summary, show combat over menu
+  if (typeof showCombatOverMenu !== 'undefined' && showCombatOverMenu) {
+    // Draw result panel
+    const panelW = 520;
+    const panelH = 220;
+    const panelX = (width - panelW) / 2;
+    const panelY = (height - panelH) / 2 + 20;
+    push();
+    fill(12, 12, 12, 220);
+    stroke(255, 60);
+    rect(panelX, panelY, panelW, panelH, 12);
+    pop();
+
+    // Draw buttons: Return to Character Select, Restart Duel
+    const btnW = 220;
+    const btnH = 48;
+    const gap = 24;
+    const leftX = panelX + (panelW / 2) - btnW - (gap / 2);
+    const rightX = panelX + (panelW / 2) + (gap / 2);
+    const btnY = panelY + panelH - 80;
+
+    // Draw left button
+    push();
+    fill(40, 110, 200);
+    noStroke();
+    rect(leftX, btnY, btnW, btnH, 8);
+    fill(255);
+    textSize(18);
+    textAlign(CENTER, CENTER);
+    text('Return to Character Select', leftX + btnW / 2, btnY + btnH / 2);
+    pop();
+
+    // Draw right button
+    push();
+    fill(60, 180, 90);
+    noStroke();
+    rect(rightX, btnY, btnW, btnH, 8);
+    fill(255);
+    textSize(18);
+    textAlign(CENTER, CENTER);
+    text('Restart Duel', rightX + btnW / 2, btnY + btnH / 2);
+    pop();
+
+    // Draw small time/info text
+    textSize(14);
+    fill(200);
+    text(`Time: ${battleTimer.toFixed(1)}s`, width / 2, panelY + 40);
+
+  } else {
+    textSize(18);
+    text('Press ENTER to restart the duel.', width / 2, height / 2 + 0);
+    text(`Time: ${battleTimer.toFixed(1)}s`, width / 2, height / 2 + 40);
+  }
   pop();
 }
 
@@ -701,6 +752,88 @@ function drawSettingsPanel() {
   textSize(12);
   textAlign(CENTER, TOP);
   text('Click anywhere or press ESC to go back', width / 2, panelY + panelHeight - 28);
+
+  pop();
+}
+
+function drawCombatOver() {
+  // Fullscreen combat over screen (separate from SUMMARY)
+  push();
+  for (let i = 0; i < height; i += 8) {
+    const t = i / height;
+    fill(18 + t * 50, 16 + t * 30, 40 + t * 80, 220);
+    noStroke();
+    rect(0, i, width, 8);
+  }
+
+  push();
+  noFill();
+  stroke(255, 24);
+  strokeWeight(2);
+  rectMode(CENTER);
+  rect(width / 2, height / 2, width * 0.92, height * 0.86, 44);
+  pop();
+
+  textAlign(CENTER, CENTER);
+  textSize(64);
+  fill(248, 200, 92);
+  text(combatOverOutcome || 'COMBAT OVER', width / 2, 120);
+
+  textSize(26);
+  fill(220);
+  text(combatOverLine || summaryText || 'Combat has ended.', width / 2, 180);
+
+  // Large center panel with options
+  const panelW = 620;
+  const panelH = 340;
+  const panelX = (width - panelW) / 2;
+  const panelY = (height - panelH) / 2 + 30;
+  push();
+  fill(10, 10, 18, 220);
+  stroke(255, 64);
+  strokeWeight(1.5);
+  rect(panelX, panelY, panelW, panelH, 18);
+  pop();
+
+  push();
+  noFill();
+  stroke(255, 16);
+  strokeWeight(1);
+  for (let ring = 0; ring < 3; ring++) {
+    rect(panelX + panelW / 2, panelY + panelH / 2, panelW - ring * 50, panelH - ring * 50, 18);
+  }
+  pop();
+
+  // Button
+  const btnW = 300;
+  const btnH = 56;
+  const btnX = panelX + (panelW - btnW) / 2;
+  const btnY = panelY + panelH - 100;
+
+  combatOverButtons = [];
+  const returnBtn = new UIButton(btnX, btnY, btnW, btnH, () => {
+    resetLobbyReadyState();
+    window.allFighters = null;
+    player = null;
+    enemy = null;
+    showCombatOverMenu = false;
+    setBattleState(BATTLE_STATES.LOBBY);
+  });
+  returnBtn.draw('Return to Lobby', {
+    stroke: [120, 180, 255],
+    fill: [40, 80, 180],
+    text: 255,
+    textSize: 18,
+    radius: 12
+  });
+  combatOverButtons.push(returnBtn);
+
+  // Small footer info
+  push();
+  fill(180);
+  textSize(14);
+  text(`Time: ${battleTimer.toFixed(1)}s`, width / 2, panelY + 36);
+  pop();
 
   pop();
 }

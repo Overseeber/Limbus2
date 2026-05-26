@@ -1192,7 +1192,7 @@ class Match {
     /**
      * End match
      */
-    endMatch(winnerId) {
+    endMatch(winnerId, options = {}) {
         this.stop();
         
         const winner = winnerId ? this.players[winnerId] : null;
@@ -1200,7 +1200,10 @@ class Match {
         this.broadcast({
             type: 'MATCH_END',
             winnerId: winnerId,
-            winnerCharacter: winner ? winner.characterKey : null
+            winnerCharacter: winner ? winner.characterKey : null,
+            returnToLobby: !!options.returnToLobby,
+            reason: options.reason || null,
+            forfeiterId: options.forfeiterId || null
         });
         
         console.log(`Match ended in room ${this.room.id}. Winner: ${winner ? winner.characterKey : 'None'}`);

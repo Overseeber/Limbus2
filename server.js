@@ -132,6 +132,29 @@ function broadcastEvent(event, excludeSocketId = null, roomId = null) {
     }
 }
 
+function resetRoomReadyState(room) {
+    if (!room || !room.clients) return;
+    room.clients.forEach(clientId => {
+        const client = clientList[clientId];
+        if (client) client.ready = false;
+    });
+}
+
+function handleForfeit(socket, client, room) {
+    if (!room || !room.match) return;
+    const forfeiterId = socket.id;
+    const winnerId = room.clients.find(id => id !== forfeiterId) || null;
+
+    room.match.endMatch(winnerId, {
+        returnToLobby: true,
+        reason: 'forfeit',
+        forfeiterId: forfeiterId
+    });
+    room.match = null;
+    resetRoomReadyState(room);
+    emitRoomState(room.id);
+}
+
 
 
 const EVENT_TYPES = {
@@ -364,6 +387,16 @@ socket.on('toggleReady', () => {
         room.match.resolveAttack(socket.id, attackData);
     });
 
+    socket.on('event', (event) => {
+        if (!event || !event.type) return;
+        if (event.type === 'FORFEIT_MATCH') {
+            if (!client.room) return;
+            const room = roomList[client.room];
+            if (!room || !room.match) return;
+            handleForfeit(socket, client, room);
+        }
+    });
+
     // no peer input, server only
    
 
@@ -372,18 +405,27 @@ socket.on('toggleReady', () => {
         if (client.room && roomList[client.room]) {
             const room = roomList[client.room];
             
-            // End match if active
+            const remainingClientIds = room.clients.filter(id => id !== socket.id);
+            
             if (room.match) {
-                room.match.endMatch(null);
+                const winnerId = remainingClientIds.length > 0 ? remainingClientIds[0] : null;
+                room.match.endMatch(winnerId, {
+                    returnToLobby: true,
+                    reason: 'disconnect',
+                    forfeiterId: socket.id
+                });
                 room.match = null;
+                resetRoomReadyState(room);
             }
             
-            room.clients = room.clients.filter(id => id !== socket.id);
+            room.clients = remainingClientIds;
             socket.leave(client.room);
             if (room.clients.length === 0 && room.id !== 'room1') {
                 delete roomList[room.id];
             }
-            emitRoomState(room.id);
+            if (room.clients.length > 0) {
+                emitRoomState(room.id);
+            }
         }
         delete clientList[socket.id];
         console.log('Client has disconnected', socket.id);

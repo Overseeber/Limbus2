@@ -49,6 +49,7 @@ let endingFading = false;
 let endingFadeDuration = 0.6;
 let endingFadeTimer = 0;
 let endingFadeAlpha = 0;
+let endingReturnToLobby = false;
 let combatOverOutcome = '';
 let combatOverLine = '';
 
@@ -844,7 +845,9 @@ function handleNetworkEvent(event) {
       break;
     case 'MATCH_END':
       // Server signaled match end — start ending sequence
-      startEndingSequence(event.winnerId, event.winnerCharacter);
+      startEndingSequence(event.winnerId, event.winnerCharacter, {
+        returnToLobby: !!event.returnToLobby
+      });
       break;
     default:
       // Ignore unhandled server event types here
@@ -1322,7 +1325,7 @@ function drawOpeningSequence() {
   }
 }
 
-function startEndingSequence(winnerId, winnerCharacter) {
+function startEndingSequence(winnerId, winnerCharacter, options = {}) {
   if (endingSequenceActive) return;
   endingSequenceActive = true;
   endingSequenceTimer = 0;
@@ -1331,6 +1334,7 @@ function startEndingSequence(winnerId, winnerCharacter) {
   endingTargetZoom = Math.min(1, width / (ARENA_WIDTH || width));
   endingWinnerId = winnerId || null;
   endingWinnerCharacter = winnerCharacter || null;
+  endingReturnToLobby = !!options.returnToLobby;
   showCombatOverMenu = false;
   resetLobbyReadyState();
 }
@@ -1442,36 +1446,45 @@ function drawEndingSequence() {
     pop();
 
     if (endingFadeTimer >= endingFadeDuration) {
-      // Finalize transition to COMBAT_OVER
       endingFading = false;
       endingSequenceActive = false;
-      setBattleState(BATTLE_STATES.COMBAT_OVER);
-      if (endingWinnerId) {
-        winner = window.allFighters ? window.allFighters.find(f => f.clientId === endingWinnerId) : null;
-        summaryText = winner ? `${winner.name} wins!` : `${endingWinnerCharacter || 'Player'} wins!`;
-        const localFighter = player || (window.allFighters ? window.allFighters.find(f => f.isPlayerControlled) : null);
-        if (localFighter) {
-          if (localFighter.clientId === endingWinnerId) {
-            combatOverOutcome = 'VICTORY';
-            combatOverLine = 'You won the combat!';
-          } else {
-            combatOverOutcome = 'DEFEAT';
-            combatOverLine = 'You were defeated.';
-          }
-        } else {
-          combatOverOutcome = 'COMBAT OVER';
-          combatOverLine = summaryText;
-        }
-      } else {
-        winner = null;
-        summaryText = 'Draw!';
-        combatOverOutcome = 'DRAW';
-        combatOverLine = 'Neither fighter emerged victorious.';
-      }
-      showCombatOverMenu = true;
-      // Reset fade timer
       endingFadeTimer = 0;
       endingFadeAlpha = 0;
+
+      if (endingReturnToLobby) {
+        window.allFighters = null;
+        player = null;
+        enemy = null;
+        showCombatOverMenu = false;
+        endingReturnToLobby = false;
+        setBattleState(BATTLE_STATES.LOBBY);
+      } else {
+        // Finalize transition to COMBAT_OVER
+        setBattleState(BATTLE_STATES.COMBAT_OVER);
+        if (endingWinnerId) {
+          winner = window.allFighters ? window.allFighters.find(f => f.clientId === endingWinnerId) : null;
+          summaryText = winner ? `${winner.name} wins!` : `${endingWinnerCharacter || 'Player'} wins!`;
+          const localFighter = player || (window.allFighters ? window.allFighters.find(f => f.isPlayerControlled) : null);
+          if (localFighter) {
+            if (localFighter.clientId === endingWinnerId) {
+              combatOverOutcome = 'VICTORY';
+              combatOverLine = 'You won the combat!';
+            } else {
+              combatOverOutcome = 'DEFEAT';
+              combatOverLine = 'You were defeated.';
+            }
+          } else {
+            combatOverOutcome = 'COMBAT OVER';
+            combatOverLine = summaryText;
+          }
+        } else {
+          winner = null;
+          summaryText = 'Draw!';
+          combatOverOutcome = 'DRAW';
+          combatOverLine = 'Neither fighter emerged victorious.';
+        }
+        showCombatOverMenu = true;
+      }
     }
   }
 }
@@ -1762,9 +1775,15 @@ function keyPressed() {
 }
 
 function forfeitMatch() {
-  // Immediately return to lobby and clear fighters
   pauseMenuOpen = false;
   pauseSettingsOpen = false;
+
+  if (Network && Network.isConnected && Network.socket) {
+    Network.sendEvent({ type: 'FORFEIT_MATCH' });
+    return;
+  }
+
+  // Local fallback when not connected
   window.allFighters = null;
   player = null;
   enemy = null;

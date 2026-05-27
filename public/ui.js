@@ -264,7 +264,10 @@ function drawMultiPlayerHuds() {
   if (!window.allFighters) return;
   
   const controlledFighter = getPlayerControlledFighter();
-  const otherFighters = window.allFighters.filter(f => !f.isPlayerControlled);
+  // Filter out the controlled/local player's fighter to show all other fighters
+  // In local CPU mode, !isPlayerControlled works. In network room mode, all fighters have
+  // isPlayerControlled=true, so we use reference comparison against the controlled fighter.
+  const otherFighters = window.allFighters.filter(f => f !== controlledFighter);
   
   // Draw HUD panels for other fighters in top right
   const startX = width - 256;

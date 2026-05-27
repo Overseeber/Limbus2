@@ -265,6 +265,7 @@ class Fighter {
     this.statusEffectsApplied = false;   // Reset status effect application flag
     this.slashEffectsSpawned = false;    // Reset visual effect spawning flag
     this.lastSlashSpawnFrame = null;     // Track last visual frame that spawned slashes
+    this.lastAttackPhase = 'none';       // Track last attack phase for phase-change detection
     
     // ULTIMATE ATTACK SYSTEM RESET
     this.ultimateActive = false;         // Clear ultimate activation state
@@ -627,6 +628,14 @@ class Fighter {
       return;
     }
     
+    // Track flag transitions for visual effect spawning (server-driven, attackFrame is always 0)
+    const prevDashAttackActive = this._prevDashAttackActive;
+    this._prevDashAttackActive = !!this.dashAttackActive;
+    const prevSlamActive = this._prevSlamActive;
+    this._prevSlamActive = !!(this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition);
+    const dashAttackJustActivated = this.dashAttackActive && !prevDashAttackActive;
+    const slamJustActivated = (this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition) && !prevSlamActive;
+    
     // Use intro sprite if intro animation is playing
     if (this.isPlayingIntro) {
       const introSprite = this.getIntroSprite();
@@ -668,23 +677,20 @@ class Fighter {
         this.currentSprite = 'churt';
       } else if (this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition) {
         this.currentSprite = 'cs1f2';
-        if (!this.slashEffectsSpawned) {
+        if (slamJustActivated) {
           this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
-          this.slashEffectsSpawned = true;
         }
       } else if (this.dashAttackActive) {
         // Dash attack deceleration - show cjoust sprite while slowing down
         this.currentSprite = 'cjoust';
-        if (!this.slashEffectsSpawned) {
+        if (dashAttackJustActivated) {
           this.spawnSlashEffect('cjs1', { x: 0, y: -10 });
-          this.slashEffectsSpawned = true;
         }
       } else if (this.isDashing) {
         if (this.state === 'attack' || this.state === 'attacking') {
           this.currentSprite = 'cjoust';
-          if (!this.slashEffectsSpawned) {
+          if (dashAttackJustActivated) {
             this.spawnSlashEffect('cjs1', { x: 0, y: -10 });
-            this.slashEffectsSpawned = true;
           }
         } else if (this.usePostDashSprite) {
           this.currentSprite = 'chalt';
@@ -736,13 +742,22 @@ class Fighter {
         this.currentSprite = 'cs1f2';
       } else {
         this.currentSprite = 's4f4';
+        if (slamJustActivated) {
+          this.spawnSlashEffect('s2s2', { x: 0, y: -10 });
+        }
       }
     } else if (this.dashAttackActive) {
       // Dash attack deceleration - show joust sprite while slowing down
       this.currentSprite = 'joust';
+      if (dashAttackJustActivated) {
+        this.spawnSlashEffect('js1', { x: 0, y: -10 });
+      }
     } else if (this.isDashing) {
       if (this.state === 'attack' || this.state === 'attacking' || this.dashAttackActive) {
         this.currentSprite = 'joust';
+        if (dashAttackJustActivated) {
+          this.spawnSlashEffect('js1', { x: 0, y: -10 });
+        }
       } else if (this.usePostDashSprite) {
         this.currentSprite = 's2f1';
       } else {
@@ -794,6 +809,9 @@ class Fighter {
     const attackKey = this.attackSequence === 1 ? 'light' : this.attackSequence === 2 ? 'medium' : 'heavy';
     const attackDef = CHARACTERS[this.characterKey] && CHARACTERS[this.characterKey].attacks ? CHARACTERS[this.characterKey].attacks[attackKey] : null;
 
+    // Detect phase transition for slash spawning (attackFrame from server is always 0)
+    const phaseTransitioned = this.lastAttackPhase !== this.attackPhase && this.attackPhase !== 'none';
+
     if (this.attackSequence === 1) {
       const sequence = ['prepat', 's1f1', 's1f2', 's1f3'];
       let visualFrame = 0;
@@ -810,10 +828,10 @@ class Fighter {
       }
       this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
 
-      if (this.attackFrame === 1 && this.lastSlashSpawnFrame !== 1) {
+      // Spawn slashes when entering active phase (hitspark frame)
+      if (phaseTransitioned && this.attackPhase === 'active') {
         this.spawnSlashEffect('s1s1', { x: 0, y: -10 });
         this.spawnSlashEffect('s1s2', { x: 15, y: -5 });
-        this.lastSlashSpawnFrame = 1;
       }
     } else if (this.attackSequence === 2) {
       const sequence = ['s2f1', 'halt1', 'halt2', 's3f1'];
@@ -829,9 +847,9 @@ class Fighter {
       }
       this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
 
-      if (this.attackFrame === 0 && this.lastSlashSpawnFrame !== 0) {
+      // Spawn slash at attack start (s2f1 is both startup and active in reference)
+      if (phaseTransitioned && (this.attackPhase === 'startup' || this.attackPhase === 'active')) {
         this.spawnSlashEffect('s1s3', { x: 0, y: -10 });
-        this.lastSlashSpawnFrame = 0;
       }
     } else if (this.attackSequence === 3) {
       const sequence = ['s3f1', 's3f2', 's3f3'];
@@ -845,11 +863,14 @@ class Fighter {
       }
       this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
 
-      if (this.attackFrame === 1 && this.lastSlashSpawnFrame !== 1) {
+      // Spawn slash when entering active phase (s3f2 hitspark frame)
+      if (phaseTransitioned && this.attackPhase === 'active') {
         this.spawnSlashEffect('s1s4', { x: 0, y: -10 });
-        this.lastSlashSpawnFrame = 1;
       }
     }
+
+    // Track attack phase for next frame's transition detection
+    this.lastAttackPhase = this.attackPhase;
   }
 
   updateHaltSequence() {
@@ -870,6 +891,9 @@ class Fighter {
     const sequence3 = ['cs3f1', 'cs3f2', 'cs3f3', 'cs3f4'];
     let visualFrame = 0;
 
+    // Detect phase transition for slash spawning (attackFrame from server is always 0)
+    const phaseTransitioned = this.lastAttackPhase !== attackPhase && attackPhase !== 'none';
+
     if (this.attackSequence === 1) {
       const damageFrames = [false, true, false];
       if (attackPhase === 'startup') {
@@ -881,9 +905,9 @@ class Fighter {
       }
       this.currentSprite = sequence1[Math.min(visualFrame, sequence1.length - 1)];
 
-      if (this.attackFrame === 1 && this.lastSlashSpawnFrame !== 1) {
+      // Spawn cs1s1 slash when entering active phase (cs1f2 hitspark frame)
+      if (phaseTransitioned && attackPhase === 'active') {
         this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
-        this.lastSlashSpawnFrame = 1;
       }
 
       if (damageFrames[visualFrame] && !this.attackDamageDealt) {
@@ -905,9 +929,9 @@ class Fighter {
       }
       this.currentSprite = sequence2[Math.min(visualFrame, sequence2.length - 1)];
 
-      if (this.attackFrame === 1 && this.lastSlashSpawnFrame !== 1) {
+      // Spawn cs2s1 slash when entering the active/recovery transition (cs2f1 hitspark frame)
+      if (phaseTransitioned && attackPhase === 'recovery') {
         this.spawnSlashEffect('cs2s1', { x: 0, y: -10 });
-        this.lastSlashSpawnFrame = 1;
       }
 
       if (damageFrames[visualFrame] && !this.attackDamageDealt) {
@@ -940,12 +964,13 @@ class Fighter {
       }
       this.currentSprite = sequence3[Math.min(visualFrame, sequence3.length - 1)];
 
-      if (this.attackFrame === 1 && this.lastSlashSpawnFrame !== 1) {
+      // Spawn cs3s1 when entering active phase (cs3f2 hitspark)
+      if (phaseTransitioned && attackPhase === 'active') {
         this.spawnSlashEffect('cs3s1', { x: 0, y: -10 });
-        this.lastSlashSpawnFrame = 1;
-      } else if (this.attackFrame === 2 && this.lastSlashSpawnFrame !== 2) {
+      }
+      // Spawn cs3s2 when entering recovery phase (cs3f3 hitspark)
+      if (phaseTransitioned && attackPhase === 'recovery') {
         this.spawnSlashEffect('cs3s2', { x: 0, y: -10 });
-        this.lastSlashSpawnFrame = 2;
       }
 
       if (damageFrames[visualFrame] && !this.attackDamageDealt) {
@@ -963,6 +988,9 @@ class Fighter {
         this.attackDamageDealt = true;
       }
     }
+
+    // Track attack phase for next frame's transition detection
+    this.lastAttackPhase = attackPhase;
   }
 
   updateCallistoHaltSequence() {

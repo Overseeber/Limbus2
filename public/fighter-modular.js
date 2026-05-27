@@ -1250,7 +1250,14 @@ class Fighter {
       this.requestAttack();
     }
     if (keyLower === this.controls.evade) {
-      this.requestEvade();
+      // Immediately start evade instead of setting a flag that requires processActions
+      // (processActions is part of fighter.update() which is disabled in server-authoritative mode)
+      const closestOpponent = this.getClosestOpponent();
+      if (closestOpponent) {
+        this.startEvade(closestOpponent);
+      } else {
+        this.startEvade();
+      }
     }
     
     // Ultimate activation with X key (always available for testing)
@@ -1340,8 +1347,13 @@ class Fighter {
     if (opponent) {
       this.faceTowards(opponent);
     }
-    this.vel.x = -this.facing * 18;
-    this.vel.y = -3;
+    // Move fighter backward by ~1 attack range (230px) to avoid incoming strikes
+    // Velocity-based movement won't work because fighter.update() is disabled
+    // in server-authoritative mode, so we apply position directly.
+    const evadeDistance = 230;
+    this.pos.x += -this.facing * evadeDistance;
+    // Clamp to arena bounds
+    this.pos.x = constrain(this.pos.x, 60, width - 60);
   }
 
   useTimeToHunt() {
@@ -2367,6 +2379,11 @@ class Fighter {
   }
 
   hitOpponent(opponent, box) {
+    // EVADE CHECK: If the opponent is in evade state, attacks miss them
+    // Evade grants brief invulnerability by moving the fighter out of harm's way
+    if (opponent.isEvading || opponent.state === 'evade') {
+      return false;
+    }
     const playerBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
     const attackBox = { x: box.x - box.w / 2, y: box.y, w: box.w, h: box.h };
     return this.rectOverlap(playerBox, attackBox) && opponent.hitCooldown <= 0;

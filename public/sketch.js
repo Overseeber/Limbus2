@@ -1605,6 +1605,9 @@ function updateClientInterpolation() {
 function drawVignette() {
   // Vignette width in pixels
   const vignetteWidth = 150;
+  const bgHeight = window.bgScaledHeight || height;
+  const bgTop = Math.max(0, (height - bgHeight) / 2);
+  const bgBottom = Math.min(height, bgTop + bgHeight);
   
   // Draw left vignette
   for (let x = 0; x < vignetteWidth; x++) {
@@ -1621,25 +1624,26 @@ function drawVignette() {
     noStroke();
     rect(width - vignetteWidth + x, 0, 1, height);
   }
-  //add bottom and top vignette
 
+  // Draw top vignette at the top edge of the arena background image
   for (let y = 0; y < vignetteWidth; y++) {
     const alpha = map(y, 0, vignetteWidth, 255, 0);
     fill(0, 0, 0, alpha);
     noStroke();
-    rect(0, y, width, 1);
+    rect(0, bgTop + y, width, 1);
   }
 
+  // Draw bottom vignette at the bottom edge of the arena background image
   for (let y = 0; y < vignetteWidth; y++) {
     const alpha = map(y, 0, vignetteWidth, 0, 255);
     fill(0, 0, 0, alpha);
     noStroke();
-    rect(0, height - vignetteWidth + y, width, 1);
+    rect(0, bgBottom - vignetteWidth + y, width, 1);
   }
 
   fill(0);
-  rect(-500,0,500,height);
-  rect(width,0,500,height);
+  rect(-500, 0, 500, height);
+  rect(width, 0, 500, height);
 }
 
 function updateBattle() {
@@ -1821,9 +1825,12 @@ function keyPressed() {
   if (battleState === BATTLE_STATES.BATTLE) {
     const controlledFighter = getPlayerControlledFighter();
     if (controlledFighter) {
+      // Always process ability keys (Q for special abilities) regardless of game mode
+      // This allows players to use character abilities in both single-player and multiplayer
+      controlledFighter.processKeyPressed(key);
+      
       // Local fallback for single-player responsiveness only
       if (gameMode !== 'multiplayer') {
-        controlledFighter.processKeyPressed(key);
         if (key === ' ' || keyCode === 32) {
           controlledFighter.startDash();
         }

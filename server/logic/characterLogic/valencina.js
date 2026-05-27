@@ -50,21 +50,35 @@ function executeTimeToHunt(state, abilityConfig, targetState, config) {
 
   // APPLY STATUS EFFECTS
   const appliedStatuses = [];
-  abilityConfig.statusEffects.forEach(statusConfig => {
-    // Apply Shin bonus to status effects
-    let finalPotency = statusConfig.potency || 1;
-    if (state.resources.shinActive && statusConfig.type === 'Burn') {
-      finalPotency += config.shin.burnBonusPotency;
-    }
-
-    targetState.statuses.push({
-      type: statusConfig.type,
-      count: statusConfig.count || 1,
-      potency: finalPotency,
-      duration: statusConfig.duration || 0
-    });
-    appliedStatuses.push(statusConfig.type);
+  
+  // APPLY GAME TARGET - Main effect of Time to Hunt
+  // Sets speed to 1, restricts jumping and dashing for 10 seconds
+  targetState.statuses.push({
+    type: 'GameTarget',
+    count: 1,
+    potency: 1,
+    duration: 10  // 10 second duration
   });
+  appliedStatuses.push('GameTarget');
+  
+  // Apply additional status effects from config if any
+  if (abilityConfig.statusEffects) {
+    abilityConfig.statusEffects.forEach(statusConfig => {
+      // Apply Shin bonus to status effects
+      let finalPotency = statusConfig.potency || 1;
+      if (state.resources.shinActive && statusConfig.type === 'Burn') {
+        finalPotency += config.shin.burnBonusPotency;
+      }
+
+      targetState.statuses.push({
+        type: statusConfig.type,
+        count: statusConfig.count || 1,
+        potency: finalPotency,
+        duration: statusConfig.duration || 0
+      });
+      appliedStatuses.push(statusConfig.type);
+    });
+  }
 
   // APPLY KNOCKBACK
   if (abilityConfig.knockback) {

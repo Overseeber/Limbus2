@@ -1945,8 +1945,11 @@ class Fighter {
     }
 
     if (this.jumpRequest && this.onGround() && !this.isDucking) {
-      this.vel.y = this.jumpStrength;
-      this.setState('jump');
+      // Game Target prevents jumping
+      if (!this.hasStatus('GameTarget')) {
+        this.vel.y = this.jumpStrength;
+        this.setState('jump');
+      }
       this.jumpRequest = false;
     }
 
@@ -2118,6 +2121,10 @@ class Fighter {
 
   startDash() {
     if (this.dashCharges <= 0 || this.isDashing || !this.onGround() || this.ultimateActive) {
+      return;
+    }
+    // Game Target prevents dashing
+    if (this.hasStatus('GameTarget')) {
       return;
     }
     this.dashCharges -= 1;

@@ -854,7 +854,7 @@ CALLISTO: {
       }
       
       // Installation Art ability on Q key
-      if (key === 'q' && !fighter.installationArtActive) {
+      if (key.toLowerCase() === 'q' && !fighter.installationArtActive) {
         // Emit ability request to server instead of executing locally
         if (typeof Network !== 'undefined' && Network.requestAbility) {
           Network.requestAbility('installationArt');
@@ -1732,7 +1732,7 @@ CALLISTO: {
     processKeyPressed: function(key, fighter) {
       // ⚡ Time to Hunt ability (Q key)
       console.log(`[DEBUG] Time to Hunt - Key: ${key}, Cooldown: ${fighter.timeToHuntCooldown}, Type: ${typeof fighter.timeToHuntCooldown}`);
-      if (key === 'q') {
+      if (key.toLowerCase() === 'q') {
         // Initialize cooldown if undefined
         if (fighter.timeToHuntCooldown === undefined) {
           fighter.timeToHuntCooldown = 0;

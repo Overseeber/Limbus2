@@ -350,8 +350,11 @@ class Fighter {
     this.hitCooldown = 0;                // Cooldown timer between taking hits
     this.dashAttacked = false;           // Flag for dash attack execution in current dash
     
-    // SPECIAL ATTACK REQUEST FLAGS
+    // EVADE SYSTEM PROPERTIES
     this.evadeRequested = false;         // Flag for evade action request
+    this.evadeCooldown = 0;              // Cooldown timer between evades (0 = ready)
+    
+    // SPECIAL ATTACK REQUEST FLAGS
     this.slamAttackRequested = false;    // Flag for slam attack request
     
     // SLAM ATTACK SYSTEM
@@ -1319,7 +1322,7 @@ class Fighter {
     this.guardRequest = true;
     this.isGuarding = true;
     
-    // AUTO-FACE DIRECTION: Face towards closest opponent when guarding
+    // AUTO-FACE DIRECTION: Face towards closest opponent
     // This ensures the guard animation faces the nearest threat
     const closestOpponent = this.getClosestOpponent();
     if (closestOpponent) {
@@ -1342,10 +1345,11 @@ class Fighter {
       return;
     }
     this.setEvadeState(0.22);
-    // FACE TOWARDS SPECIFIC OPPONENT: Face the specific opponent being evaded from
+    // FACE TOWARDS CLOSEST OPPONENT: Face the closest opponent when evading
     // This ensures the evade animation faces the correct direction
-    if (opponent) {
-      this.faceTowards(opponent);
+    const closestOpponent = this.getClosestOpponent();
+    if (closestOpponent) {
+      this.faceTowards(closestOpponent);
     }
     // Move fighter backward by ~1 attack range (230px) to avoid incoming strikes
     // Velocity-based movement won't work because fighter.update() is disabled
@@ -1716,6 +1720,19 @@ class Fighter {
     const distance = dist(this.pos.x, this.pos.y, target.pos.x, target.pos.y);
     // Check if distance is within this fighter's attack range
     return distance <= this.attackRange;
+  }
+
+  /**
+   * RANGE CHECK: Check if a target is within this fighter's attack range
+   * Used by guard, evade, and attack auto-facing to determine when to face the opponent
+   * @param {Fighter} target - The opponent to check range against
+   * @returns {boolean} - True if target is within attack range
+   */
+  isInAttackRange(target) {
+    if (!target || target === this) return false;
+    const distance = dist(this.pos.x, this.pos.y, target.pos.x, target.pos.y);
+    const range = this.attackRange > 0 ? this.attackRange : 231; // Default light attack range
+    return distance <= range;
   }
   
   /**

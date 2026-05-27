@@ -391,6 +391,10 @@ function processSnapshot(snapshot) {
         const wasDashing = fighter.prevIsDashing;
         fighter.prevIsDashing = fighter.isDashing;
 
+        // PRESERVE LOCAL EVADE STATE: The server doesn't know about client-side evade
+        // flashes (0.22s duration), so we keep the local evade state across snapshots.
+        const wasEvading = fighter.isEvading || fighter.state === 'evade';
+
         // Derive local visual movement state from server snapshot
         const serverState = state.state || 'idle';
         const combatState = serverState === 'attacking' ? 'attack' : serverState;
@@ -462,6 +466,13 @@ function processSnapshot(snapshot) {
         } else {
             fighter.state = 'idle';
             fighter.haltSequence = false;
+        }
+
+        // RESTORE LOCAL EVADE STATE: If we were evading before the snapshot overrode us,
+        // put the evade state back. The server doesn't know about client-side evade flashes.
+        if (wasEvading && fighter.evadeTimer > 0) {
+            fighter.state = 'evade';
+            fighter.isEvading = true;
         }
 
         // Reset slash effects on new attack

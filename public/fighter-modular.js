@@ -1084,58 +1084,64 @@ class Fighter {
         // Simplified alpha calculation (no map)
         const alpha = effect.timer * 637.5; // 0.4 * 637.5 = 255
         
-      // Try to draw sprite with proper scaling and alpha fade
-      const spriteInfo = SPRITES?.[effect.type];
-      if (spriteInfo) {
-        // FIX 3: CBSK effects use FIXED orientation, not fighter facing
-        // They are drawn at ground level with random rotation, independent of
-        // the character's facing direction
-        if (['cbsk1', 'cbsk2', 'cbsk3'].includes(effect.type) || effect.type.startsWith('cbsk')) {
-          // Draw ground-based slash entities with fixed orientation
-          push();
-          
-          // Apply alpha fade (5 second duration - no fade until last second)
-          let alpha = 255;
-          if (effect.timer <= 1.0) {
-            // Only fade in the last second
-            alpha = effect.timer * 255;
+        // Try to draw sprite with proper scaling and alpha fade
+        const spriteInfo = SPRITES?.[effect.type];
+        if (spriteInfo) {
+          // FIX 3: CBSK effects use FIXED orientation, not fighter facing
+          // They are drawn at ground level with random rotation, independent of
+          // the character's facing direction
+          if (['cbsk1', 'cbsk2', 'cbsk3'].includes(effect.type) || effect.type.startsWith('cbsk')) {
+            // Draw ground-based slash entities with fixed orientation
+            push();
+            
+            // Apply alpha fade (5 second duration - no fade until last second)
+            let cbskAlpha = 255;
+            if (effect.timer <= 1.0) {
+              // Only fade in the last second
+              cbskAlpha = effect.timer * 255;
+            }
+            tint(255, 255, 255, cbskAlpha);
+            
+            // Position at ground level with only horizontal inheritance
+            const groundY = effect.owner.spawnY;
+            translate(effect.pos.x + offsetX, groundY);
+            
+            // Random rotation between -45 to 45 degrees
+            if (!effect.rotation) {
+              effect.rotation = random(-PI/4, PI/4);
+            }
+            rotate(effect.rotation);
+            
+            // FIX 3: Do NOT apply facing flip - use fixed orientation
+            scale(scaleFactor, 1);
+            
+            // Draw the sprite
+            drawSpriteScaled(effect.type, 0, 0, scaleFactor);
+            
+            pop();
+          } else {
+            // Regular slash effects - flip with facing
+            push();
+            tint(255, 255, 255, alpha);
+            translate(baseX + offsetX * facing, baseY + offsetY + 50);
+            if (facing === -1) {
+              scale(-1, 1); // Flip horizontally when facing right
+            }
+            drawSpriteScaled(effect.type, 0, 0, scaleFactor);
+            pop();
           }
-          tint(255, 255, 255, alpha);
-          
-          // Position at ground level with only horizontal inheritance
-          const groundY = effect.owner.spawnY;
-          translate(effect.pos.x + offsetX, groundY);
-          
-          // Random rotation between -45 to 45 degrees
-          if (!effect.rotation) {
-            effect.rotation = random(-PI/4, PI/4);
-          }
-          rotate(effect.rotation);
-          
-          // FIX 3: Do NOT apply facing flip - use fixed orientation
-          const scaleFactor = 144 / 512;
-          scale(scaleFactor, 1);
-          
-          // Draw the sprite
-          drawSpriteScaled(effect.type, 0, 0, scaleFactor);
-          
-          pop();
         } else {
-          // Regular slash effects - flip with facing
+          // Fallback: draw scaled slash effect
           push();
-          tint(255, 255, 255, alpha);
-          translate(baseX + offsetX * facing, baseY + offsetY + 50);
-          if (facing === -1) {
-            scale(-1, 1); // Flip horizontally when facing right
-          }
-          drawSpriteScaled(effect.type, 0, 0, scaleFactor);
+          scale(scaleFactor * facing, 1);
+          noStroke();
+          ellipse(baseX + offsetX, baseY + offsetY + 50, 15, 15);
           pop();
         }
       } else {
-        // Fallback: draw scaled slash effect
         push();
-        scale(scaleFactor * facing, 1);
         noStroke();
+        scale(facing, 1);
         ellipse(baseX + offsetX, baseY + offsetY + 50, 15, 15);
         pop();
       }

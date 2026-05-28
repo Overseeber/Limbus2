@@ -11,7 +11,7 @@ window.Network = {
     if (typeof io !== 'undefined') {
       // Try each server address in order until one connects
       const serverAddresses = [
-        'http://10.21.69.171:3000',  // school Pi
+        'http://10.21.70.172:3000',  // school Pi
         'http://192.168.50.60:3000',  // home Pi
         'http://localhost:3000'       // local testing
       ];

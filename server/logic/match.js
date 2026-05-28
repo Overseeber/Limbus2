@@ -316,9 +316,13 @@ class Match {
         }
 
         // GUARD INPUT
-        if (input.guard && !state.isAttacking && state.state !== 'hit' && state.state !== 'staggered') {
+        const guardEdge = input.guard && !prevInput.guard;
+        if (guardEdge && !state.isAttacking && state.state !== 'hit' && state.state !== 'staggered') {
+            // AUTO-FACE toward closest enemy when guard is FIRST pressed (edge-triggered)
+            // This prevents continuous re-facing every tick while holding guard
+            this.faceClosestEnemy(player);
             state.isGuarding = true;
-        } else {
+        } else if (!input.guard) {
             state.isGuarding = false;
         }
 
@@ -470,15 +474,11 @@ class Match {
     }
 
     /**
-     * Start evade - SERVER AUTHORITATIVE
-     * Finds the closest enemy, calculates direction away from them,
-     * and moves the player by EVADE_DISTANCE (approximately 1 attack range).
-     * Sets the evade state and timer.
+     * Find the closest non-defeated enemy to this player
+     * @param {Object} player - The player to find enemies for
+     * @returns {Object|null} The closest enemy player object, or null if none found
      */
-    startEvade(player) {
-        const state = player.gameState;
-        
-        // Find closest enemy
+    findClosestEnemy(player) {
         let closestEnemy = null;
         let closestDist = Infinity;
         
@@ -486,8 +486,8 @@ class Match {
             if (other.clientId === player.clientId) return;
             if (other.gameState.isDefeated) return;
             
-            const dx = state.position.x - other.gameState.position.x;
-            const dy = state.position.y - other.gameState.position.y;
+            const dx = player.gameState.position.x - other.gameState.position.x;
+            const dy = player.gameState.position.y - other.gameState.position.y;
             const dist = Math.sqrt(dx * dx + dy * dy);
             
             if (dist < closestDist) {
@@ -496,51 +496,66 @@ class Match {
             }
         });
         
-        if (!closestEnemy) return;
+        return closestEnemy;
+    }
+
+    /**
+     * Auto-face the player toward their closest enemy.
+     * Called ONCE at action startup (attack, guard, evade).
+     * This is SERVER AUTHORITATIVE — clients never auto-rotate.
+     * @param {Object} player - The player to adjust facing for
+     */
+    faceClosestEnemy(player) {
+        const enemy = this.findClosestEnemy(player);
+        if (!enemy) return;
         
-        // Calculate direction away from closest enemy
-        const dx = state.position.x - closestEnemy.gameState.position.x;
-        const dy = state.position.y - closestEnemy.gameState.position.y;
-        const length = Math.sqrt(dx * dx + dy * dy);
+        // Face toward the closest enemy
+        const state = player.gameState;
+        state.facing = enemy.gameState.position.x > state.position.x ? 1 : -1;
+    }
+
+    /**
+     * Start evade - SERVER AUTHORITATIVE
+     * 1. Auto-faces toward the closest enemy
+     * 2. Moves the fighter backwards (away from that enemy)
+     * 3. Sets evade state and timer
+     * This preserves fighting-game backstep behavior.
+     */
+    startEvade(player) {
+        const state = player.gameState;
+        
+        // STEP 1: AUTO-FACE toward closest enemy before evade movement
+        // This ensures evade moves backward relative to the opponent
+        this.faceClosestEnemy(player);
+        
+        // Compute evade direction: backwards relative to facing
+        // After faceClosestEnemy, the player faces the enemy, so
+        // moving in -facing direction means moving away from the enemy
+        const evadeDir = -state.facing; // Always move opposite to facing (backwards)
         
         // Teleport the fighter ~66% of evade distance instantly
         // This gives the responsive snap feel of the original evade
-        if (length < 0.001) {
-            state.position.x += state.facing * EVADE_DISTANCE * 0.66;
-        } else {
-            const dirX = dx / length;
-            const dirY = dy / length;
-            
-            state.position.x += dirX * EVADE_DISTANCE * 0.66;
-            state.position.y += dirY * EVADE_DISTANCE * 0.2; // slight vertical
-        }
+        state.position.x += evadeDir * EVADE_DISTANCE * 0.66;
+        state.position.y += EVADE_DISTANCE * 0.2 * 0.3; // slight vertical pop
         
         // Clamp to arena bounds
         state.position.x = Math.max(60, Math.min(1340, state.position.x));
         state.position.y = Math.max(100, Math.min(600, state.position.y));
         
         // Apply velocity as leftover momentum (the remaining ~34% of distance)
-        // This creates a smooth drift-out that naturally decays via friction
-        // instead of an abrupt halt. The fighter slides to rest.
+        // Moves backward in the direction we're now facing away from the enemy
         const remainingDistance = EVADE_DISTANCE * 0.34;
         const evadeVelocity = remainingDistance / 0.15; // cover remaining distance over ~0.15s
         
-        if (length < 0.001) {
-            state.velocity.x = state.facing * evadeVelocity;
-            state.velocity.y = 0;
-        } else {
-            const dirX = dx / length;
-            const dirY = dy / length;
-            state.velocity.x = dirX * evadeVelocity;
-            state.velocity.y = dirY * evadeVelocity * 0.3;
-        }
+        state.velocity.x = evadeDir * evadeVelocity;
+        state.velocity.y = 0; // No vertical velocity on ground
         
         // Set evade state
         state.isEvading = true;
         state.evadeTimer = EVADE_MAX_DURATION;
         state.state = 'evade';
         
-        console.log(`[Evade] ${player.clientId} started evade, moving away from ${closestEnemy.clientId}`);
+        console.log(`[Evade] ${player.clientId} started evade, backing away from enemy`);
     }
 
     /**
@@ -585,10 +600,15 @@ class Match {
 
     /**
      * RESTORED: Start an attack with proper phase timing
+     * Auto-faces toward the closest enemy before starting the attack startup.
      */
     startAttack(player, sequence, isCharged) {
         const config = player.config;
         const state = player.gameState;
+        
+        // AUTO-FACE toward closest enemy before attack startup
+        // This ensures hitboxes face the correct direction
+        this.faceClosestEnemy(player);
         
         // Get attack definition
         const attackKey = sequence === 1 ? 'light' : sequence === 2 ? 'medium' : 'heavy';

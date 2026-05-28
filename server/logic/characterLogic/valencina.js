@@ -84,7 +84,8 @@ function executeTimeToHunt(state, abilityConfig, targetState, config) {
         type: statusConfig.type,
         count: statusConfig.count || 1,
         potency: finalPotency,
-        duration: statusConfig.duration || 0
+        duration: statusConfig.duration || 0,
+        timer: 0
       });
       appliedStatuses.push(statusConfig.type);
     });
@@ -164,7 +165,8 @@ function executeDisposal(state, abilityConfig, targetStates, config) {
         type: statusConfig.type,
         count: statusConfig.count || 1,
         potency: finalPotency,
-        duration: statusConfig.duration || 0
+        duration: statusConfig.duration || 0,
+        timer: 0
       });
       appliedStatuses.push(statusConfig.type);
     });

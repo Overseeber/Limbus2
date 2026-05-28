@@ -1338,6 +1338,9 @@ class Match {
             const dmgResult = this.engine.calculateDamage(attackData.baseDamage, state, defender.gameState);
             const ap = this.engine.applyDamage(defender.gameState, dmgResult.damage);
 
+            // Call character-specific onSuccessfulHit for dash attacks
+            this.engine.callOnSuccessfulHit(state, defender.gameState, dmgResult.damage);
+
             // Consume status effects on hit for dash attacks
             const ce = this.engine.consumeOnHit(defender.gameState);
             const be = this.engine.consumeBleedOnAttack(state);

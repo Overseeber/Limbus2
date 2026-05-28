@@ -379,6 +379,18 @@ class GameplayEngine {
     return { success: false, reason: 'No handler' };
   }
 
+  callOnSuccessfulHit(attacker, defender, damage) {
+    if (!attacker.characterKey) return null;
+    try {
+      const logic = require(`./characterLogic/${attacker.characterKey.toLowerCase()}`);
+      if (logic.onSuccessfulHit) {
+        const config = this.getCharacterConfig(attacker.characterKey);
+        return logic.onSuccessfulHit.call(this, attacker, defender, damage, config);
+      }
+    } catch(e) {}
+    return null;
+  }
+
   applyDamage(target, damage) {
     if (target.isDefeated) return { success: false, reason: 'Defeated' };
     target.hp = Math.max(0, target.hp - damage);
@@ -409,6 +421,12 @@ class GameplayEngine {
     if (knock) { const dir = defender.position.x < attacker.position.x ? -1 : 1; const fk = this.calculateKnockback(knock, attacker); this.applyKnockback(defender, fk, dir, attacker); result.knockback = fk; }
     if (stagger && defender.state !== 'staggered') { defender.stagger += stagger; result.staggerResult = { staggered: false, stagger: defender.stagger }; if (defender.stagger >= (config.staggerThreshold || 1000)) { defender.state = 'staggered'; defender.staggerTimer = config.staggerLength || 5; defender.stagger = config.staggerThreshold || 1000; result.staggerResult = { staggered: true, duration: config.staggerLength || 5 }; } }
     if (attackData.statusEffects) attackData.statusEffects.forEach(s => { this.applyStatus(defender, s.type, s.count, s.potency); result.statuses.push(s.type); });
+    // Call character-specific onSuccessfulHit for per-hit status application
+    const hitEffects = this.callOnSuccessfulHit(attacker, defender, result.damage, config);
+    if (hitEffects) {
+      if (hitEffects.statusesApplied) hitEffects.statusesApplied.forEach(s => result.statuses.push(s));
+      else if (hitEffects.statusApplied) result.statuses.push(hitEffects.statusApplied);
+    }
     const ce = this.consumeOnHit(defender); if (ce.length) result.consumeEvents = ce;
     const be = this.consumeBleedOnAttack(attacker); if (be.length) result.bleedAttackEvents = be;
     const cs = this.combatState[attacker.id] || {}; cs.chargeAttack = !!attackData.chargeAttack; this.combatState[attacker.id] = cs;

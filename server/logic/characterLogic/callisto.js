@@ -39,7 +39,8 @@ function executeSlamAttack(state, abilityConfig, targetState, config) {
       type: statusConfig.type,
       count: 1,
       potency: statusConfig.potency || 1,
-      duration: statusConfig.duration || 0
+      duration: statusConfig.duration || 0,
+      timer: 0
     });
     appliedStatuses.push(statusConfig.type);
   });
@@ -123,7 +124,8 @@ function executeInstallationArt(state, abilityConfig, targetStates, config) {
       type: 'Bleed',
       count: 8,
       potency: 8,
-      duration: 0
+      duration: 0,
+      timer: 0
     });
     appliedStatuses.push('Bleed');
     
@@ -132,7 +134,8 @@ function executeInstallationArt(state, abilityConfig, targetStates, config) {
       type: 'Sinking',
       count: 1, // 1 sinking count
       potency: damage, // sinking potency equal to damage dealt
-      duration: 0
+      duration: 0,
+      timer: 0
     });
     appliedStatuses.push('Sinking');
 

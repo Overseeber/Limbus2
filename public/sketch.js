@@ -423,27 +423,33 @@ function processSnapshot(snapshot) {
         // For remote fighters: check their remote input from the snapshot.
         const fighterHasInput = fighter.isLocalPlayer ? hasLocalInput : hasRemoteInput;
 
-        if (state.isEvading || combatState === 'evade') {
+        // FIX 4: Prioritize ability states (attacking) for animation selection
+        // Ability states must be authoritative and not collapse into idle/movement
+        if (fighter.isAttacking || fighter.attackSequence > 0) {
+            // FIX 4: Ability animations - set state to 'attack' and clear halt sequence
+            // This ensures attack sprites display properly and are not overwritten by
+            // movement/idle logic. The server is authoritative for ability state.
+            fighter.state = 'attack';
+            fighter.haltSequence = false;
+        } else if (state.isEvading || combatState === 'evade') {
             // SERVER AUTHORITATIVE EVADE: Use the server's authoritative evade state
             // to show the evade sprite. The server controls evade activation, duration,
             // and deactivation.
             fighter.state = 'evade';
             fighter.haltSequence = false;
-        } else if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate' || fighter.slamHoldPosition || fighter.isSlamAttacking) {
-          // Use the server combatState for hit/stagger/ultimate, but for slam
-          // we prefer the client-side visual flag `slamHoldPosition` or server
-          // provided `isSlamAttacking`. This prevents gameplay-state 'slam'
-          // from blocking input while still showing the slam sprite.
-          fighter.state = combatState === 'slam' ? 'idle' : combatState;
+        } else if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate') {
+          // Use the server combatState for hit/stagger/ultimate
+          fighter.state = combatState;
           fighter.haltSequence = false;
-        } else if ((fighter.state === 'hit' || fighter.state === 'staggered' || fighter.slamHoldPosition || fighter.isSlamAttacking) && !fighterHasInput) {
-            // Preserve hurt/staggered/slam visuals until the fighter's OWNER provides input.
-            // Each player's controller (local keyboard for local player, remote input for enemy)
-            // determines when they exit these states visually. The server guarantees state
-            // transitions independently but clients hold the sprite for game feel.
-            fighter.haltSequence = false;
-        } else if (fighter.isAttacking || fighter.attackSequence > 0) {
-            fighter.state = 'attack';
+        } else if (fighter.slamHoldPosition || fighter.isSlamAttacking) {
+          // Slam visuals are controlled by server slamHold/isSlamAttacking flags
+          // BUT keep gameplay state as 'idle' so input isn't blocked
+          fighter.state = 'slam';
+          fighter.haltSequence = false;
+        } else if ((fighter.state === 'hit' || fighter.state === 'staggered') && !fighterHasInput) {
+            // FIX 5: ONLY preserve hurt/staggered visuals via state persistence.
+            // DO NOT preserve slam or halt sprites here - they should reset properly.
+            // This prevents the local client from getting stuck in stale visual states.
             fighter.haltSequence = false;
         } else if (fighter.isDashing) {
             fighter.state = 'dash';
@@ -458,13 +464,16 @@ function processSnapshot(snapshot) {
             fighter.state = 'run';
             fighter.haltSequence = false;
         } else if (wasDashing && !fighter.isDashing && Math.abs(fighter.vel.x) > 10 && fighter.onGround) {
-            if (!fighter.haltSequence) {
+            // FIX 5: Halt sequence is a VISUAL-ONLY transition that should NOT
+            // persist or override normal sprite rendering. It must clean up
+            // properly when velocity drops or new actions begin.
+            if (!fighter.haltSequence && !fighter.dashAttackActive) {
                 fighter.haltSequence = true;
                 fighter.haltFrame = 0;
                 fighter.haltFrameTimer = 0;
             }
             fighter.state = 'idle';
-        } else if (Math.abs(fighter.vel.x) > 10 && fighter.onGround) {
+        } else if (Math.abs(fighter.vel.x) > 10 && fighter.onGround && !fighter.dashAttackActive) {
             if (!fighter.haltSequence) {
                 fighter.haltSequence = true;
                 fighter.haltFrame = 0;
@@ -472,8 +481,25 @@ function processSnapshot(snapshot) {
             }
             fighter.state = 'idle';
         } else {
+            // FIX 5 + FIX 6: Clean up visual states when transitioning to idle
             fighter.state = 'idle';
             fighter.haltSequence = false;
+            fighter.haltFrame = 0;
+            fighter.haltFrameTimer = 0;
+            // FIX 6: Clear temporary ability flags on idle transition
+            // to prevent stale ability states from persisting
+            if (fighter.dashAttackActive && !state.isDashing && Math.abs(state.vx) < 10) {
+                fighter.dashAttackActive = false;
+            }
+        }
+        
+        // FIX 6: Clear any remaining visual-only override flags when transitioning
+        // to a non-special state. This ensures ability cleanup fully resets visual state.
+        if (fighter.state !== 'slam' && fighter.state !== 'attack' && 
+            fighter.state !== 'hit' && fighter.state !== 'staggered' &&
+            fighter.state !== 'evade' && fighter.state !== 'dash') {
+            // Ensure no stale visual-only flags persist outside their valid contexts
+            fighter.slamHoldPosition = false;
         }
 
         // The server is now authoritative for evade state.

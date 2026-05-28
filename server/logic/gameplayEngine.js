@@ -125,10 +125,21 @@ class GameplayEngine {
     return { state: fighter.state };
   }
 
-  applyStatus(target, type, count, potency) {
+  applyStatus(target, type, count, potency, duration) {
     const existing = target.statuses.find(s => s.type === type);
-    if (existing) { existing.count = (existing.count || 0) + (count || 1); existing.potency = (existing.potency || 0) + (potency || 0); return { applied: false, updated: true, count: existing.count, potency: existing.potency }; }
-    target.statuses.push({ type, count: count || 1, potency: potency || 0, timer: 0 });
+    if (existing) { 
+      existing.count = (existing.count || 0) + (count || 1); 
+      existing.potency = (existing.potency || 0) + (potency || 0); 
+      if (typeof duration === 'number') existing.remainingTime = duration;
+      if (typeof duration === 'number') existing.duration = duration;
+      return { applied: false, updated: true, count: existing.count, potency: existing.potency }; 
+    }
+    const status = { type, count: count || 1, potency: potency || 0, timer: 0 };
+    if (typeof duration === 'number') {
+      status.remainingTime = duration;
+      status.duration = duration;
+    }
+    target.statuses.push(status);
     return { applied: true };
   }
 
@@ -163,7 +174,13 @@ class GameplayEngine {
         case 'Haste':
         case 'Bind':
         case 'Sinking':
+        case 'Game Target':
           s.timer += dt;
+          // FIX 2: Properly decrement remainingTime-based timers
+          if (typeof s.remainingTime === 'number') {
+            s.remainingTime -= dt;
+            if (s.remainingTime <= 0) return false;
+          }
           if (typeof s.duration === 'number' && s.timer >= s.duration) return false;
           return s.count > 0;
         case 'Fragile':
@@ -172,6 +189,10 @@ class GameplayEngine {
           return s.count > 0;
         default:
           s.timer += dt;
+          if (typeof s.remainingTime === 'number') {
+            s.remainingTime -= dt;
+            if (s.remainingTime <= 0) return false;
+          }
           const maxDuration = typeof s.duration === 'number' ? s.duration : 30;
           return s.count > 0 && s.timer < maxDuration;
       }

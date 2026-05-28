@@ -1045,6 +1045,9 @@ class Match {
             }
             attacker.hitTargetsThisAttack.push(defender.clientId);
 
+            // FIX 1: Set lastHitOpponent server-side when a hit lands
+            attacker.gameState.lastHitOpponent = defender.clientId;
+
             const result = this.engine.resolveAttack(
                 attacker.gameState,
                 defender.gameState,
@@ -1182,6 +1185,9 @@ class Match {
             
             if (!isInRange || hitCooldownActive) return;
             
+            // FIX 1: Set lastHitOpponent for dash attacks
+            state.lastHitOpponent = defender.clientId;
+
             // Apply damage and knockback directly without going through
             // engine.resolveAttack (which re-checks facing with rect-based detection).
             // Dash attacks hit regardless of facing.
@@ -1259,6 +1265,9 @@ class Match {
             const distance = Math.hypot(dx, dy);
             
             if (distance <= slamRadius) {
+                // FIX 1: Set lastHitOpponent for slam landing
+                state.lastHitOpponent = defender.clientId;
+
                 const attackData = {
                     range: slamRadius,
                     baseDamage: config.baseDamage * 2,
@@ -1318,11 +1327,28 @@ class Match {
             return this.startSlamAttack(attacker);
         }
         
-        const targetPlayer = targetId ? this.players[targetId] : null;
+        // Determine target using lastHitOpponent if no explicit targetId provided
+        let resolvedTargetId = targetId;
+        if (!resolvedTargetId) {
+            // FIX: Use lastHitOpponent for targeting
+            resolvedTargetId = attacker.gameState.lastHitOpponent || null;
+        }
+        
+        const targetPlayer = resolvedTargetId ? this.players[resolvedTargetId] : null;
         let targetState = targetPlayer ? targetPlayer.gameState : null;
 
+        // For single-target abilities, resolve against lastHitOpponent
+        if (!targetState && ['timeToHunt', 'installationArt'].includes(abilityId)) {
+            // Fall back to closest enemy if no lastHitOpponent
+            const closestEnemy = this.findClosestEnemy(attacker);
+            if (closestEnemy) {
+                targetState = closestEnemy.gameState;
+                resolvedTargetId = closestEnemy.clientId;
+            }
+        }
+
         // For AOE abilities, resolve against all enemy targets if no explicit target was supplied.
-        if (!targetState && ['installationArt', 'disposial', 'ultimate'].includes(abilityId)) {
+        if (!targetState && ['disposial', 'ultimate'].includes(abilityId)) {
             targetState = Object.values(this.players)
                 .filter(p => p.clientId !== attacker.clientId && !p.gameState.isDefeated)
                 .map(p => p.gameState);
@@ -1331,13 +1357,24 @@ class Match {
         const result = this.engine.executeAbility(
             attacker.gameState,
             abilityId,
-            targetId,
+            resolvedTargetId,
             targetState
         );
 
         if (!result) return null;
+        
+        // Set ability result flags for client cleanup
+        if (abilityId === 'timeToHunt') {
+            result.abilityId = 'timeToHunt';
+        }
+        if (abilityId === 'installationArt') {
+            result.abilityId = 'installationArt';
+        }
+        
         if (targetPlayer) {
             result.targetId = targetPlayer.clientId;
+        } else if (resolvedTargetId) {
+            result.targetId = resolvedTargetId;
         }
         if (!result.targetId && Array.isArray(targetState) && targetState.length > 0) {
             result.targetIds = targetState.map(ts => ts.id);

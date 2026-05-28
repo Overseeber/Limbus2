@@ -1065,7 +1065,16 @@ class Fighter {
       // Pre-calculate positions to avoid push/pop
       const baseX = owner.pos.x;
       const baseY = owner.pos.y;
-      const facing = owner.facing === 1 ? -1 : 1;
+      
+      // FIX 3: CBSK effects use their own facing, NOT the fighter's facing
+      const isCbsk = ['cbsk1', 'cbsk2', 'cbsk3'].includes(effect.type) || effect.type.startsWith('cbsk');
+      // Non-cbsk effects flip with fighter facing; cbsk effects use fixed orientation
+      const facing = isCbsk ? 1 : (owner.facing === 1 ? -1 : 1);
+      
+      // Store the effect as cbsk for future reference
+      if (isCbsk) {
+        effect.isCbsk = true;
+      }
       
       // Apply same scaling as character sprites
       if (owner.spriteType === 'atlas') {
@@ -1075,91 +1084,60 @@ class Fighter {
         // Simplified alpha calculation (no map)
         const alpha = effect.timer * 637.5; // 0.4 * 637.5 = 255
         
-        // Try to draw sprite with proper scaling and alpha fade
-        const spriteInfo = SPRITES?.[effect.type];
-        if (spriteInfo) {
-          // Check for special Installation Art slash entities (cbsk1, cbsk2, cbsk3)
-          if (['cbsk1', 'cbsk2', 'cbsk3'].includes(effect.type)) {
-            // Draw ground-based slash entities with random rotation
-            console.log(`[DEBUG] Drawing cbsk effect: ${effect.type} at pos (${effect.pos.x.toFixed(1)}, ${owner.spawnY.toFixed(1)}) with rotation: ${(effect.rotation * 180/PI).toFixed(1)}°`);
-            push();
-            
-            // Apply alpha fade (5 second duration - no fade until last second)
-            let alpha = 255;
-            if (effect.timer <= 1.0) {
-              // Only fade in the last second
-              alpha = effect.timer * 255; // 1.0 * 255 = 255
-            }
-            tint(255, 255, 255, alpha);
-            
-            // Position at ground level (0 pixels from ground) with only horizontal inheritance
-            // Use the effect owner's spawnY for ground level
-            const groundY = effect.owner.spawnY;
-            translate(effect.pos.x + offsetX * facing, groundY);
-            
-            // Random rotation between -45 to 45 degrees
-            if (!effect.rotation) {
-              effect.rotation = random(-PI/4, PI/4); // Random -45 to 45 degrees
-            }
-            rotate(effect.rotation);
-            
-            // Apply same scaling as character sprites
-            const scaleFactor = 144 / 512;
-            scale(scaleFactor * facing, 1);
-            
-            // Draw the sprite
-            drawSpriteScaled(effect.type, 0, 0, scaleFactor);
-            
-            pop();
-          } else {
-            // Regular slash effects
-            console.log(`[DEBUG] Drawing regular slash effect: ${effect.type} (should not be cbsk)`);
-            push();
-            // Apply alpha fade only and facing transformation
-            tint(255, 255, 255, alpha);
-            translate(baseX + offsetX * facing, baseY + offsetY + 50);
-            if (facing === -1) {
-              scale(-1, 1); // Flip horizontally when facing right
-            }
-            drawSpriteScaled(effect.type, 0, 0, scaleFactor);
-            pop();
+      // Try to draw sprite with proper scaling and alpha fade
+      const spriteInfo = SPRITES?.[effect.type];
+      if (spriteInfo) {
+        // FIX 3: CBSK effects use FIXED orientation, not fighter facing
+        // They are drawn at ground level with random rotation, independent of
+        // the character's facing direction
+        if (['cbsk1', 'cbsk2', 'cbsk3'].includes(effect.type) || effect.type.startsWith('cbsk')) {
+          // Draw ground-based slash entities with fixed orientation
+          push();
+          
+          // Apply alpha fade (5 second duration - no fade until last second)
+          let alpha = 255;
+          if (effect.timer <= 1.0) {
+            // Only fade in the last second
+            alpha = effect.timer * 255;
           }
-        } else {
-          // Fallback: draw scaled slash effect
-          push();
-          scale(scaleFactor * facing, 1);
-          noStroke();
-          ellipse(baseX + offsetX, baseY + offsetY + 50, 15, 15);
-          pop();
-        }
-      } else {
-        // Regular sprite scaling
-        const targetHeight = 144;
-        const scaleFactor = targetHeight / (owner.sprite?.height || 512);
-        
-        // Simplified alpha calculation
-        const alpha = effect.timer * 637.5;
-        
-        // Try to draw sprite with proper scaling and alpha fade
-        const spriteInfo = SPRITES?.[effect.type];
-        if (spriteInfo) {
-          push();
-          // Apply alpha fade only and facing transformation
           tint(255, 255, 255, alpha);
-          translate(baseX + offsetX * facing, baseY + offsetY - 30);
+          
+          // Position at ground level with only horizontal inheritance
+          const groundY = effect.owner.spawnY;
+          translate(effect.pos.x + offsetX, groundY);
+          
+          // Random rotation between -45 to 45 degrees
+          if (!effect.rotation) {
+            effect.rotation = random(-PI/4, PI/4);
+          }
+          rotate(effect.rotation);
+          
+          // FIX 3: Do NOT apply facing flip - use fixed orientation
+          const scaleFactor = 144 / 512;
+          scale(scaleFactor, 1);
+          
+          // Draw the sprite
+          drawSpriteScaled(effect.type, 0, 0, scaleFactor);
+          
+          pop();
+        } else {
+          // Regular slash effects - flip with facing
+          push();
+          tint(255, 255, 255, alpha);
+          translate(baseX + offsetX * facing, baseY + offsetY + 50);
           if (facing === -1) {
             scale(-1, 1); // Flip horizontally when facing right
           }
           drawSpriteScaled(effect.type, 0, 0, scaleFactor);
           pop();
-        } else {
-          // Fallback: draw scaled slash effect
-          push();
-          scale(scaleFactor * facing, 1);
-          noStroke();
-          ellipse(baseX + offsetX, baseY + offsetY, 15, 15);
-          pop();
         }
+      } else {
+        // Fallback: draw scaled slash effect
+        push();
+        scale(scaleFactor * facing, 1);
+        noStroke();
+        ellipse(baseX + offsetX, baseY + offsetY + 50, 15, 15);
+        pop();
       }
     }
 

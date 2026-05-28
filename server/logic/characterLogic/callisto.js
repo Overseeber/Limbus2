@@ -71,9 +71,16 @@ function executeSlamAttack(state, abilityConfig, targetState, config) {
 }
 
 /**
- * INSTALLATION ART - Server Implementation
- * Callisto performs a massive AOE attack that hits all nearby enemies
- * Consumes Corpus Ingredient and applies heavy status effects
+ * INSTALLATION ART NO. 3: IMPROVISED RIBCAGE - Server Implementation
+ * Callisto performs a windup (cguard) then executes (cevade) an attack
+ * that originates from ground beneath the target, spawning cbsk1.
+ * 
+ * Behavior:
+ * 1. Windup: 0.5 seconds (cguard sprite)
+ * 2. Execute: Spawn cbsk1 at target location, deal damage
+ * 3. Effects: 2x radius, 8 bleed, sinking potency = damage dealt, 1 sinking count
+ * 4. 500% damage dealt as stagger damage
+ * 5. Counts as normal attack (normal combo/damage flow)
  */
 function executeInstallationArt(state, abilityConfig, targetStates, config) {
   const targets = Array.isArray(targetStates) ? targetStates : targetStates ? [targetStates] : [];
@@ -110,21 +117,27 @@ function executeInstallationArt(state, abilityConfig, targetStates, config) {
 
     // APPLY STATUS EFFECTS
     const appliedStatuses = [];
-    abilityConfig.statusEffects.forEach(statusConfig => {
-      // Check for Callisto's Artwork: Tibia bonus
-      let finalPotency = statusConfig.potency || 1;
-      if (statusConfig.type === 'Bleed' && state.resources.artworkTibiaStacks > 0) {
-        finalPotency += state.resources.artworkTibiaStacks;
-      }
-
-      targetState.statuses.push({
-        type: statusConfig.type,
-        count: statusConfig.count || 1,
-        potency: finalPotency,
-        duration: statusConfig.duration || 0
-      });
-      appliedStatuses.push(statusConfig.type);
+    
+    // Apply 8 bleed
+    targetState.statuses.push({
+      type: 'Bleed',
+      count: 8,
+      potency: 8,
+      duration: 0
     });
+    appliedStatuses.push('Bleed');
+    
+    // Apply sinking potency equal to damage dealt
+    targetState.statuses.push({
+      type: 'Sinking',
+      count: 1, // 1 sinking count
+      potency: damage, // sinking potency equal to damage dealt
+      duration: 0
+    });
+    appliedStatuses.push('Sinking');
+
+    // Apply stagger damage = 500% of damage dealt
+    targetState.stagger += damage * 5;
 
     results.push({
       targetId: targetState.id,
@@ -132,7 +145,8 @@ function executeInstallationArt(state, abilityConfig, targetStates, config) {
       damage: damage,
       targetHp: targetState.hp,
       statuses: appliedStatuses,
-      defeated: targetState.hp <= 0
+      defeated: targetState.hp <= 0,
+      staggerDamage: damage * 5
     });
   });
 

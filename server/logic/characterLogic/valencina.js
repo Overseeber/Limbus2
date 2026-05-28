@@ -53,12 +53,22 @@ function executeTimeToHunt(state, abilityConfig, targetState, config) {
   
   // APPLY GAME TARGET - Main effect of Time to Hunt
   // Sets speed to 1, restricts jumping and dashing for 10 seconds
+  // FIX 2: Use remainingTime for proper timer countdown via processStatuses
   targetState.statuses.push({
     type: 'Game Target',
     count: 1,
     potency: 1,
-    duration: 10  // 10 second duration
+    duration: 10,  // 10 second duration
+    remainingTime: 10, // Timers will decrement this via processStatuses
+    timer: 0
   });
+  
+  // FIX 2: Apply server-side speed/restriction effects immediately
+  // The opponent's speed, canJump, and canDash are set server-side
+  // and replicated through snapshots. The client applies these visually.
+  targetState.speed = 1;
+  targetState.canJump = false;
+  targetState.canDash = false;
   appliedStatuses.push('Game Target');
   
   // Apply additional status effects from config if any

@@ -336,6 +336,8 @@ function processSnapshot(snapshot) {
         fighter.isGuarding = state.isGuarding || false;
         fighter.isDashing = state.isDashing || false;
         fighter.dashCharges = typeof state.dashCharges !== 'undefined' ? state.dashCharges : fighter.dashCharges || 0;
+        // Apply authoritative evade state from server
+        fighter.isEvading = state.isEvading || false;
 
         // Apply attack sequence state for animation control
         fighter.attackSequence = state.attackSequence || 0;
@@ -357,7 +359,8 @@ function processSnapshot(snapshot) {
             dash: !!state.input?.dash,
             slam: !!state.input?.slam,
             attackPressed: !!state.input?.attackPressed,
-            attackReleased: !!state.input?.attackReleased
+            attackReleased: !!state.input?.attackReleased,
+            evade: !!state.input?.evade
         };
         
         // Apply slam state
@@ -391,8 +394,7 @@ function processSnapshot(snapshot) {
         const wasDashing = fighter.prevIsDashing;
         fighter.prevIsDashing = fighter.isDashing;
 
-        // PRESERVE LOCAL EVADE STATE: The server doesn't know about client-side evade
-        // flashes (0.22s duration), so we keep the local evade state across snapshots.
+        // SERVER IS NOW AUTHORITATIVE for evade — track state only for transition detection
         const wasEvading = fighter.isEvading || fighter.state === 'evade';
 
         // Derive local visual movement state from server snapshot
@@ -421,7 +423,13 @@ function processSnapshot(snapshot) {
         // For remote fighters: check their remote input from the snapshot.
         const fighterHasInput = fighter.isLocalPlayer ? hasLocalInput : hasRemoteInput;
 
-        if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate' || fighter.slamHoldPosition || fighter.isSlamAttacking) {
+        if (state.isEvading || combatState === 'evade') {
+            // SERVER AUTHORITATIVE EVADE: Use the server's authoritative evade state
+            // to show the evade sprite. The server controls evade activation, duration,
+            // and deactivation.
+            fighter.state = 'evade';
+            fighter.haltSequence = false;
+        } else if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate' || fighter.slamHoldPosition || fighter.isSlamAttacking) {
           // Use the server combatState for hit/stagger/ultimate, but for slam
           // we prefer the client-side visual flag `slamHoldPosition` or server
           // provided `isSlamAttacking`. This prevents gameplay-state 'slam'
@@ -468,12 +476,11 @@ function processSnapshot(snapshot) {
             fighter.haltSequence = false;
         }
 
-        // RESTORE LOCAL EVADE STATE: If we were evading before the snapshot overrode us,
-        // put the evade state back. The server doesn't know about client-side evade flashes.
-        if (wasEvading && fighter.evadeTimer > 0) {
-            fighter.state = 'evade';
-            fighter.isEvading = true;
-        }
+        // The server is now authoritative for evade state.
+        // The old 'RESTORE LOCAL EVADE STATE' hack is removed because it caused
+        // the client to get stuck in evade after the server had already exited it.
+        // The server controls all evade activation, duration, and deactivation.
+        // The snapshot's state.isEvading field drives the client visual directly.
 
         // Reset slash effects on new attack
         if (state.attackSequence > 0 && fighter.attackSequence !== state.attackSequence) {
@@ -500,7 +507,8 @@ let inputHoldTimers = {
     dash: 0,
     attackPressed: 0,
     attackReleased: 0,
-    slam: 0
+    slam: 0,
+    evade: 0
 };
 
 // Track actual key states
@@ -511,7 +519,8 @@ let keyState = {
     right: false,
     dash: false,
     attack: false,
-    guard: false
+    guard: false,
+    evade: false
 };
 
 // Previous frame key states for client-side edge detection
@@ -520,7 +529,8 @@ let prevKeyState = {
     down: false,
     left: false,
     right: false,
-    dash: false
+    dash: false,
+    evade: false
 };
 
 // The minimum duration (ms) to hold an edge flag
@@ -568,6 +578,14 @@ function sendInputState() {
     const stickyAttackPressed = now < inputHoldTimers.attackPressed;
     const stickyAttackReleased = now < inputHoldTimers.attackReleased;
     
+    // === EVADE (E key) edge detection ===
+    const rawEvade = keyIsDown(69); // E key
+    if (rawEvade && !prevKeyState.evade) {
+        inputHoldTimers.evade = now + EDGE_HOLD_MS;
+    }
+    prevKeyState.evade = rawEvade;
+    const stickyEvade = now < inputHoldTimers.evade;
+    
     // === GUARD (right click) ===
     keyState.guard = isRightMouseDown;
     
@@ -596,7 +614,8 @@ function sendInputState() {
         attackReleased: stickyAttackReleased, // Held for 2+ ticks
         guard: isRightMouseDown,
         dash: rawDash || stickyDash,     // Keep dash active for server
-        slam: stickySlam                 // Held for 2+ ticks
+        slam: stickySlam,                // Held for 2+ ticks
+        evade: stickyEvade               // Held for 2+ ticks
     };
 
     Network.sendInput(input);
@@ -786,58 +805,110 @@ function initCPUBattle() {
 }
 
 function handleAbilityResult(result) {
-  // Handle server-authorized ability results
   if (!result || !window.allFighters) return;
-  
+
   console.log('[Ability Result]', result);
-  
-  // Find the fighter that executed the ability
+
   const fighter = window.allFighters.find(f => f.clientId === result.fighterId);
   if (!fighter) return;
-  
-  // Apply server-authorized results
+
+  const applyStatusObjects = (target, statuses) => {
+    if (!target || !target.addStatus || !Array.isArray(statuses)) return;
+    statuses.forEach(status => {
+      if (!status) return;
+      const type = typeof status === 'string' ? status : status.type || status;
+      const count = typeof status.count === 'number' ? status.count : 1;
+      const potency = typeof status.potency === 'number' ? status.potency : 1;
+      target.addStatus(type, count, potency);
+    });
+  };
+
+  const applyTargetResult = (targetId, resultData) => {
+    const target = window.allFighters.find(f => f.clientId === targetId);
+    if (!target) return;
+
+    if (typeof resultData.targetHp !== 'undefined') {
+      target.hp = resultData.targetHp;
+    }
+
+    if (typeof resultData.damage === 'number' && typeof spawnDamageNumber === 'function') {
+      spawnDamageNumber(resultData.damage, target.pos.copy(), fighter.facing, false, 'normal', false, 'normal');
+    }
+
+    if (typeof addScreenShake === 'function' && typeof resultData.damage === 'number') {
+      addScreenShake(resultData.damage);
+    }
+
+    if (resultData.statuses) {
+      applyStatusObjects(target, resultData.statuses);
+    }
+
+    if (resultData.defeated) {
+      target.isDefeated = true;
+      target.hp = 0;
+    }
+  };
+
   if (result.success) {
-    // Update HP if damage was dealt to a target
-    if (result.targetHp !== undefined && result.targetId) {
-      const target = window.allFighters.find(f => f.clientId === result.targetId);
-      if (target) {
-        target.hp = result.targetHp;
-        // Spawn damage number
-        if (result.damage && typeof spawnDamageNumber === 'function') {
-          spawnDamageNumber(result.damage, target.pos.copy(), fighter.facing, false, 'normal', false, 'normal');
+    if (Array.isArray(result.results)) {
+      result.results.forEach(r => {
+        if (r.targetId) {
+          applyTargetResult(r.targetId, r);
         }
-        // Apply screen shake
-        if (typeof addScreenShake === 'function') {
-          addScreenShake(result.damage);
+      });
+    } else if (result.targetId) {
+      applyTargetResult(result.targetId, result);
+    }
+
+    if (!result.targetId && Array.isArray(result.targetIds)) {
+      result.targetIds.forEach((targetId) => {
+        const target = window.allFighters.find(f => f.clientId === targetId);
+        if (target && result.statuses) {
+          applyStatusObjects(target, result.statuses);
         }
-      }
+      });
     }
-    
-    // Apply statuses
-    if (result.statuses && Array.isArray(result.statuses)) {
-      const target = result.targetId ? window.allFighters.find(f => f.clientId === result.targetId) : fighter;
-      if (target && target.addStatus) {
-        result.statuses.forEach(statusType => {
-          target.addStatus(statusType, 1, 1);
-        });
-      }
+
+    if (result.statuses && result.targetId === undefined && !Array.isArray(result.results)) {
+      applyStatusObjects(fighter, result.statuses);
     }
-    
-    // Handle defeat
-    if (result.defeated && result.targetId) {
-      const target = window.allFighters.find(f => f.clientId === result.targetId);
-      if (target && !target.isDefeated) {
-        target.isDefeated = true;
-        target.hp = 0;
-      }
+
+    if (typeof result.precognitionRemaining === 'number') {
+      fighter.precognition = result.precognitionRemaining;
     }
-    
-    // Trigger visual effects based on ability type
+    if (typeof result.corpusRemaining === 'number') {
+      fighter.corpusIngredient = result.corpusRemaining;
+    }
+
+    if (result.abilityId === 'timeToHunt') {
+      fighter.timeToHuntCasting = false;
+      fighter.timeToHuntCastTimer = 0;
+      fighter.timeToHuntTarget = null;
+      fighter.timeToHuntPredictive = false;
+      fighter.timeToHuntCooldown = result.success ? (result.cooldown || 15) : 0;
+      // Reset sprite back to idle state after ability resolution
+      fighter.currentSprite = 'idle';
+      fighter.setState('idle');
+    }
+
+    if (result.abilityId === 'installationArt') {
+      fighter.installationArtPredictive = false;
+      if (result.success) {
+        fighter.installationArtCooldown = result.cooldown || 10;
+      } else {
+        fighter.installationArtActive = false;
+        fighter.installationArtExecuted = false;
+        fighter.installationArtTimer = 0;
+      }
+      // Reset sprite back to idle state after ability resolution
+      fighter.currentSprite = 'cidle';
+      fighter.setState('idle');
+    }
+
     if (result.abilityId) {
       triggerAbilityVisuals(fighter, result.abilityId, result);
     }
   } else {
-    // Ability failed - show feedback
     console.log('[Ability Failed]', result.reason);
   }
 }
@@ -875,6 +946,9 @@ function handleNetworkEvent(event) {
       break;
     case 'slamLanding':
       handleSlamLandingEvent(event);
+      break;
+    case 'abilityResult':
+      handleAbilityResult(event);
       break;
     case 'MATCH_END':
       // Server signaled match end — start ending sequence

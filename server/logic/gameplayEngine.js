@@ -136,33 +136,106 @@ class GameplayEngine {
     const events = [];
     fighter.statuses = fighter.statuses.filter(s => {
       switch (s.type) {
-        case 'Burn': s.timer += dt; if (s.timer >= 1) { s.timer = 0; s.count -= 1; fighter.hp = Math.max(0, fighter.hp - s.potency); events.push({ type: 'BURN_DAMAGE', damage: s.potency, hp: fighter.hp }); } return s.count > 0;
-        case 'Bleed': s.timer += dt; if (s.timer >= 1) { s.timer = 0; s.potency = Math.max(0, s.potency - 1); } return s.potency > 0 && s.count > 0;
-        case 'Tremor': s.timer += dt; if (s.count <= 0) { fighter.stagger += s.potency; events.push({ type: 'TREMOR_STAGGER', amount: s.potency }); return false; } return true;
-        case 'Haste': case 'Bind': case 'Sinking': s.timer += dt; return s.count > 0;
-        case 'Fragile': case 'Protection': case 'Poise': return s.count > 0;
-        default: s.timer += dt; return s.count > 0 && s.timer < 30;
+        case 'Burn':
+          s.timer += dt;
+          if (s.timer >= 1) {
+            s.timer = 0;
+            s.count -= 1;
+            fighter.hp = Math.max(0, fighter.hp - s.potency);
+            events.push({ type: 'BURN_DAMAGE', damage: s.potency, hp: fighter.hp });
+          }
+          return s.count > 0;
+        case 'Bleed':
+          s.timer += dt;
+          if (s.timer >= 1) {
+            s.timer = 0;
+            s.potency = Math.max(0, s.potency - 1);
+          }
+          return s.potency > 0 && s.count > 0;
+        case 'Tremor':
+          s.timer += dt;
+          if (s.count <= 0) {
+            fighter.stagger += s.potency;
+            events.push({ type: 'TREMOR_STAGGER', amount: s.potency });
+            return false;
+          }
+          return true;
+        case 'Haste':
+        case 'Bind':
+        case 'Sinking':
+          s.timer += dt;
+          if (typeof s.duration === 'number' && s.timer >= s.duration) return false;
+          return s.count > 0;
+        case 'Fragile':
+        case 'Protection':
+        case 'Poise':
+          return s.count > 0;
+        default:
+          s.timer += dt;
+          const maxDuration = typeof s.duration === 'number' ? s.duration : 30;
+          return s.count > 0 && s.timer < maxDuration;
       }
     });
-    if (fighter.hp <= 0 && !fighter.isDefeated) { fighter.isDefeated = true; fighter.velocity.x = 0; fighter.velocity.y = 0; fighter.state = 'defeated'; events.push({ type: 'DEFEATED' }); }
-    return events;
-  }
-
-  consumeOnHit(fighter) {
-    const events = [];
-    const bleed = fighter.statuses.find(s => s.type === 'Bleed');
-    if (bleed) { bleed.count -= 1; if (bleed.count <= 0) { const d = bleed.potency; if (d > 0) { fighter.hp = Math.max(0, fighter.hp - d); events.push({ type: 'BLEED_DAMAGE', damage: d }); } fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed'); } }
-    const rupture = fighter.statuses.find(s => s.type === 'Rupture');
-    if (rupture) { const d = rupture.potency; fighter.hp = Math.max(0, fighter.hp - d); events.push({ type: 'RUPTURE_DAMAGE', damage: d }); rupture.count -= 1; if (rupture.count <= 0) fighter.statuses = fighter.statuses.filter(s => s.type !== 'Rupture'); }
-    const sink = fighter.statuses.find(s => s.type === 'Sinking');
-    if (sink) { sink.count -= 1; if (sink.count <= 0) fighter.statuses = fighter.statuses.filter(s => s.type !== 'Sinking'); }
+    if (fighter.hp <= 0 && !fighter.isDefeated) {
+      fighter.isDefeated = true;
+      fighter.velocity.x = 0;
+      fighter.velocity.y = 0;
+      fighter.state = 'defeated';
+      events.push({ type: 'DEFEATED' });
+    }
     return events;
   }
 
   consumeBleedOnAttack(fighter) {
     const events = [];
     const bleed = fighter.statuses.find(s => s.type === 'Bleed');
-    if (bleed && bleed.potency > 0) { const d = bleed.potency; fighter.hp = Math.max(0, fighter.hp - d); events.push({ type: 'BLEED_ATTACK_DAMAGE', damage: d }); bleed.count -= 1; if (bleed.count <= 0) fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed'); }
+    if (bleed && bleed.potency > 0) {
+      const d = bleed.potency;
+      fighter.hp = Math.max(0, fighter.hp - d);
+      events.push({ type: 'BLEED_ATTACK_DAMAGE', damage: d });
+      bleed.count -= 1;
+      if (bleed.count <= 0) fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed');
+    }
+    return events;
+  }
+
+  consumeOnHit(fighter) {
+    const events = [];
+
+    const bleed = fighter.statuses.find(s => s.type === 'Bleed');
+    if (bleed) {
+      bleed.count -= 1;
+      if (bleed.count <= 0) {
+        const damage = bleed.potency || 0;
+        if (damage > 0) {
+          fighter.hp = Math.max(0, fighter.hp - damage);
+          events.push({ type: 'BLEED_DAMAGE', damage: damage });
+        }
+        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed');
+      }
+    }
+
+    const rupture = fighter.statuses.find(s => s.type === 'Rupture');
+    if (rupture) {
+      rupture.count -= 1;
+      if (rupture.count <= 0) {
+        const damage = rupture.potency || 0;
+        if (damage > 0) {
+          fighter.hp = Math.max(0, fighter.hp - damage);
+          events.push({ type: 'RUPTURE_DAMAGE', damage: damage });
+        }
+        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Rupture');
+      }
+    }
+
+    const sinking = fighter.statuses.find(s => s.type === 'Sinking');
+    if (sinking) {
+      sinking.count -= 1;
+      if (sinking.count <= 0) {
+        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Sinking');
+      }
+    }
+
     return events;
   }
 

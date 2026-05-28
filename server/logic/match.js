@@ -25,6 +25,8 @@
 
 const GameplayEngine = require('./gameplayEngine');
 const SLAM_ATTACK_RADIUS = 80;
+const EVADE_DISTANCE = 230; // ~1 attack range
+const EVADE_MAX_DURATION = 1.0; // max 1 second
 
 class Match {
     constructor(room, io) {
@@ -61,6 +63,8 @@ class Match {
             gameState.isDashing = false;
             gameState.canDash = true;
             gameState.hitTimer = 0; // hitstun timer
+            gameState.isEvading = false; // evade state
+            gameState.evadeTimer = 0;    // evade duration timer
             
             // Set starting position
             const index = config.index || 0;
@@ -80,27 +84,29 @@ class Match {
                 characterKey: charKey,
                 gameState: gameState,
                 config: charConfig,
-                input: {
-                    left: false,
-                    right: false,
-                    up: false,
-                    down: false,
-                    attack: false,
-                    guard: false,
-                    dash: false,
-                    slam: false,
-                    attackPressed: false,
-                    attackReleased: false
-                },
-                prevInput: {
-                    left: false,
-                    right: false,
-                    up: false,
-                    down: false,
-                    attack: false,
-                    guard: false,
-                    dash: false
-                },
+            input: {
+                left: false,
+                right: false,
+                up: false,
+                down: false,
+                attack: false,
+                guard: false,
+                dash: false,
+                slam: false,
+                attackPressed: false,
+                attackReleased: false,
+                evade: false
+            },
+            prevInput: {
+                left: false,
+                right: false,
+                up: false,
+                down: false,
+                attack: false,
+                guard: false,
+                dash: false,
+                evade: false
+            },
                 // Attack sequence state - RESTORED original game feel
                 attackTimer: 0,           // Cooldown before next attack allowed
                 attackSequence: 0,        // 0=none, 1=light, 2=medium, 3=heavy
@@ -432,6 +438,149 @@ class Match {
             state.state !== 'hit' && state.state !== 'staggered' && !player.isSlamAttacking) {
             this.startSlamAttack(player);
         }
+
+        // EVADE INPUT - edge triggered
+        // Pressing evade key when not already evading and not in a state that blocks it
+        const evadeEdge = input.evade && !prevInput.evade;
+        if (evadeEdge && !state.isEvading && state.state !== 'hit' && 
+            state.state !== 'staggered' && !state.isAttacking && !state.isDashing) {
+            this.startEvade(player);
+        }
+
+        // EVADE INTERRUPTION: Any player input OR being hit ends evade immediately
+        // Check if currently evading
+        if (state.isEvading) {
+            // Check for any new input that should cancel evade
+            const anyInputEdge = 
+                (input.left && !prevInput.left) ||
+                (input.right && !prevInput.right) ||
+                (input.up && !prevInput.up) ||
+                (input.down && !prevInput.down) ||
+                (input.attack && !prevInput.attack) ||
+                (input.guard && !prevInput.guard) ||
+                (input.dash && !prevInput.dash) ||
+                (input.slam && !prevInput.slam) ||
+                input.attackPressed;
+
+            if (anyInputEdge) {
+                // Determine the correct state to transition to based on current input
+                this.exitEvade(player, input);
+            }
+        }
+    }
+
+    /**
+     * Start evade - SERVER AUTHORITATIVE
+     * Finds the closest enemy, calculates direction away from them,
+     * and moves the player by EVADE_DISTANCE (approximately 1 attack range).
+     * Sets the evade state and timer.
+     */
+    startEvade(player) {
+        const state = player.gameState;
+        
+        // Find closest enemy
+        let closestEnemy = null;
+        let closestDist = Infinity;
+        
+        Object.values(this.players).forEach(other => {
+            if (other.clientId === player.clientId) return;
+            if (other.gameState.isDefeated) return;
+            
+            const dx = state.position.x - other.gameState.position.x;
+            const dy = state.position.y - other.gameState.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist < closestDist) {
+                closestDist = dist;
+                closestEnemy = other;
+            }
+        });
+        
+        if (!closestEnemy) return;
+        
+        // Calculate direction away from closest enemy
+        const dx = state.position.x - closestEnemy.gameState.position.x;
+        const dy = state.position.y - closestEnemy.gameState.position.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+        
+        // Teleport the fighter ~66% of evade distance instantly
+        // This gives the responsive snap feel of the original evade
+        if (length < 0.001) {
+            state.position.x += state.facing * EVADE_DISTANCE * 0.66;
+        } else {
+            const dirX = dx / length;
+            const dirY = dy / length;
+            
+            state.position.x += dirX * EVADE_DISTANCE * 0.66;
+            state.position.y += dirY * EVADE_DISTANCE * 0.2; // slight vertical
+        }
+        
+        // Clamp to arena bounds
+        state.position.x = Math.max(60, Math.min(1340, state.position.x));
+        state.position.y = Math.max(100, Math.min(600, state.position.y));
+        
+        // Apply velocity as leftover momentum (the remaining ~34% of distance)
+        // This creates a smooth drift-out that naturally decays via friction
+        // instead of an abrupt halt. The fighter slides to rest.
+        const remainingDistance = EVADE_DISTANCE * 0.34;
+        const evadeVelocity = remainingDistance / 0.15; // cover remaining distance over ~0.15s
+        
+        if (length < 0.001) {
+            state.velocity.x = state.facing * evadeVelocity;
+            state.velocity.y = 0;
+        } else {
+            const dirX = dx / length;
+            const dirY = dy / length;
+            state.velocity.x = dirX * evadeVelocity;
+            state.velocity.y = dirY * evadeVelocity * 0.3;
+        }
+        
+        // Set evade state
+        state.isEvading = true;
+        state.evadeTimer = EVADE_MAX_DURATION;
+        state.state = 'evade';
+        
+        console.log(`[Evade] ${player.clientId} started evade, moving away from ${closestEnemy.clientId}`);
+    }
+
+    /**
+     * Exit evade state - SERVER AUTHORITATIVE
+     * Transitions to the appropriate state based on current input.
+     * Called when input is detected during evade, or when timer expires.
+     */
+    exitEvade(player, input) {
+        const state = player.gameState;
+        
+        if (!state.isEvading) return;
+        
+        state.isEvading = false;
+        state.evadeTimer = 0;
+        
+        // Determine correct state based on input
+        // Priority: attack > guard > movement > idle
+        if (input.attack || input.attackPressed) {
+            // Player pressed attack during evade -> will be handled by attack input processing
+            state.state = 'idle';
+        } else if (input.guard) {
+            state.isGuarding = true;
+            state.state = 'guard';
+        } else if (input.dash) {
+            // Dash will be started by the dash input processing
+            state.state = 'idle';
+        } else if (input.left || input.right) {
+            // Movement will be applied by movement input processing
+            state.state = 'idle';
+        } else if (input.up) {
+            // Jump will be started by jump input processing
+            state.state = 'idle';
+        } else if (input.slam) {
+            // Slam will be started by slam input processing
+            state.state = 'idle';
+        } else {
+            state.state = 'idle';
+        }
+        
+        console.log(`[Evade] ${player.clientId} ended evade, state=${state.state}`);
     }
 
     /**
@@ -629,6 +778,16 @@ class Match {
             state.canDash = state.dashCharges > 0;
         }
 
+        // EVADE TIMER - Server-authoritative duration countdown
+        if (state.isEvading) {
+            state.evadeTimer -= dt;
+            if (state.evadeTimer <= 0) {
+                // Auto-exit evade when timer expires (max 1 second)
+                this.exitEvade(player, {});
+                state.evadeTimer = 0;
+            }
+        }
+
         // ATTACK COOLDOWN
         player.attackTimer -= dt;
         if (player.attackTimer < 0) player.attackTimer = 0;
@@ -811,7 +970,8 @@ class Match {
             dash: !!input.dash,
             slam: !!input.slam,
             attackPressed: !!input.attackPressed,
-            attackReleased: !!input.attackReleased
+            attackReleased: !!input.attackReleased,
+            evade: !!input.evade
         };
     }
 
@@ -1138,22 +1298,37 @@ class Match {
             return this.startSlamAttack(attacker);
         }
         
-        const target = targetId ? this.players[targetId] : null;
-        
+        const targetPlayer = targetId ? this.players[targetId] : null;
+        let targetState = targetPlayer ? targetPlayer.gameState : null;
+
+        // For AOE abilities, resolve against all enemy targets if no explicit target was supplied.
+        if (!targetState && ['installationArt', 'disposial', 'ultimate'].includes(abilityId)) {
+            targetState = Object.values(this.players)
+                .filter(p => p.clientId !== attacker.clientId && !p.gameState.isDefeated)
+                .map(p => p.gameState);
+        }
+
         const result = this.engine.executeAbility(
             attacker.gameState,
             abilityId,
             targetId,
-            target ? target.gameState : null
+            targetState
         );
-        
+
+        if (!result) return null;
+        if (targetPlayer) {
+            result.targetId = targetPlayer.clientId;
+        }
+        if (!result.targetId && Array.isArray(targetState) && targetState.length > 0) {
+            result.targetIds = targetState.map(ts => ts.id);
+        }
+
         result.fighterId = attackerId;
         result.abilityId = abilityId;
-        this.broadcast({
-            type: 'abilityResult',
-            ...result
-        });
-        
+        const payload = { type: 'abilityResult', ...result };
+        this.broadcast(payload);
+        this.io.to(this.room.id).emit('abilityResult', result);
+
         return result;
     }
 
@@ -1184,6 +1359,8 @@ class Match {
                 isDashing: player.gameState.isDashing || false,
                 dashCharges: player.gameState.dashCharges || 0,
                 onGround: player.gameState.onGround || false,
+                // Evade state
+                isEvading: player.gameState.isEvading || false,
                 // Input state for remote player hold logic
                 input: {
                     left: !!player.input?.left,
@@ -1195,7 +1372,8 @@ class Match {
                     dash: !!player.input?.dash,
                     slam: !!player.input?.slam,
                     attackPressed: !!player.input?.attackPressed,
-                    attackReleased: !!player.input?.attackReleased
+                    attackReleased: !!player.input?.attackReleased,
+                    evade: !!player.input?.evade
                 },
                 // Attack state for client animation
                 attackSequence: player.attackSequence || 0,

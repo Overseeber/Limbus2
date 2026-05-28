@@ -212,7 +212,7 @@ function drawTimeToHuntUI(fighter, x, y) {
   const iconSize = 48;
   const cooldown = fighter.timeToHuntCooldown || 0;
   const maxCooldown = 15;
-  const isActive = fighter.gameTimeTarget || false;
+  const isActive = fighter.lastHitOpponent && fighter.lastHitOpponent.gameTimeTarget;
   
   push();
   

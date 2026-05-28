@@ -266,6 +266,7 @@ class Fighter {
     this.slashEffectsSpawned = false;    // Reset visual effect spawning flag
     this.lastSlashSpawnFrame = null;     // Track last visual frame that spawned slashes
     this.lastAttackPhase = 'none';       // Track last attack phase for phase-change detection
+    this.lastHitOpponent = null;         // Clear last hit opponent tracker
     
     // ULTIMATE ATTACK SYSTEM RESET
     this.ultimateActive = false;         // Clear ultimate activation state
@@ -508,6 +509,7 @@ class Fighter {
     this.attackHitResolved = false;
     this.statusEffectsApplied = false;
     this.slashEffectsSpawned = false;
+    this.lastHitOpponent = null;  // Clear last hit opponent on attack reset
     this.lastSlashSpawnFrame = null;
     this.attackSequence = 0;
     this.attackFrame = 0;
@@ -1946,7 +1948,7 @@ class Fighter {
 
     if (this.jumpRequest && this.onGround() && !this.isDucking) {
       // Game Target prevents jumping
-      if (!this.hasStatus('GameTarget')) {
+      if (!this.hasStatus('Game Target')) {
         this.vel.y = this.jumpStrength;
         this.setState('jump');
       }
@@ -2124,7 +2126,7 @@ class Fighter {
       return;
     }
     // Game Target prevents dashing
-    if (this.hasStatus('GameTarget')) {
+    if (this.hasStatus('Game Target')) {
       return;
     }
     this.dashCharges -= 1;
@@ -2732,6 +2734,10 @@ addCombo(attacker) {
     } else {
       this.statuses.push({ type, count, potency, timer: 1.0 });
     }
+
+    if (type === 'Game Target') {
+      this.gameTimeTarget = true;
+    }
     
     // Emit statusApplied event
     this.events.emit('statusApplied', {
@@ -2940,6 +2946,7 @@ addCombo(attacker) {
         }
         if (status.type === 'Game Target') {
           this.speed = this.baseSpeed || 7.5;
+          this.gameTimeTarget = false;
         }
         
         this.statuses.splice(this.statuses.indexOf(status), 1);
@@ -3207,7 +3214,7 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
     }
     
     // Draw Time to Hunt range and hitbox for Valencina
-    if (this.characterKey === 'VALENCINA' && this.gameTimeTarget) {
+    if (this.characterKey === 'VALENCINA' && this.lastHitOpponent && this.lastHitOpponent.gameTimeTarget) {
       this.drawTimeToHuntRange();
     }
   }

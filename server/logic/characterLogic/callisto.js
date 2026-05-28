@@ -76,8 +76,14 @@ function executeSlamAttack(state, abilityConfig, targetState, config) {
  * Consumes Corpus Ingredient and applies heavy status effects
  */
 function executeInstallationArt(state, abilityConfig, targetStates, config) {
-  // Ensure targetStates is an array
-  const targets = Array.isArray(targetStates) ? targetStates : [targetStates];
+  const targets = Array.isArray(targetStates) ? targetStates : targetStates ? [targetStates] : [];
+  if (targets.length === 0) {
+    return {
+      success: false,
+      reason: 'No targets',
+      ability: 'installationArt'
+    };
+  }
 
   // VALIDATE CORPUS COST
   if (state.resources.corpusIngredient < abilityConfig.corpusCost) {
@@ -146,6 +152,7 @@ function executeInstallationArt(state, abilityConfig, targetStates, config) {
     corpusRemaining: state.resources.corpusIngredient,
     artworkStacksGained: Math.floor(abilityConfig.corpusCost / 10),
     artworkStacksTotal: state.resources.artworkTibiaStacks,
+    cooldown: abilityConfig.cooldown,
     targetsHit: results.length,
     results: results
   };

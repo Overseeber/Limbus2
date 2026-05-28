@@ -789,23 +789,28 @@ CALLISTO: {
       if (fighter.installationArtActive) {
         fighter.installationArtTimer -= dt;
         
-        // Execute attack after 0.5 second delay
+        // Execute attack after 1 second delay
         if (fighter.installationArtTimer <= 0 && !fighter.installationArtExecuted) {
           fighter.installationArtExecuted = true;
           
-          // Use cevade sprite for execution - but keep cguard for additional 0.5s
+          // Use cevade sprite for execution - keep cguard for additional 0.5s
           fighter.currentSprite = 'cevade';
           console.log(`[DEBUG] Installation Art - Set sprite to cevade, current: ${fighter.currentSprite}`);
-          
-          console.log('[DEBUG] Installation Art - Executing AOE attack!');
-          this.executeImprovisedRibcage(fighter);
+
+          if (!fighter.installationArtPredictive) {
+            console.log('[DEBUG] Installation Art - Executing local AOE attack!');
+            this.executeImprovisedRibcage(fighter);
+          } else {
+            console.log('[DEBUG] Installation Art - Predictive visual execution only');
+          }
         }
         
-        // End ability after execution + additional 0.5 seconds (total 1.0s from start)
+        // End ability after execution + additional 0.5 seconds (total 1.5s from start)
         if (fighter.installationArtTimer <= -0.5) {
           fighter.installationArtActive = false;
           fighter.installationArtExecuted = false;
           fighter.installationArtTimer = 0;
+          fighter.installationArtPredictive = false;
           
           // Reset sprite back to normal
           fighter.currentSprite = 'cidle';
@@ -855,12 +860,12 @@ CALLISTO: {
       
       // Installation Art ability on Q key
       if (key.toLowerCase() === 'q' && !fighter.installationArtActive) {
-        // Emit ability request to server instead of executing locally
         if (typeof Network !== 'undefined' && Network.requestAbility) {
+          this.useInstallationArt(fighter, true);
           Network.requestAbility('installationArt');
         } else {
           // Fallback to local execution for development
-          this.useInstallationArt(fighter);
+          this.useInstallationArt(fighter, false);
         }
       }
     },
@@ -930,7 +935,7 @@ CALLISTO: {
     },
     
     // Installation Art ability
-    useInstallationArt: function(fighter) {
+    useInstallationArt: function(fighter, predictive = false) {
       if (fighter.installationArtActive) return;
       if (fighter.installationArtCooldown > 0) {
         console.log(`🎨 Installation Art on cooldown: ${fighter.installationArtCooldown.toFixed(1)}s`);
@@ -940,15 +945,16 @@ CALLISTO: {
       fighter.installationArtActive = true;
       fighter.installationArtTimer = 1.0; // Increased to 1 second for visible pose
       fighter.installationArtExecuted = false;
+      fighter.installationArtPredictive = predictive;
 
-      // Consume bleed stacks when using this ability
-      if (fighter.statusSystem && typeof fighter.statusSystem.consumeOnAbility === 'function') {
+      // Consume bleed stacks when using this ability in offline/fallback mode
+      if (!predictive && fighter.statusSystem && typeof fighter.statusSystem.consumeOnAbility === 'function') {
         fighter.statusSystem.consumeOnAbility();
       }
 
       // Use cguard sprite for windup
       fighter.currentSprite = 'cguard';
-      console.log(`[DEBUG] Installation Art - Set sprite to cguard, current: ${fighter.currentSprite}`);
+      console.log(`[DEBUG] Installation Art - Set sprite to cguard, current: ${fighter.currentSprite} (predictive=${predictive})`);
 
       console.log('🎨 Callisto activated Installation Art!');
     },
@@ -1116,6 +1122,7 @@ CALLISTO: {
       fighter.installationArtActive = false;
       fighter.installationArtTimer = 0;
       fighter.installationArtExecuted = false;
+      fighter.installationArtPredictive = false;
       fighter.installationArtCooldown = 0;
     },
 
@@ -1739,15 +1746,22 @@ CALLISTO: {
           console.log('[DEBUG] Time to Hunt - Initialized cooldown to 0');
         }
         
-        if (fighter.timeToHuntCooldown <= 0) {
+        if (fighter.timeToHuntCooldown <= 0 && !fighter.timeToHuntCasting) {
+          if (!fighter.lastHitOpponent) {
+            console.log('[DEBUG] Time to Hunt - No lastHitOpponent to target!');
+            return;
+          }
+
           console.log('[DEBUG] Time to Hunt - Activating!');
-          // Emit ability request to server instead of executing locally
           if (typeof Network !== 'undefined' && Network.requestAbility) {
-            Network.requestAbility('timeToHunt', fighter.lastHitOpponent ? fighter.lastHitOpponent.id : null);
+            this.useTimeToHunt(fighter, true);
+            Network.requestAbility('timeToHunt', fighter.lastHitOpponent.id);
           } else {
             // Fallback to local execution for development
-            this.useTimeToHunt(fighter);
+            this.useTimeToHunt(fighter, false);
           }
+        } else if (fighter.timeToHuntCasting) {
+          console.log('[DEBUG] Time to Hunt - Already casting');
         } else {
           console.log(`[DEBUG] Time to Hunt - On cooldown: ${fighter.timeToHuntCooldown.toFixed(1)}s`);
         }
@@ -1790,7 +1804,7 @@ CALLISTO: {
     // UNIQUE ABILITY METHODS
     
     // Time to Hunt - Q key ability
-    useTimeToHunt: function(fighter) {
+    useTimeToHunt: function(fighter, predictive = false) {
       if (!fighter.lastHitOpponent) {
         console.log('[DEBUG] Time to Hunt - No lastHitOpponent found!');
         return;
@@ -1802,10 +1816,12 @@ CALLISTO: {
       fighter.timeToHuntCasting = true;
       fighter.timeToHuntCastTimer = 1.0; // 1 second casting time
       fighter.timeToHuntTarget = target;
+      fighter.timeToHuntPredictive = predictive;
+      fighter.timeToHuntCooldown = 15;
 
       // Set sprite to de1 when casting
       fighter.currentSprite = 'de1';
-      console.log(`⚡ Time to Hunt casting on ${target.name}!`);
+      console.log(`⚡ Time to Hunt casting on ${target.name}! (predictive=${predictive})`);
     },
 
     updateTimeToHuntCast: function(fighter, dt) {
@@ -1813,24 +1829,23 @@ CALLISTO: {
         fighter.timeToHuntCastTimer -= dt;
 
         if (fighter.timeToHuntCastTimer <= 0) {
-          // Execute Time to Hunt effect
           const target = fighter.timeToHuntTarget;
 
-          // Apply Game Target status to opponent (duration: 10 seconds)
-          target.addStatus('Game Target', 10, 0); // 10 second duration, 0 potency
+          if (!fighter.timeToHuntPredictive && target) {
+            // Execute local Time to Hunt effect for offline/fallback mode
+            target.addStatus('Game Target', 10, 0); // 10 second duration, 0 potency
+            target.originalSpeed = target.originalSpeed || target.speed;
+            target.speed = 1;
+            target.gameTargetCaster = fighter;
 
-          // Store original speed and set to 1
-          target.originalSpeed = target.originalSpeed || target.speed;
-          target.speed = 1;
+            console.log(`⚡ Time to Hunt activated locally on ${target.name}! Speed set to 1 for 10 seconds.`);
+          }
 
-          // Store reference for cleanup
-          target.gameTargetCaster = fighter;
-
-          fighter.timeToHuntCooldown = 15; // 15 second cooldown
           fighter.timeToHuntCasting = false;
+          fighter.timeToHuntCastTimer = 0;
           fighter.timeToHuntTarget = null;
-
-          console.log(`⚡ Time to Hunt activated on ${target.name}! Speed set to 1 for 10 seconds.`);
+          fighter.timeToHuntPredictive = false;
+          fighter.currentSprite = 'cidle';
         }
       }
     },
@@ -2660,6 +2675,7 @@ CALLISTO: {
       fighter.timeToHuntCasting = false;
       fighter.timeToHuntCastTimer = 0;
       fighter.timeToHuntTarget = null;
+      fighter.timeToHuntPredictive = false;
       fighter.gameTimeTarget = false;
       fighter.accelerationRounds = 0;
       fighter.precognition = this.maxPrecognition;

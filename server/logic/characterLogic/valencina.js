@@ -54,12 +54,12 @@ function executeTimeToHunt(state, abilityConfig, targetState, config) {
   // APPLY GAME TARGET - Main effect of Time to Hunt
   // Sets speed to 1, restricts jumping and dashing for 10 seconds
   targetState.statuses.push({
-    type: 'GameTarget',
+    type: 'Game Target',
     count: 1,
     potency: 1,
     duration: 10  // 10 second duration
   });
-  appliedStatuses.push('GameTarget');
+  appliedStatuses.push('Game Target');
   
   // Apply additional status effects from config if any
   if (abilityConfig.statusEffects) {
@@ -99,6 +99,7 @@ function executeTimeToHunt(state, abilityConfig, targetState, config) {
     targetHp: targetState.hp,
     statuses: appliedStatuses,
     precognitionRemaining: state.resources.precognition,
+    cooldown: abilityConfig.cooldown,
     defeated: targetState.hp <= 0
   };
 }

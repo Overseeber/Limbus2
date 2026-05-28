@@ -2502,13 +2502,23 @@ function drawCharacterPreview() {
   const confirmBtn = new UIButton(confirmX, buttonY, buttonW, buttonH, () => {
     const sel = previewCharacterKey;
     console.log('CONFIRM CHARACTER', sel);
+    if (gameMode === 'cpu') {
+      // Save the selected character for local CPU mode
+      if (sel) {
+        players[0].character = sel;
+        players[0].active = true;
+        players[0].controlled = true;
+        players[0].ai = false;
+        players[0].ready = false;
+      }
+    }
     if (roomCharacterSelectSlot >= 0) {
       localSlotSelections[roomCharacterSelectSlot] = sel;
     }
     if (gameMode === 'multiplayer' && sel && typeof Network !== 'undefined' && Network.changeCharacter) {
       Network.changeCharacter(sel);
     }
-    // Clear preview
+    // Clear preview state
     previewCharacterKey = null;
     roomCharacterSelectSlot = -1;
     
@@ -2516,10 +2526,9 @@ function drawCharacterPreview() {
       // For CPU mode, go to opponent config screen
       setBattleState(BATTLE_STATES.CPU_OPPONENT_CONFIG);
     } else {
-      // For multiplayer, return to lobby
       setBattleState(BATTLE_STATES.LOBBY);
     }
-    console.log('TRANSITION TO', gameMode === 'cpu' ? 'READY' : 'LOBBY');
+    console.log('TRANSITION TO', battleState);
   });
   confirmBtn.draw('CONFIRM', { stroke: [80, 180, 80], fill: [40, 90, 40], text: 255 });
   previewButtons.push(confirmBtn);

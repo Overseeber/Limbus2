@@ -1554,7 +1554,7 @@ class Fighter {
     this.evadeTimer = max(0, this.evadeTimer - dt);
     this.staggerTimer = max(0, this.staggerTimer - dt);
     this.staggerRecoveryTimer = max(0, this.staggerRecoveryTimer - dt);
-    this.comboTimer = max(0, this.comboTimer - dt);
+    // comboTimer is now server-authoritative (applied via snapshot)
     this.hitCooldown = max(0, this.hitCooldown - dt);
     this.attackCounterTimer = max(0, this.attackCounterTimer - dt);
     this.staggeredDisplayTimer = max(0, this.staggeredDisplayTimer - dt);
@@ -1565,10 +1565,7 @@ class Fighter {
       this.currentDialogue = '';
     }
 
-    // Combo system - reset when timer runs out
-    if (this.comboTimer <= 0) {
-      this.combo = 0;
-    }
+    // Combo system is now fully server-authoritative (applied via snapshot)
 
     // Attack sequence system - preserve the current cycle step until the display timer expires
     if (this.attackCounterTimer <= 0 && this.attackCounter > 0) {
@@ -2589,7 +2586,7 @@ class Fighter {
     attacker.parryIndicator = 0.35;
     this.attackTimer = this.attackInterval;
     attacker.attackTimer = attacker.attackInterval;
-    this.combo = max(0, this.combo - 1);
+    // Combo is now server-authoritative; parry combo penalty handled server-side
     // Only the defender (parrier) loses parry count, not the attacker
     this.parryCount -= 1;
     attacker.parryStunTimer = 0.2;
@@ -2656,11 +2653,7 @@ calculateDamage(base, opponent) {
 
 onSuccessfulHit(damage, opponent) {
   this.lastAttackHit = true;
-  this.comboTimer = this.comboTimeout;
-  // Combo already increased by 1 in addCombo, don't double increment
-  
-  // Combo system: combo continues as long as timer is active
-  // Attack sequence system: handled separately in update function
+  // Combo is now server-authoritative; comboTimer set via snapshot
   
   if (this.parryTimer <= 0 && this.parryCount < 3) {
     this.parryCount += 1;
@@ -2683,28 +2676,10 @@ onSuccessfulHit(damage, opponent) {
 }
 
 addCombo(attacker) {
-  console.log('[COMBO DEBUG] addCombo called - attacker:', attacker, 'this:', this, 'comboTimer:', this.comboTimer, 'combo before:', this.combo);
-  
-  // Only the attacker should gain combo, not the victim
-  if (this !== attacker) {
-    console.log('[COMBO DEBUG] addCombo early return - not the attacker');
-    return;
-  }
-  
-  // During ultimate, always increase combo regardless of timer state
-  if (this.ultimateActive) {
-    console.log('[COMBO DEBUG] Ultimate active - forcing combo increase');
-    this.combo += 1;
-    this.comboTimer = this.comboTimeout;
-    console.log('[COMBO DEBUG] addCombo completed - combo after:', this.combo);
-    return;
-  }
-  
-  // Normal combo logic for non-ultimate
-  // Increase combo for the attacker only
-  this.comboTimer = this.comboTimeout;
-  this.combo += 1;
-  console.log('[COMBO DEBUG] addCombo completed - combo after:', this.combo);
+  // Combo is now fully server-authoritative.
+  // This method is kept as a no-op for compatibility with existing call sites.
+  // Server increments combo via engine.addCombo() on confirmed hits,
+  // and the client receives the authoritative value through snapshots.
 }
 
   hasStatus(type) {

@@ -213,19 +213,19 @@ function onSuccessfulHit(state, targetState, damage, config) {
     effects.accelerationRoundsGain = config.accelerationRounds.gainPerHit;
   }
 
-  // APPLY BURN AND TREMOR
-  targetState.statuses.push({
-    type: 'Burn',
-    count: 2,
-    potency: 2,
-    duration: 0
-  });
-  targetState.statuses.push({
-    type: 'Tremor',
-    count: 2,
-    potency: 2,
-    duration: 0
-  });
+  // APPLY BURN AND TREMOR (use engine.applyStatus for proper stacking)
+  if (typeof this.applyStatus === 'function') {
+    this.applyStatus(targetState, 'Burn', 2, 2);
+    this.applyStatus(targetState, 'Tremor', 2, 2);
+  } else {
+    // Fallback: push directly if not called from engine context
+    const burnExisting = targetState.statuses.find(s => s.type === 'Burn');
+    if (burnExisting) { burnExisting.count += 2; burnExisting.potency += 2; }
+    else targetState.statuses.push({ type: 'Burn', count: 2, potency: 2, timer: 0 });
+    const tremorExisting = targetState.statuses.find(s => s.type === 'Tremor');
+    if (tremorExisting) { tremorExisting.count += 2; tremorExisting.potency += 2; }
+    else targetState.statuses.push({ type: 'Tremor', count: 2, potency: 2, timer: 0 });
+  }
 
   effects.statusesApplied = ['Burn', 'Tremor'];
 

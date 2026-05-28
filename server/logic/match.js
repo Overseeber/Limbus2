@@ -954,19 +954,52 @@ class Match {
     handleEvents(player, events) {
         events.forEach(event => {
             switch (event.type) {
-                case 'BURN_DAMAGE':
-                case 'BLEED_DAMAGE':
-                case 'RUPTURE_DAMAGE':
-                case 'BLEED_ATTACK_DAMAGE':
+                case 'STATUS_DAMAGE':
                     this.broadcast({
                         type: 'STATUS_DAMAGE',
                         fighterId: player.clientId,
-                        eventType: event.type,
+                        statusType: event.statusType,
                         damage: event.damage,
                         hp: player.gameState.hp
                     });
                     break;
-                    
+
+                case 'STATUS_APPLIED':
+                    this.broadcast({
+                        type: 'STATUS_APPLIED',
+                        fighterId: player.clientId,
+                        statusType: event.statusType,
+                        count: event.count,
+                        potency: event.potency
+                    });
+                    break;
+
+                case 'STATUS_CONSUMED':
+                    this.broadcast({
+                        type: 'STATUS_CONSUMED',
+                        fighterId: player.clientId,
+                        statusType: event.statusType,
+                        remaining: event.remaining
+                    });
+                    break;
+
+                case 'STATUS_EXPIRED':
+                    this.broadcast({
+                        type: 'STATUS_EXPIRED',
+                        fighterId: player.clientId,
+                        statusType: event.statusType
+                    });
+                    break;
+
+                case 'STAGGER_INCREASE':
+                    this.broadcast({
+                        type: 'STAGGER_INCREASE',
+                        fighterId: player.clientId,
+                        statusType: event.statusType,
+                        amount: event.amount
+                    });
+                    break;
+
                 case 'DEFEATED':
                     this.broadcast({
                         type: 'FIGHTER_DEFEATED',
@@ -1174,6 +1207,7 @@ class Match {
                 attackerId: attacker.clientId,
                 targetId: defender.clientId,
                 damage: result.damage,
+                isCrit: result.isCrit || false,
                 attackSequence: attacker.attackSequence,
                 hp: defender.gameState.hp,
                 knockback: result.knockback,
@@ -1186,11 +1220,11 @@ class Match {
 
             if (result.consumeEvents) {
                 result.consumeEvents.forEach(ev => {
-                    if (ev.type === 'BLEED_DAMAGE' || ev.type === 'RUPTURE_DAMAGE' || ev.type === 'BLEED_ATTACK_DAMAGE') {
+                    if (ev.type === 'STATUS_DAMAGE') {
                         this.broadcast({
                             type: 'STATUS_DAMAGE',
                             fighterId: defender.clientId,
-                            eventType: ev.type,
+                            statusType: ev.statusType,
                             damage: ev.damage,
                             hp: defender.gameState.hp
                         });
@@ -1200,13 +1234,15 @@ class Match {
 
             if (result.bleedAttackEvents) {
                 result.bleedAttackEvents.forEach(ev => {
-                    this.broadcast({
-                        type: 'STATUS_DAMAGE',
-                        fighterId: attacker.clientId,
-                        eventType: ev.type,
-                        damage: ev.damage,
-                        hp: attacker.gameState.hp
-                    });
+                    if (ev.type === 'STATUS_DAMAGE') {
+                        this.broadcast({
+                            type: 'STATUS_DAMAGE',
+                            fighterId: attacker.clientId,
+                            statusType: ev.statusType,
+                            damage: ev.damage,
+                            hp: attacker.gameState.hp
+                        });
+                    }
                 });
             }
 
@@ -1299,8 +1335,13 @@ class Match {
             // Apply damage and knockback directly without going through
             // engine.resolveAttack (which re-checks facing with rect-based detection).
             // Dash attacks hit regardless of facing.
-            const dmg = this.engine.calculateDamage(attackData.baseDamage, state, defender.gameState);
-            const ap = this.engine.applyDamage(defender.gameState, dmg);
+            const dmgResult = this.engine.calculateDamage(attackData.baseDamage, state, defender.gameState);
+            const ap = this.engine.applyDamage(defender.gameState, dmgResult.damage);
+
+            // Consume status effects on hit for dash attacks
+            const ce = this.engine.consumeOnHit(defender.gameState);
+            const be = this.engine.consumeBleedOnAttack(state);
+            this.handleEvents(player, ce.concat(be));
             
             if (defender.gameState.state !== 'staggered') {
                 defender.gameState.state = 'hit';
@@ -1498,6 +1539,10 @@ class Match {
             result.targetIds = targetState.map(ts => ts.id);
         }
 
+        // Consume Bleed on ability use (attacker takes bleed damage)
+        const bleedEvents = this.engine.consumeBleedOnAbility(attacker.gameState);
+        if (bleedEvents.length) this.handleEvents(attacker, bleedEvents);
+
         result.fighterId = attackerId;
         result.abilityId = abilityId;
         const payload = { type: 'abilityResult', ...result };
@@ -1569,7 +1614,9 @@ class Match {
                 dashAttackActive: player.dashAttackActive || false,
                 // Combo state (authoritative, for UI rendering)
                 combo: (this.engine.combatState[player.clientId] || {}).combo || 0,
-                comboTimer: (this.engine.combatState[player.clientId] || {}).comboTimer || 0
+                comboTimer: (this.engine.combatState[player.clientId] || {}).comboTimer || 0,
+                // Stagger state (authoritative)
+                stagger: player.gameState.stagger || 0
             }))
         };
 

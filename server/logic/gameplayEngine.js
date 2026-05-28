@@ -82,13 +82,20 @@ class GameplayEngine {
     d += (cs.combo || 0) * COMBO_DAMAGE_PER_STACK;
     if (cs.attackCounter === 3) d *= 2;
     if (cs.chargeAttack) d *= 1.4;
-    if (this.hasStatus(defender, 'Poise')) d *= 1.15;
     if (defender.state === 'staggered') d *= 2;
     if (attacker.characterKey === 'CALLISTO' && attacker.resources.artworkTibiaStacks > 0) d *= 1 + 0.1 * attacker.resources.artworkTibiaStacks;
+    // Sinking on attacker: lose 1% damage dealt per potency
+    if (this.hasStatus(attacker, 'Sinking')) { const s = this.getStatus(attacker, 'Sinking'); d *= Math.max(0.5, 1 - 0.01 * s.potency); }
+    // Fragile on defender: take 10% more damage per potency stack
     if (this.hasStatus(defender, 'Fragile')) { const s = this.getStatus(defender, 'Fragile'); d *= 1 + 0.1 * s.potency; }
-    if (this.hasStatus(defender, 'Protection')) { const s = this.getStatus(defender, 'Protection'); d *= 1 - 0.1 * s.potency; }
-    if (this.hasStatus(defender, 'Sinking')) { const s = this.getStatus(defender, 'Sinking'); d *= Math.max(0.5, 1 - 0.05 * Math.floor(s.potency / 5)); }
-    return Math.floor(d);
+    // Protection on defender: take 10% less damage per potency stack
+    if (this.hasStatus(defender, 'Protection')) { const s = this.getStatus(defender, 'Protection'); d *= Math.max(0.1, 1 - 0.1 * s.potency); }
+    // Sinking on defender: lose 5% damage resistance per 5 potency (take MORE damage)
+    if (this.hasStatus(defender, 'Sinking')) { const s = this.getStatus(defender, 'Sinking'); d *= 1 + 0.05 * Math.floor(s.potency / 5); }
+    // Poise crit system: +5% crit chance per potency, on crit multiply damage x1.5
+    const critResult = this.rollCrit(attacker);
+    if (critResult.isCrit) d *= 1.5;
+    return { damage: Math.floor(d), isCrit: critResult.isCrit };
   }
 
   calculateKnockback(base, attacker) { return Math.floor(Math.max(0, base) * (attacker.knockbackMultiplier || 1.0)); }
@@ -108,7 +115,9 @@ class GameplayEngine {
     fighter.stagger += amount;
     if (fighter.stagger >= (config.staggerThreshold || 1000) && fighter.state !== 'staggered') {
       fighter.state = 'staggered'; fighter.staggerTimer = config.staggerLength || 5; fighter.stagger = config.staggerThreshold || 1000;
-      return { staggered: true, duration: config.staggerLength || 5 };
+      // Tremor: consume on burst (stagger threshold reached)
+      const tremorEvents = this.consumeTremor(fighter, config);
+      return { staggered: true, duration: config.staggerLength || 5, tremorEvents };
     }
     return { staggered: false, stagger: fighter.stagger };
   }
@@ -137,7 +146,7 @@ class GameplayEngine {
       existing.potency = (existing.potency || 0) + (potency || 0); 
       if (typeof duration === 'number') existing.remainingTime = duration;
       if (typeof duration === 'number') existing.duration = duration;
-      return { applied: false, updated: true, count: existing.count, potency: existing.potency }; 
+      return { type: 'STATUS_APPLIED', statusType: type, count: existing.count, potency: existing.potency, updated: true }; 
     }
     const status = { type, count: count || 1, potency: potency || 0, timer: 0 };
     if (typeof duration === 'number') {
@@ -145,7 +154,7 @@ class GameplayEngine {
       status.duration = duration;
     }
     target.statuses.push(status);
-    return { applied: true };
+    return { type: 'STATUS_APPLIED', statusType: type, count: status.count, potency: status.potency, applied: true };
   }
 
   processStatuses(fighter, dt) {
@@ -158,48 +167,67 @@ class GameplayEngine {
             s.timer = 0;
             s.count -= 1;
             fighter.hp = Math.max(0, fighter.hp - s.potency);
-            events.push({ type: 'BURN_DAMAGE', damage: s.potency, hp: fighter.hp });
+            events.push({ type: 'STATUS_DAMAGE', statusType: 'Burn', damage: s.potency, hp: fighter.hp });
           }
-          return s.count > 0;
+          if (s.count <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: 'Burn' }); return false; }
+          return true;
         case 'Bleed':
           s.timer += dt;
           if (s.timer >= 1) {
             s.timer = 0;
             s.potency = Math.max(0, s.potency - 1);
           }
-          return s.potency > 0 && s.count > 0;
+          if (s.potency <= 0 || s.count <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: 'Bleed' }); return false; }
+          return true;
         case 'Tremor':
-          s.timer += dt;
           if (s.count <= 0) {
             fighter.stagger += s.potency;
-            events.push({ type: 'TREMOR_STAGGER', amount: s.potency });
+            events.push({ type: 'STAGGER_INCREASE', statusType: 'Tremor', amount: s.potency });
+            events.push({ type: 'STATUS_EXPIRED', statusType: 'Tremor' });
             return false;
           }
           return true;
-        case 'Haste':
-        case 'Bind':
+        case 'Rupture':
+          if (s.count <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: 'Rupture' }); return false; }
+          return true;
         case 'Sinking':
-        case 'Game Target':
           s.timer += dt;
-          // FIX 2: Properly decrement remainingTime-based timers
           if (typeof s.remainingTime === 'number') {
             s.remainingTime -= dt;
-            if (s.remainingTime <= 0) return false;
+            if (s.remainingTime <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: 'Sinking' }); return false; }
           }
-          if (typeof s.duration === 'number' && s.timer >= s.duration) return false;
-          return s.count > 0;
+          if (s.count <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: 'Sinking' }); return false; }
+          return true;
+        case 'Charge':
+          if (s.count <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: 'Charge' }); return false; }
+          return true;
+        case 'Poise':
+          if (s.count <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: 'Poise' }); return false; }
+          return true;
         case 'Fragile':
         case 'Protection':
-        case 'Poise':
-          return s.count > 0;
+          if (s.count <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
+          return true;
+        case 'Haste':
+        case 'Bind':
+        case 'Game Target':
+          s.timer += dt;
+          if (typeof s.remainingTime === 'number') {
+            s.remainingTime -= dt;
+            if (s.remainingTime <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
+          }
+          if (typeof s.duration === 'number' && s.timer >= s.duration) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
+          if (s.count <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
+          return true;
         default:
           s.timer += dt;
           if (typeof s.remainingTime === 'number') {
             s.remainingTime -= dt;
-            if (s.remainingTime <= 0) return false;
+            if (s.remainingTime <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
           }
           const maxDuration = typeof s.duration === 'number' ? s.duration : 30;
-          return s.count > 0 && s.timer < maxDuration;
+          if (s.count <= 0 || s.timer >= maxDuration) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
+          return true;
       }
     });
     if (fighter.hp <= 0 && !fighter.isDefeated) {
@@ -218,9 +246,16 @@ class GameplayEngine {
     if (bleed && bleed.potency > 0) {
       const d = bleed.potency;
       fighter.hp = Math.max(0, fighter.hp - d);
-      events.push({ type: 'BLEED_ATTACK_DAMAGE', damage: d });
+      events.push({ type: 'STATUS_DAMAGE', statusType: 'Bleed', damage: d, trigger: 'attack' });
       bleed.count -= 1;
-      if (bleed.count <= 0) fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed');
+      if (bleed.count <= 0) {
+        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed');
+        events.push({ type: 'STATUS_EXPIRED', statusType: 'Bleed' });
+      }
+    }
+    if (fighter.hp <= 0 && !fighter.isDefeated) {
+      fighter.isDefeated = true; fighter.velocity.x = 0; fighter.velocity.y = 0; fighter.state = 'defeated';
+      events.push({ type: 'DEFEATED' });
     }
     return events;
   }
@@ -231,37 +266,47 @@ class GameplayEngine {
     const bleed = fighter.statuses.find(s => s.type === 'Bleed');
     if (bleed) {
       bleed.count -= 1;
+      events.push({ type: 'STATUS_CONSUMED', statusType: 'Bleed', remaining: bleed.count });
       if (bleed.count <= 0) {
         const damage = bleed.potency || 0;
         if (damage > 0) {
           fighter.hp = Math.max(0, fighter.hp - damage);
-          events.push({ type: 'BLEED_DAMAGE', damage: damage });
+          events.push({ type: 'STATUS_DAMAGE', statusType: 'Bleed', damage: damage, trigger: 'hit' });
         }
         fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed');
+        events.push({ type: 'STATUS_EXPIRED', statusType: 'Bleed' });
       }
     }
 
     const rupture = fighter.statuses.find(s => s.type === 'Rupture');
     if (rupture) {
       rupture.count -= 1;
+      const damage = rupture.potency || 0;
+      if (damage > 0) {
+        fighter.hp = Math.max(0, fighter.hp - damage);
+        events.push({ type: 'STATUS_DAMAGE', statusType: 'Rupture', damage: damage, trigger: 'hit' });
+      }
+      events.push({ type: 'STATUS_CONSUMED', statusType: 'Rupture', remaining: rupture.count });
       if (rupture.count <= 0) {
-        const damage = rupture.potency || 0;
-        if (damage > 0) {
-          fighter.hp = Math.max(0, fighter.hp - damage);
-          events.push({ type: 'RUPTURE_DAMAGE', damage: damage });
-        }
         fighter.statuses = fighter.statuses.filter(s => s.type !== 'Rupture');
+        events.push({ type: 'STATUS_EXPIRED', statusType: 'Rupture' });
       }
     }
 
     const sinking = fighter.statuses.find(s => s.type === 'Sinking');
     if (sinking) {
       sinking.count -= 1;
+      events.push({ type: 'STATUS_CONSUMED', statusType: 'Sinking', remaining: sinking.count });
       if (sinking.count <= 0) {
         fighter.statuses = fighter.statuses.filter(s => s.type !== 'Sinking');
+        events.push({ type: 'STATUS_EXPIRED', statusType: 'Sinking' });
       }
     }
 
+    if (fighter.hp <= 0 && !fighter.isDefeated) {
+      fighter.isDefeated = true; fighter.velocity.x = 0; fighter.velocity.y = 0; fighter.state = 'defeated';
+      events.push({ type: 'DEFEATED' });
+    }
     return events;
   }
 
@@ -352,9 +397,10 @@ class GameplayEngine {
     let base = attackData.baseDamage || attacker.baseDamage, knock = attackData.knockback || 0, stagger = attackData.staggerDamage || 0;
     if (defender.isGuarding) { base *= 0.5; knock = Math.floor(knock * 0.5); stagger = 0; result.wasGuarded = true; }
 
-    const dmg = this.calculateDamage(base, attacker, defender);
-    const ap = this.applyDamage(defender, dmg);
+    const dmgResult = this.calculateDamage(base, attacker, defender);
+    const ap = this.applyDamage(defender, dmgResult.damage);
     result.damage = ap.damage; result.defenderHp = defender.hp; result.defeated = ap.defeated;
+    result.isCrit = dmgResult.isCrit;
 
     // Reset defender's combo when they get hit (getting hit breaks offensive momentum)
     this.resetCombo(defender.id);
@@ -422,6 +468,70 @@ class GameplayEngine {
     if (state.resources.precognition > 0) state.resources.precognition = Math.max(0, state.resources.precognition - 2 * dt);
     if (state.hp / state.maxHp < this.getCharacterConfig('VALENCINA').shin.activationThreshold && !state.resources.shinActive) { state.resources.shinActive = true; e.push({ type: 'SHIN_ACTIVATED' }); }
     return e;
+  }
+
+  rollCrit(attacker) {
+    let critChance = 0;
+    const poise = this.getStatus(attacker, 'Poise');
+    if (poise) critChance += 0.05 * poise.potency;
+    if (critChance <= 0) return { isCrit: false };
+    const roll = Math.random();
+    const isCrit = roll < critChance;
+    if (isCrit && poise) {
+      poise.count -= 1;
+      if (poise.count <= 0) attacker.statuses = attacker.statuses.filter(s => s.type !== 'Poise');
+    }
+    return { isCrit, critChance };
+  }
+
+  consumeBleedOnAbility(fighter) {
+    const events = [];
+    const bleed = fighter.statuses.find(s => s.type === 'Bleed');
+    if (bleed && bleed.potency > 0) {
+      const d = bleed.potency;
+      fighter.hp = Math.max(0, fighter.hp - d);
+      events.push({ type: 'STATUS_DAMAGE', statusType: 'Bleed', damage: d, trigger: 'ability' });
+      bleed.count -= 1;
+      if (bleed.count <= 0) {
+        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Bleed');
+        events.push({ type: 'STATUS_EXPIRED', statusType: 'Bleed' });
+      }
+    }
+    if (fighter.hp <= 0 && !fighter.isDefeated) {
+      fighter.isDefeated = true; fighter.velocity.x = 0; fighter.velocity.y = 0; fighter.state = 'defeated';
+      events.push({ type: 'DEFEATED' });
+    }
+    return events;
+  }
+
+  consumeCharge(fighter) {
+    const events = [];
+    const charge = fighter.statuses.find(s => s.type === 'Charge');
+    if (charge) {
+      charge.count -= 1;
+      events.push({ type: 'STATUS_CONSUMED', statusType: 'Charge', remaining: charge.count });
+      if (charge.count <= 0) {
+        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Charge');
+        events.push({ type: 'STATUS_EXPIRED', statusType: 'Charge' });
+      }
+    }
+    return events;
+  }
+
+  consumeTremor(fighter, config) {
+    const events = [];
+    const tremor = fighter.statuses.find(s => s.type === 'Tremor');
+    if (tremor) {
+      tremor.count -= 1;
+      events.push({ type: 'STATUS_CONSUMED', statusType: 'Tremor', remaining: tremor.count });
+      if (tremor.count <= 0) {
+        fighter.stagger += tremor.potency;
+        events.push({ type: 'STAGGER_INCREASE', statusType: 'Tremor', amount: tremor.potency });
+        fighter.statuses = fighter.statuses.filter(s => s.type !== 'Tremor');
+        events.push({ type: 'STATUS_EXPIRED', statusType: 'Tremor' });
+      }
+    }
+    return events;
   }
 
   hasStatus(f, t) { return f.statuses && f.statuses.some(s => s.type === t); }

@@ -173,17 +173,41 @@ class Match {
         // Update combo timers and combat state once per tick
         this.engine.updateCombos(dt);
 
-        // Update AI player inputs before processing
-        Object.values(this.players).forEach(player => {
-            if (player.ai) {
-                this.simulateAIInput(player);
-            }
-        });
+        // Track match start time for opening phase (first 2.5 seconds)
+        if (!this.matchStartTime) {
+            this.matchStartTime = Date.now();
+        }
+        const timeSinceStart = (Date.now() - this.matchStartTime) / 1000;
+        const isOpeningPhase = timeSinceStart < 2.5;
 
         // Update each player's authoritative state
         Object.values(this.players).forEach(player => {
             if (!player.gameState.isDefeated) {
-                // Process input with edge detection
+                // Update gameplay state through GameplayEngine FIRST
+                // This allows hit/stagger state to exit on input before input processing
+                const config = {
+                    staggerThreshold: player.config.staggerThreshold,
+                    staggerLength: player.config.staggerLength
+                };
+                const events = this.engine.updateFighter(player.gameState, dt, config, player.input);
+
+                // Handle events from GameplayEngine
+                this.handleEvents(player, events);
+
+                // Now process input with edge detection (after state updates)
+                // Skip AI input during opening phase
+                if (player.ai && !isOpeningPhase) {
+                    this.simulateAIInput(player);
+                } else if (player.ai && isOpeningPhase) {
+                    // Clear AI input during opening to let animations play
+                    player.input = { 
+                        left: false, right: false, up: false, down: false,
+                        attack: false, guard: false, dash: false, slam: false,
+                        attackPressed: false, attackReleased: false, evade: false,
+                        abilityQ: false, abilityX: false
+                    };
+                }
+
                 this.processInput(player, dt);
 
                 // Update physics (includes attack phase timer)
@@ -204,17 +228,6 @@ class Match {
                 if (player.strikeActive && player.attackSequence > 0) {
                     this.checkAttackHits(player);
                 }
-
-                // Update gameplay state through GameplayEngine
-                const config = {
-                    staggerThreshold: player.config.staggerThreshold,
-                    staggerLength: player.config.staggerLength
-                };
-
-                const events = this.engine.updateFighter(player.gameState, dt, config, player.input);
-
-                // Handle events from GameplayEngine
-                this.handleEvents(player, events);
             }
         });
 
@@ -316,8 +329,10 @@ class Match {
         }
 
         // JUMP INPUT - edge triggered
-        if (input.up && !prevInput.up && state.onGround && state.state !== 'hit' && 
-            state.state !== 'staggered' && !state.isAttacking) {
+        // Allow jump on any input if just exited hit state
+        const canJump = state.state !== 'hit' && 
+                       (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
+        if (input.up && !prevInput.up && state.onGround && canJump && !state.isAttacking) {
             const jumpHeight = config.jumpHeight || 1200;
             state.velocity.y = -jumpHeight;
             state.onGround = false;
@@ -325,7 +340,9 @@ class Match {
 
         // GUARD INPUT
         const guardEdge = input.guard && !prevInput.guard;
-        if (guardEdge && !state.isAttacking && state.state !== 'hit' && state.state !== 'staggered') {
+        const canGuard = state.state !== 'hit' && 
+                        (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
+        if (guardEdge && !state.isAttacking && canGuard) {
             // AUTO-FACE toward closest enemy when guard is FIRST pressed (edge-triggered)
             // This prevents continuous re-facing every tick while holding guard
             this.faceClosestEnemy(player);
@@ -336,8 +353,9 @@ class Match {
 
         // DASH INPUT - edge triggered
         const dashEdge = input.dash && !prevInput.dash;
-        if (dashEdge && state.dashCharges > 0 && !state.isAttacking && state.onGround && 
-            state.state !== 'hit' && state.state !== 'staggered' && state.state !== 'slam') {
+        const canDash = state.state !== 'hit' && state.state !== 'slam' &&
+                       (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
+        if (dashEdge && state.dashCharges > 0 && !state.isAttacking && state.onGround && canDash) {
             const dashDir = input.right ? 1 : (input.left ? -1 : state.facing);
             const dashSpeed = ((typeof config.dashSpeed !== 'undefined' ? config.dashSpeed : 60) * 60);
             state.velocity.x = dashDir * dashSpeed;
@@ -383,11 +401,14 @@ class Match {
         const canChainAttack = !player.attackCharge && player.attackCounter > 0 && (now - player.lastAttackTime) < comboWindow;
         const canAttackNow = player.attackTimer <= 0 || canChainAttack;
 
+        // Allow attack if not in hit state (stagger is OK with staggerTimer <= 0)
+        const canAttack = state.state !== 'hit' && state.state !== 'slam' &&
+                         (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
+
         // IMPORTANT: Only set attackHoldStart ONCE per press, not every tick.
         // The client holds attackPressed sticky for 120ms. Without this check,
         // attackHoldStart gets reset every tick, breaking the fallback timer.
-        if (attackPressed && !state.isAttacking && state.state !== 'hit' && 
-            state.state !== 'staggered' && state.state !== 'slam' && canAttackNow) {
+        if (attackPressed && !state.isAttacking && canAttack && canAttackNow) {
             if (!player.attackHoldStart) {
                 player.attackHoldStart = now;
                 player.attackRequestActive = true;
@@ -446,8 +467,9 @@ class Match {
         // Only trigger slam when the client explicitly sent the slam sticky flag
         // and the fighter is airborne. This prevents down-only inputs from
         // accidentally starting a slam on the server.
-        if (input.slam && !input.up && !state.onGround && !state.isAttacking && 
-            state.state !== 'hit' && state.state !== 'staggered' && !player.isSlamAttacking) {
+        const canSlam = state.state !== 'hit' && 
+                       (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
+        if (input.slam && !input.up && !state.onGround && !state.isAttacking && canSlam && !player.isSlamAttacking) {
             this.startSlamAttack(player);
         }
 
@@ -999,7 +1021,9 @@ class Match {
             slam: !!input.slam,
             attackPressed: !!input.attackPressed,
             attackReleased: !!input.attackReleased,
-            evade: !!input.evade
+            evade: !!input.evade,
+            abilityQ: !!input.abilityQ,
+            abilityX: !!input.abilityX
         };
     }
 
@@ -1020,6 +1044,8 @@ class Match {
         input.attackPressed = false;
         input.attackReleased = false;
         input.evade = false;
+        input.abilityQ = false;
+        input.abilityX = false;
 
         if (!enemy || !player.ai) {
             return;
@@ -1500,7 +1526,9 @@ class Match {
                     slam: !!player.input?.slam,
                     attackPressed: !!player.input?.attackPressed,
                     attackReleased: !!player.input?.attackReleased,
-                    evade: !!player.input?.evade
+                    evade: !!player.input?.evade,
+                    abilityQ: !!player.input?.abilityQ,
+                    abilityX: !!player.input?.abilityX
                 },
                 // Attack state for client animation
                 attackSequence: player.attackSequence || 0,

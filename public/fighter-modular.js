@@ -267,6 +267,7 @@ class Fighter {
     this.lastSlashSpawnFrame = null;     // Track last visual frame that spawned slashes
     this.lastAttackPhase = 'none';       // Track last attack phase for phase-change detection
     this.lastHitOpponent = null;         // Clear last hit opponent tracker
+    this.isOnGround = true;              // Keep server-grounded state separate from the onGround() method
     
     // ULTIMATE ATTACK SYSTEM RESET
     this.ultimateActive = false;         // Clear ultimate activation state

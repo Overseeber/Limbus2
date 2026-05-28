@@ -323,8 +323,8 @@ function processSnapshot(snapshot) {
         fighter.maxHp = state.maxHp;
         fighter.facing = state.facing;
 
-        // Apply movement states
-        fighter.onGround = state.onGround || false;
+        // Apply movement states without overriding the onGround() method
+        fighter.isOnGround = typeof state.onGround !== 'undefined' ? state.onGround : fighter.onGround();
 
         // Apply statuses
         fighter.statuses = state.statuses || [];
@@ -447,15 +447,15 @@ function processSnapshot(snapshot) {
           // BUT keep gameplay state as 'idle' so input isn't blocked
           fighter.state = 'slam';
           fighter.haltSequence = false;
-        } else if ((fighter.state === 'hit' || fighter.state === 'staggered') && !fighterHasInput) {
+        } else if (fighter.state === 'hit' || fighter.state === 'staggered') {
             // FIX 5: ONLY preserve hurt/staggered visuals via state persistence.
             // DO NOT preserve slam or halt sprites here - they should reset properly.
-            // This prevents the local client from getting stuck in stale visual states.
+            // This prevents local input from prematurely cancelling hurt visuals.
             fighter.haltSequence = false;
         } else if (fighter.isDashing) {
             fighter.state = 'dash';
             fighter.haltSequence = false;
-        } else if (!fighter.onGround) {
+        } else if (!fighter.isOnGround) {
             fighter.state = 'jump';
             fighter.haltSequence = false;
         } else if (fighter.isGuarding) {
@@ -464,7 +464,7 @@ function processSnapshot(snapshot) {
         } else if (isMovingFast) {
             fighter.state = 'run';
             fighter.haltSequence = false;
-        } else if (wasDashing && !fighter.isDashing && Math.abs(fighter.vel.x) > 10 && fighter.onGround) {
+        } else if (wasDashing && !fighter.isDashing && Math.abs(fighter.vel.x) > 10 && fighter.isOnGround) {
             // FIX 5: Halt sequence is a VISUAL-ONLY transition that should NOT
             // persist or override normal sprite rendering. It must clean up
             // properly when velocity drops or new actions begin.
@@ -474,7 +474,7 @@ function processSnapshot(snapshot) {
                 fighter.haltFrameTimer = 0;
             }
             fighter.state = 'idle';
-        } else if (Math.abs(fighter.vel.x) > 10 && fighter.onGround && !fighter.dashAttackActive) {
+        } else if (Math.abs(fighter.vel.x) > 10 && fighter.isOnGround && !fighter.dashAttackActive) {
             if (!fighter.haltSequence) {
                 fighter.haltSequence = true;
                 fighter.haltFrame = 0;
@@ -613,6 +613,10 @@ function sendInputState() {
     prevKeyState.evade = rawEvade;
     const stickyEvade = now < inputHoldTimers.evade;
     
+    // === ABILITY KEY INPUT ===
+    const rawAbilityQ = keyIsDown(81); // Q key
+    const rawAbilityX = keyIsDown(88); // X key
+
     // === GUARD (right click) ===
     keyState.guard = isRightMouseDown;
     
@@ -620,7 +624,7 @@ function sendInputState() {
     // Determine if airborne using onGround property from server
     const controlledFighter = getPlayerControlledFighter();
     const isOnGround = controlledFighter ? 
-      (controlledFighter.onGround || 
+      (controlledFighter.isOnGround || 
        (controlledFighter.pos && controlledFighter.pos.y >= (controlledFighter.spawnY || 600) - 0.01)) : true;
 
     // Only set the slam sticky flag when the player is airborne AND
@@ -642,7 +646,9 @@ function sendInputState() {
         guard: isRightMouseDown,
         dash: rawDash || stickyDash,     // Keep dash active for server
         slam: stickySlam,                // Held for 2+ ticks
-        evade: stickyEvade               // Held for 2+ ticks
+        evade: stickyEvade,              // Held for 2+ ticks
+        abilityQ: rawAbilityQ,
+        abilityX: rawAbilityX
     };
 
     Network.sendInput(input);
@@ -982,6 +988,9 @@ function handleNetworkEvent(event) {
     case 'abilityResult':
       handleAbilityResult(event);
       break;
+    case 'dashAttackResult':
+      handleDashAttackNetworkEvent(event);
+      break;
     case 'MATCH_END':
       // Server signaled match end — start ending sequence
       startEndingSequence(event.winnerId, event.winnerCharacter, {
@@ -1042,6 +1051,34 @@ function handleSlamHitNetworkEvent(event) {
     target.isDefeated = true;
     target.hp = target.hp || 0;
   }
+}
+
+function handleDashAttackNetworkEvent(event) {
+  if (!event || !window.allFighters || !Array.isArray(event.hits)) return;
+  const attacker = window.allFighters.find(f => f.clientId === event.attackerId);
+
+  event.hits.forEach(hit => {
+    const target = window.allFighters.find(f => f.clientId === hit.targetId);
+    if (!target) return;
+
+    if (typeof hit.defenderHp !== 'undefined') {
+      target.hp = hit.defenderHp;
+    }
+
+    const facing = attacker ? attacker.facing : 1;
+    if (typeof hit.damage === 'number' && typeof spawnDamageNumber === 'function') {
+      spawnDamageNumber(hit.damage, target.pos.copy(), facing, false, 'normal', false, 'normal');
+    }
+
+    if (typeof addScreenShake === 'function' && typeof hit.damage === 'number') {
+      addScreenShake(hit.damage);
+    }
+
+    if (hit.defeated && !target.isDefeated) {
+      target.isDefeated = true;
+      target.hp = target.hp || 0;
+    }
+  });
 }
 
 function handleStatusDamageNetworkEvent(event) {
@@ -1206,6 +1243,11 @@ function draw() {
   } else if (battleState === BATTLE_STATES.READY) {
     drawReadyScreen();
   } else if (battleState === BATTLE_STATES.OPENING) {
+    // Continue simulating the fight during the opening animation so AI and input
+    // edge detection remain active before the match officially begins.
+    const savedBattleTimer = battleTimer;
+    updateBattle();
+    battleTimer = savedBattleTimer;
     drawOpeningSequence();
   } else if (battleState === BATTLE_STATES.BATTLE) {
     // Check for ultimate background dimming across all fighters

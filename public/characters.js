@@ -734,9 +734,7 @@ CALLISTO: {
     onSuccessfulHit: function(damage, opponent, fighter) {
       if (!opponent) return;
       
-      // Increment combo count for Callisto
-      fighter.combo++;
-      fighter.comboTimer = 1.4; // Reset combo timer
+      // Combo is now server-authoritative (incremented via engine.addCombo on confirmed hit)
       
       // ON HIT: Inflict 4 bleed and bleed count
       fighter.requestApplyStatus(opponent, { type: 'Bleed', count: 4, potency: 4 });
@@ -972,9 +970,7 @@ CALLISTO: {
       fighter.attackCounterDisplay = fighter.attackCounter;
       fighter.attackCounterTimer = 1.0;
       
-      // Increment combo count for Callisto
-      fighter.combo++;
-      fighter.comboTimer = 1.4; // Reset combo timer
+      // Combo is now server-authoritative
       
       // Use cevade sprite for execution
       fighter.currentSprite = 'cevade';
@@ -1615,8 +1611,7 @@ CALLISTO: {
       enemy.ultimateProtected = previousProtected;
       enemy.hitCooldown = previousCooldown;
 
-      // Build combo on hit
-      fighter.addCombo(fighter);
+      // Combo is now server-authoritative
 
       // Add doubled ultimate screenshake
       if (typeof addScreenShake === 'function') {
@@ -1700,8 +1695,7 @@ CALLISTO: {
       // ON HIT: Inflict 2 tremor potency and count
       fighter.requestApplyStatus(opponent, { type: 'Tremor', count: 2, potency: 2 });
       
-      // Accelerating Future: Gain combo and apply effects
-      fighter.combo++;
+      // Combo is now server-authoritative
       this.applyAcceleratingFuture(fighter);
       
       // Eye of Precognition: Gain 1 precognition on hit
@@ -2648,10 +2642,7 @@ CALLISTO: {
       fighter.vel.x = 0;
       fighter.vel.y = 0;
       
-      // Build combo for Valencina during ultimate - 1 combo per hit like regular attacks
-      console.log('[ULTIMATE DEBUG] Before addCombo - fighter combo:', fighter.combo);
-      fighter.addCombo(fighter);
-      console.log('[ULTIMATE DEBUG] After addCombo - fighter combo:', fighter.combo);
+      // Combo is now server-authoritative
       
       // Apply character-specific onSuccessfulHit effects (status effects, etc.)
       const character = CHARACTERS[fighter.characterKey];

@@ -658,6 +658,9 @@ class Match {
         player.attackRequestActive = false;
         player.attackHoldStart = null;
         player.hitTargetsThisAttack = [];
+        // Clear per-attack hit flag for combo miss detection
+        const cs = this.engine.combatState[state.id];
+        if (cs) cs.lastAttackHit = false;
         
         state.isAttacking = true;
         state.state = 'attacking';
@@ -888,6 +891,15 @@ class Match {
      */
     endAttack(player) {
         const state = player.gameState;
+
+        // Miss detection: if this attack didn't hit anyone, reset combo
+        const cs = this.engine.combatState[state.id];
+        if (cs && !cs.lastAttackHit) {
+            this.engine.resetCombo(state.id);
+        }
+        // Clear the per-attack hit flag for next attack
+        if (cs) cs.lastAttackHit = false;
+
         state.isAttacking = false;
         state.state = 'idle';
         player.attackSequence = 0;
@@ -1328,13 +1340,23 @@ class Match {
             });
         });
         
-        // Broadcast dash attack results
+        // Dash attack combo: increment on hit, reset on miss
         if (results.length > 0) {
+            this.engine.addCombo(state.id);
+            this.engine.incrementAttackCounter(state.id);
+            // Reset combo for all hit defenders
+            results.forEach(r => {
+                this.engine.resetCombo(r.targetId);
+            });
+
             this.broadcast({
                 type: 'dashAttackResult',
                 attackerId: attacker.clientId,
                 hits: results
             });
+        } else {
+            // Dash attack whiffed - reset combo
+            this.engine.resetCombo(state.id);
         }
     }
 
@@ -1544,7 +1566,10 @@ class Match {
                 slamHold: !!player.slamHoldVisual,
                 // Dash attack state
                 dashAttackQueued: player.dashAttackQueued || false,
-                dashAttackActive: player.dashAttackActive || false
+                dashAttackActive: player.dashAttackActive || false,
+                // Combo state (authoritative, for UI rendering)
+                combo: (this.engine.combatState[player.clientId] || {}).combo || 0,
+                comboTimer: (this.engine.combatState[player.clientId] || {}).comboTimer || 0
             }))
         };
 

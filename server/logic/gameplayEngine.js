@@ -6,6 +6,11 @@ const ARENA_WIDTH = 1400;
 const ARENA_HEIGHT = 700;
 const GRAVITY = 0.6;
 
+// Combo system constants (matches OldClientGameplay feel)
+const COMBO_DURATION = 1.4;        // Seconds before combo resets from inactivity
+const COMBO_DAMAGE_PER_STACK = 2;  // Bonus damage per combo stack
+const MAX_COMBO = 99;              // Maximum combo count
+
 class GameplayEngine {
   constructor() {
     this.combatState = {};
@@ -74,7 +79,7 @@ class GameplayEngine {
   calculateDamage(base, attacker, defender) {
     let d = base * (attacker.baseDamage || 1);
     const cs = this.combatState[attacker.id] || {};
-    d += (cs.combo || 0) * 2;
+    d += (cs.combo || 0) * COMBO_DAMAGE_PER_STACK;
     if (cs.attackCounter === 3) d *= 2;
     if (cs.chargeAttack) d *= 1.4;
     if (this.hasStatus(defender, 'Poise')) d *= 1.15;
@@ -260,8 +265,33 @@ class GameplayEngine {
     return events;
   }
 
-  addCombo(id) { const s = this.combatState[id]; if (!s) return 0; s.combo = (s.combo || 0) + 1; s.comboTimer = 1.4; return s.combo; }
-  updateCombos(dt) { Object.values(this.combatState).forEach(s => { if (s.comboTimer > 0) { s.comboTimer -= dt; if (s.comboTimer <= 0) s.combo = 0; } }); }
+  addCombo(id) {
+    const s = this.combatState[id];
+    if (!s) return 0;
+    s.combo = Math.min((s.combo || 0) + 1, MAX_COMBO);
+    s.comboTimer = COMBO_DURATION;
+    s.lastAttackHit = true;
+    return s.combo;
+  }
+
+  resetCombo(id) {
+    const s = this.combatState[id];
+    if (!s) return;
+    s.combo = 0;
+    s.comboTimer = 0;
+  }
+
+  updateCombos(dt) {
+    Object.values(this.combatState).forEach(s => {
+      if (s.comboTimer > 0) {
+        s.comboTimer -= dt;
+        if (s.comboTimer <= 0) {
+          s.combo = 0;
+          s.comboTimer = 0;
+        }
+      }
+    });
+  }
   incrementAttackCounter(id) { const s = this.combatState[id]; if (!s) return 0; s.attackCounter = Math.min(3, (s.attackCounter || 0) + 1); return s.attackCounter; }
 
   applyGravity(fighter) {
@@ -325,6 +355,9 @@ class GameplayEngine {
     const dmg = this.calculateDamage(base, attacker, defender);
     const ap = this.applyDamage(defender, dmg);
     result.damage = ap.damage; result.defenderHp = defender.hp; result.defeated = ap.defeated;
+
+    // Reset defender's combo when they get hit (getting hit breaks offensive momentum)
+    this.resetCombo(defender.id);
 
     if (defender.state !== 'staggered') { defender.state = 'hit'; defender.hitTimer = 0.18; }
     if (knock) { const dir = defender.position.x < attacker.position.x ? -1 : 1; const fk = this.calculateKnockback(knock, attacker); this.applyKnockback(defender, fk, dir, attacker); result.knockback = fk; }

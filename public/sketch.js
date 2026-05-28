@@ -348,6 +348,10 @@ function processSnapshot(snapshot) {
         fighter.strikeActive = state.strikeActive || false;
         fighter.chargeAttack = state.chargeAttack || false;
         fighter.attackCounter = state.attackCounter || 0;
+
+        // Apply authoritative combo state from server
+        fighter.combo = state.combo || 0;
+        fighter.comboTimer = state.comboTimer || 0;
         
         // Apply remote input state for non-local players
         fighter.remoteInput = {

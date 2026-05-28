@@ -424,83 +424,24 @@ function processSnapshot(snapshot) {
         // For remote fighters: check their remote input from the snapshot.
         const fighterHasInput = fighter.isLocalPlayer ? hasLocalInput : hasRemoteInput;
 
-        // FIX 4: Prioritize ability states (attacking) for animation selection
-        // Ability states must be authoritative and not collapse into idle/movement
-        if (fighter.isAttacking || fighter.attackSequence > 0) {
-            // FIX 4: Ability animations - set state to 'attack' and clear halt sequence
-            // This ensures attack sprites display properly and are not overwritten by
-            // movement/idle logic. The server is authoritative for ability state.
-            fighter.state = 'attack';
-            fighter.haltSequence = false;
-        } else if (state.isEvading || combatState === 'evade') {
-            // SERVER AUTHORITATIVE EVADE: Use the server's authoritative evade state
-            // to show the evade sprite. The server controls evade activation, duration,
-            // and deactivation.
-            fighter.state = 'evade';
-            fighter.haltSequence = false;
-        } else if (combatState === 'hit' || combatState === 'staggered' || combatState === 'ultimate') {
-          // Use the server combatState for hit/stagger/ultimate
-          fighter.state = combatState;
-          fighter.haltSequence = false;
-        } else if (fighter.slamHoldPosition || fighter.isSlamAttacking) {
-          // Slam visuals are controlled by server slamHold/isSlamAttacking flags
-          // BUT keep gameplay state as 'idle' so input isn't blocked
-          fighter.state = 'slam';
-          fighter.haltSequence = false;
-        } else if (fighter.state === 'hit' || fighter.state === 'staggered') {
-            // FIX 5: ONLY preserve hurt/staggered visuals via state persistence.
-            // DO NOT preserve slam or halt sprites here - they should reset properly.
-            // This prevents local input from prematurely cancelling hurt visuals.
-            fighter.haltSequence = false;
-        } else if (fighter.isDashing) {
-            fighter.state = 'dash';
-            fighter.haltSequence = false;
-        } else if (!fighter.isOnGround) {
-            fighter.state = 'jump';
-            fighter.haltSequence = false;
-        } else if (fighter.isGuarding) {
-            fighter.state = 'guard';
-            fighter.haltSequence = false;
-        } else if (isMovingFast) {
-            fighter.state = 'run';
-            fighter.haltSequence = false;
-        } else if (wasDashing && !fighter.isDashing && Math.abs(fighter.vel.x) > 10 && fighter.isOnGround) {
-            // FIX 5: Halt sequence is a VISUAL-ONLY transition that should NOT
-            // persist or override normal sprite rendering. It must clean up
-            // properly when velocity drops or new actions begin.
-            if (!fighter.haltSequence && !fighter.dashAttackActive) {
-                fighter.haltSequence = true;
-                fighter.haltFrame = 0;
-                fighter.haltFrameTimer = 0;
-            }
-            fighter.state = 'idle';
-        } else if (Math.abs(fighter.vel.x) > 10 && fighter.isOnGround && !fighter.dashAttackActive) {
-            if (!fighter.haltSequence) {
-                fighter.haltSequence = true;
-                fighter.haltFrame = 0;
-                fighter.haltFrameTimer = 0;
-            }
-            fighter.state = 'idle';
-        } else {
-            // FIX 5 + FIX 6: Clean up visual states when transitioning to idle
-            fighter.state = 'idle';
-            fighter.haltSequence = false;
-            fighter.haltFrame = 0;
-            fighter.haltFrameTimer = 0;
-            // FIX 6: Clear temporary ability flags on idle transition
-            // to prevent stale ability states from persisting
-            if (fighter.dashAttackActive && !state.isDashing && Math.abs(state.vx) < 10) {
-                fighter.dashAttackActive = false;
-            }
+        // SERVER AUTHORITATIVE STATE MAPPING:
+        // fighter.state is set DIRECTLY from the server's state.
+        // The server controls ALL state transitions. No client-side decisions.
+        fighter.state = combatState;
+
+        // Halt sequence: VISUAL-ONLY deceleration sprites after dash
+        fighter.haltSequence = false;
+        fighter.haltFrame = 0;
+        fighter.haltFrameTimer = 0;
+
+        // Only show halt if server says idle AND fighter was just dashing
+        if (combatState === 'idle' && wasDashing && !fighter.isDashing && Math.abs(fighter.vel.x) > 10 && fighter.isOnGround) {
+            fighter.haltSequence = true;
         }
-        
-        // FIX 6: Clear any remaining visual-only override flags when transitioning
-        // to a non-special state. This ensures ability cleanup fully resets visual state.
-        if (fighter.state !== 'slam' && fighter.state !== 'attack' && 
-            fighter.state !== 'hit' && fighter.state !== 'staggered' &&
-            fighter.state !== 'evade' && fighter.state !== 'dash') {
-            // Ensure no stale visual-only flags persist outside their valid contexts
-            fighter.slamHoldPosition = false;
+        // Also show halt for non-dash deceleration
+        if (combatState === 'idle' && !fighter.isDashing && !fighter.isAttacking && 
+            Math.abs(fighter.vel.x) > 10 && fighter.isOnGround && !fighter.haltSequence) {
+            fighter.haltSequence = true;
         }
 
         // The server is now authoritative for evade state.
@@ -1012,6 +953,12 @@ function handleHitNetworkEvent(event) {
     target.hp = event.hp;
   }
 
+  // IMMEDIATELY set lastHitOpponent so abilities can target the right enemy
+  if (attacker) {
+    attacker.lastHitOpponent = target;
+    attacker.lastHitOpponentId = target.clientId;
+  }
+
   const facing = attacker ? attacker.facing : 1;
   if (event.damage && typeof spawnDamageNumber === 'function') {
     spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'normal');
@@ -1063,6 +1010,12 @@ function handleDashAttackNetworkEvent(event) {
 
     if (typeof hit.defenderHp !== 'undefined') {
       target.hp = hit.defenderHp;
+    }
+
+    // IMMEDIATELY set lastHitOpponent for dash attacks
+    if (attacker) {
+      attacker.lastHitOpponent = target;
+      attacker.lastHitOpponentId = target.clientId;
     }
 
     const facing = attacker ? attacker.facing : 1;

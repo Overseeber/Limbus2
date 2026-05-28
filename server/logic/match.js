@@ -84,6 +84,7 @@ class Match {
                 characterKey: charKey,
                 gameState: gameState,
                 config: charConfig,
+                ai: !!config.ai,
             input: {
                 left: false,
                 right: false,
@@ -171,6 +172,13 @@ class Match {
 
         // Update combo timers and combat state once per tick
         this.engine.updateCombos(dt);
+
+        // Update AI player inputs before processing
+        Object.values(this.players).forEach(player => {
+            if (player.ai) {
+                this.simulateAIInput(player);
+            }
+        });
 
         // Update each player's authoritative state
         Object.values(this.players).forEach(player => {
@@ -975,7 +983,7 @@ class Match {
         if (!this.running) return;
 
         const player = this.players[playerId];
-        if (!player || player.gameState.isDefeated) return;
+        if (!player || player.gameState.isDefeated || player.ai) return;
 
         // Store current input state (merge with defaults)
         // ONLY overwrite input, NOT prevInput here.
@@ -993,6 +1001,68 @@ class Match {
             attackReleased: !!input.attackReleased,
             evade: !!input.evade
         };
+    }
+
+    simulateAIInput(player) {
+        if (!player || player.gameState.isDefeated) return;
+
+        const enemy = this.findClosestEnemy(player);
+        const input = player.input;
+
+        input.left = false;
+        input.right = false;
+        input.up = false;
+        input.down = false;
+        input.attack = false;
+        input.guard = false;
+        input.dash = false;
+        input.slam = false;
+        input.attackPressed = false;
+        input.attackReleased = false;
+        input.evade = false;
+
+        if (!enemy || !player.ai) {
+            return;
+        }
+
+        const state = player.gameState;
+        const dx = enemy.gameState.position.x - state.position.x;
+        const distance = Math.abs(dx);
+        const approachDirection = dx > 0 ? 1 : -1;
+        const canAct = !state.isAttacking && !state.isDashing && !state.isEvading && state.onGround && state.state !== 'hit' && state.state !== 'staggered';
+
+        // Basic positioning
+        if (distance > 280) {
+            if (approachDirection > 0) input.right = true;
+            else input.left = true;
+        } else if (distance < 150) {
+            if (approachDirection > 0) input.left = true;
+            else input.right = true;
+        }
+
+        // Random attack decision when close enough
+        if (canAct && distance < 240 && Math.random() < 0.1) {
+            input.attack = true;
+            input.attackPressed = true;
+            if (Math.random() < 0.5) {
+                input.attackReleased = true;
+            }
+        }
+
+        // Guard when very close or threatened
+        if (distance < 140 && Math.random() < 0.2) {
+            input.guard = true;
+        }
+
+        // Dash occasionally to close or reposition
+        if (canAct && Math.random() < 0.03) {
+            input.dash = true;
+        }
+
+        // Evade occasionally for variety
+        if (!state.isEvading && Math.random() < 0.02) {
+            input.evade = true;
+        }
     }
 
     /**

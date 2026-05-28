@@ -107,6 +107,7 @@ let modeSelectButtons = [];
 let cpuOpponentCharacter = null;
 let cpuOpponentAIEnabled = true; // Whether AI opponent has behavior enabled
 let cpuModeStep = 'playerSelect'; // 'playerSelect', 'opponentSelect', 'opponentConfig'
+let cpuUsesServer = false; // If CPU mode is running on the server instead of local simulation
 
 // CPU opponent config screen buttons
 let cpuConfigButtons = [];
@@ -680,6 +681,7 @@ function initBattle() {
     const characterKey = (CHARACTERS && CHARACTERS[playerData.character]) ? playerData.character : 'VALENCINA';
     const fighter = new Fighter(isAI, `P${i + 1}`, characterKey, isPlayerControlled);
     fighter.playerId = i + 1; // Store player ID for UI
+    fighter.isLocalPlayer = isPlayerControlled;
     
     // Ensure AI settings are properly applied
     fighter.isAI = isAI;
@@ -794,6 +796,8 @@ function initCPUBattle() {
   // Player fighter (player-controlled)
   const playerFighter = new Fighter(false, 'P1', playerCharacter, true);
   playerFighter.playerId = 1;
+  playerFighter.clientId = 'LOCAL_PLAYER';
+  playerFighter.isLocalPlayer = true;
   playerFighter.isAI = false;
   playerFighter.isPlayerControlled = true;
   playerFighter.pos.x = width / 2 - 150;
@@ -802,9 +806,10 @@ function initCPUBattle() {
   fighters.push(playerFighter);
   
   // AI opponent
-  const aiFighter = new Fighter(true, 'P2', aiCharacter, false);
+  const aiFighter = new Fighter(cpuOpponentAIEnabled, 'P2', aiCharacter, false);
   aiFighter.playerId = 2;
-  aiFighter.isAI = true;
+  aiFighter.clientId = 'LOCAL_CPU';
+  aiFighter.isAI = cpuOpponentAIEnabled;
   aiFighter.isPlayerControlled = false;
   aiFighter.pos.x = width / 2 + 150;
   aiFighter.pos.y = height - 100;
@@ -814,6 +819,7 @@ function initCPUBattle() {
   window.allFighters = fighters;
   player = playerFighter;
   enemy = aiFighter;
+  cpuUsesServer = false;
   
   setBattleState(BATTLE_STATES.OPENING);
   winner = null;
@@ -1751,7 +1757,7 @@ function updateBattle() {
   battleTimer += dt;
 
   // Send input state to server in multiplayer mode
-  if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.sendInput) {
+  if ((gameMode === 'multiplayer' || cpuUsesServer) && typeof Network !== 'undefined' && Network.sendInput) {
     sendInputState();
   }
 
@@ -1760,23 +1766,15 @@ function updateBattle() {
     for (let i = 0; i < window.allFighters.length; i++) {
       const fighter = window.allFighters[i];
       
-      // Disable player movement when pause menu or settings are open
-      if (!pauseMenuOpen && !pauseSettingsOpen && !fighter.ultimateActive && fighter.isPlayerControlled) {
-       // fighter.handleInput(); handeled by server
-      }
-      
-      // Update AI for non-player-controlled fighters with AI enabled
-      if (!fighter.isPlayerControlled && fighter.isAI && window.allFighters.length > 1) {
-        // Find targets (other fighters)
+      // Local simulation for CPU/offline mode
+      if (gameMode !== 'multiplayer' && !cpuUsesServer) {
         const targets = window.allFighters.filter(f => f !== fighter);
-        if (targets.length > 0) {
-          fighter.updateAI(targets[0]); // Simple AI - target first available
-        }
+        fighter.update(dt, targets);
+        continue;
       }
-      
-      // Update fighter physics and state
-      const targets = window.allFighters.filter(f => f !== fighter);
-    //  fighter.update(dt, targets); // Pass all available targets for multi-player combat server job
+
+      // In multiplayer mode, the server controls fighter simulation.
+      // Client only sends inputs and renders incoming state.
     }
     
     // Handle collisions between all non-defeated fighters
@@ -1910,7 +1908,16 @@ function keyPressed() {
   
   if (battleState === BATTLE_STATES.READY && keyCode === ENTER) {
     if (gameMode === 'cpu') {
-      initCPUBattle();
+      if (typeof Network !== 'undefined' && Network.isConnected) {
+        cpuUsesServer = true;
+        Network.startCpuBattle({
+          characterKey: players[0].character || 'VALENCINA',
+          cpuCharacterKey: cpuOpponentCharacter || 'CALLISTO',
+          cpuAIEnabled: cpuOpponentAIEnabled
+        });
+      } else {
+        initCPUBattle();
+      }
     } else {
       setBattleState(BATTLE_STATES.BATTLE);
     }
@@ -2646,6 +2653,16 @@ function drawCPUOpponentConfig() {
   const startBtn = new UIButton(width / 2 - 120, startBtnY, 240, 55, () => {
     // Apply AI setting to the opponent fighter
     players[0].ready = true;
+    if (typeof Network !== 'undefined' && Network.isConnected) {
+      cpuUsesServer = true;
+      Network.startCpuBattle({
+        characterKey: players[0].character || 'VALENCINA',
+        cpuCharacterKey: cpuOpponentCharacter || 'CALLISTO',
+        cpuAIEnabled: cpuOpponentAIEnabled
+      });
+    } else {
+      initCPUBattle();
+    }
     setBattleState(BATTLE_STATES.READY);
   });
   startBtn.draw('START BATTLE!', { stroke: [80, 200, 80], fill: [40, 90, 40], text: 255, textSize: 20 });

@@ -131,6 +131,9 @@ window.Network = {
   startBattle() {
     if (this.socket) this.socket.emit('startBattle');
   },
+  startCpuBattle(config) {
+    if (this.socket) this.socket.emit('startCpuBattle', config);
+  },
   claimSlot(slotIndex) {
     if (this.socket) this.socket.emit('claimSlot', slotIndex);
   },

@@ -98,14 +98,14 @@ function emitRoomState(roomId) {
 }
 
 function getRoomsData() {
-    return Object.keys(roomList).map(roomId => {
-        const room = roomList[roomId];
-        return {
-            id: roomId,
+    return Object.keys(roomList)
+        .map(roomId => roomList[roomId])
+        .filter(room => room.type !== 'cpu')
+        .map(room => ({
+            id: room.id,
             players: room.clients.length,
             maxPlayers: 2
-        };
-    });
+        }));
 }
 
 function broadcastRoomList() {
@@ -316,13 +316,13 @@ socket.on('toggleReady', () => {
 
     emitRoomState(client.room);
 });
-    // Start the battle with full server authority
+   
     socket.on('startBattle', () => {
         const room = roomList[client.room];
         if (!room) return;
         const state = getRoomState(room);
         if (state.allReady) {
-            // Create Match instance with proper architecture
+            // create the game for that sepcific room
             room.match = new Match(room, io);
             
             // Initialize match with players from room
@@ -349,6 +349,63 @@ socket.on('toggleReady', () => {
             });
         }
     });
+
+    socket.on('startCpuBattle', (data) => {
+        const roomId = `cpu-${socket.id}`;
+        let room = roomList[roomId];
+        if (!room) {
+            room = createRoom(roomId);
+            room.type = 'cpu';
+        }
+
+        if (client.room && client.room !== roomId) {
+            const oldRoom = roomList[client.room];
+            if (oldRoom) {
+                oldRoom.clients = oldRoom.clients.filter(id => id !== socket.id);
+                socket.leave(client.room);
+                if (oldRoom.clients.length === 0 && oldRoom.id !== 'room1') {
+                    delete roomList[oldRoom.id];
+                }
+            }
+        }
+
+        if (!room.clients.includes(socket.id)) {
+            room.clients.push(socket.id);
+            client.room = room.id;
+            socket.join(room.id);
+            console.log('JOIN CPU ROOM:', socket.id, '->', room.id);
+        }
+
+        client.ready = true;
+
+        const playerConfigs = [
+            {
+                clientId: socket.id,
+                characterKey: (data && data.characterKey) || client.character || 'JOHN',
+                index: 0
+            },
+            {
+                clientId: `CPU_${socket.id}`,
+                characterKey: (data && data.cpuCharacterKey) || 'CALLISTO',
+                index: 1,
+                ai: !!(data && data.cpuAIEnabled)
+            }
+        ];
+
+        room.match = new Match(room, io);
+        room.match.initialize(playerConfigs);
+        room.match.start();
+
+        io.to(room.id).emit('battleStart', {
+            slots: [
+                { clientId: playerConfigs[0].clientId, character: playerConfigs[0].characterKey, ready: true },
+                { clientId: playerConfigs[1].clientId, character: playerConfigs[1].characterKey, ready: true }
+            ]
+        });
+
+        console.log('CPU battle started in room ' + room.id + ' for player ' + socket.id);
+    });
+
     socket.on('input', (input) => {
         const room = roomList[client.room];
         if (!room || !room.match) return;

@@ -424,24 +424,45 @@ function processSnapshot(snapshot) {
         // For remote fighters: check their remote input from the snapshot.
         const fighterHasInput = fighter.isLocalPlayer ? hasLocalInput : hasRemoteInput;
 
-        // SERVER AUTHORITATIVE STATE MAPPING:
-        // fighter.state is set DIRECTLY from the server's state.
-        // The server controls ALL state transitions. No client-side decisions.
-        fighter.state = combatState;
-
-        // Halt sequence: VISUAL-ONLY deceleration sprites after dash
-        fighter.haltSequence = false;
-        fighter.haltFrame = 0;
-        fighter.haltFrameTimer = 0;
-
-        // Only show halt if server says idle AND fighter was just dashing
-        if (combatState === 'idle' && wasDashing && !fighter.isDashing && Math.abs(fighter.vel.x) > 10 && fighter.isOnGround) {
-            fighter.haltSequence = true;
-        }
-        // Also show halt for non-dash deceleration
-        if (combatState === 'idle' && !fighter.isDashing && !fighter.isAttacking && 
-            Math.abs(fighter.vel.x) > 10 && fighter.isOnGround && !fighter.haltSequence) {
-            fighter.haltSequence = true;
+        // SERVER AUTHORITATIVE STATE: takes priority for gameplay states
+        // For movement states (dash, jump, run, guard), derive from velocity/flags
+        if (combatState === 'idle') {
+            // Movement states are NOT sent by server - derive from velocity and flags
+            if (wasDashing && !fighter.isDashing && Math.abs(fighter.vel.x) > 10 && fighter.isOnGround) {
+                // Post-dash deceleration: keep idle state but show halt sprites
+                fighter.state = 'idle';
+                fighter.haltSequence = true;
+                fighter.haltFrame = 0;
+                fighter.haltFrameTimer = 0;
+            } else if (fighter.isDashing) {
+                fighter.state = 'dash';
+                fighter.haltSequence = false;
+            } else if (!fighter.isOnGround) {
+                fighter.state = 'jump';
+                fighter.haltSequence = false;
+            } else if (fighter.isGuarding) {
+                fighter.state = 'guard';
+                fighter.haltSequence = false;
+            } else if (isMovingFast) {
+                fighter.state = 'run';
+                fighter.haltSequence = false;
+            } else if (Math.abs(fighter.vel.x) > 10 && fighter.isOnGround && !fighter.dashAttackActive) {
+                fighter.state = 'idle';
+                fighter.haltSequence = true;
+                fighter.haltFrame = 0;
+                fighter.haltFrameTimer = 0;
+            } else {
+                fighter.state = 'idle';
+                fighter.haltSequence = false;
+                fighter.haltFrame = 0;
+                fighter.haltFrameTimer = 0;
+            }
+        } else {
+            // Server explicitly set a non-idle state (attack, hit, evade, etc.)
+            fighter.state = combatState;
+            fighter.haltSequence = false;
+            fighter.haltFrame = 0;
+            fighter.haltFrameTimer = 0;
         }
 
         // The server is now authoritative for evade state.

@@ -39,7 +39,8 @@ function executeSlamAttack(state, abilityConfig, targetState, config) {
       type: statusConfig.type,
       count: 1,
       potency: statusConfig.potency || 1,
-      duration: statusConfig.duration || 0
+      duration: statusConfig.duration || 0,
+      timer: 0
     });
     appliedStatuses.push(statusConfig.type);
   });
@@ -123,7 +124,8 @@ function executeInstallationArt(state, abilityConfig, targetStates, config) {
       type: 'Bleed',
       count: 8,
       potency: 8,
-      duration: 0
+      duration: 0,
+      timer: 0
     });
     appliedStatuses.push('Bleed');
     
@@ -132,7 +134,8 @@ function executeInstallationArt(state, abilityConfig, targetStates, config) {
       type: 'Sinking',
       count: 1, // 1 sinking count
       potency: damage, // sinking potency equal to damage dealt
-      duration: 0
+      duration: 0,
+      timer: 0
     });
     appliedStatuses.push('Sinking');
 
@@ -185,13 +188,14 @@ function onSuccessfulHit(state, targetState, damage, config) {
     state.resources.maxCorpusIngredient
   );
 
-  // APPLY BLEED STATUS
-  targetState.statuses.push({
-    type: 'Bleed',
-    count: 4,
-    potency: 4,
-    duration: 0
-  });
+  // APPLY BLEED STATUS (use engine.applyStatus for proper stacking)
+  if (typeof this.applyStatus === 'function') {
+    this.applyStatus(targetState, 'Bleed', 4, 4);
+  } else {
+    const bleedExisting = targetState.statuses.find(s => s.type === 'Bleed');
+    if (bleedExisting) { bleedExisting.count += 4; bleedExisting.potency += 4; }
+    else targetState.statuses.push({ type: 'Bleed', count: 4, potency: 4, timer: 0 });
+  }
 
   return {
     success: true,

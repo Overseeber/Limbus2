@@ -2687,231 +2687,33 @@ addCombo(attacker) {
   }
 
   addStatus(type, count, potency) {
-    const existing = this.statuses.find((status) => status.type === type);
-    if (existing) {
-      existing.count += count;
-      existing.potency += potency; // Accumulate potency instead of taking max
-    } else {
-      this.statuses.push({ type, count, potency, timer: 1.0 });
-    }
-
-    if (type === 'Game Target') {
-      this.gameTimeTarget = true;
-    }
-    
-    // Emit statusApplied event
-    this.events.emit('statusApplied', {
-      target: this.characterKey,
-      statusType: type,
-      count: count,
-      potency: potency,
-      wasExisting: !!existing
-    });
+    // No-op: server applies statuses authoritatively.
+    // Client receives statuses through snapshot replication.
   }
 
   consumeStatus(type) {
-    const status = this.statuses.find((s) => s.type === type);
-    if (!status) return;
-    status.count -= 1;
-    if (status.count <= 0) {
-      this.statuses = this.statuses.filter((s) => s.type !== type);
-    }
+    // No-op: server consumes statuses authoritatively.
   }
 
   removeStatus(type) {
-    this.statuses = this.statuses.filter((s) => s.type !== type);
+    // No-op: server removes statuses authoritatively.
   }
 
   consumeStatusOnHit() {
-    // Handle Bleed when hit (lose 1 count, trigger damage if count reaches 0)
-    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
-    if (bleedStatus) {
-      bleedStatus.count -= 1;
-      if (bleedStatus.count <= 0) {
-        const damage = bleedStatus.potency;
-        if (damage > 0) {
-          this.requestSelfDamage(damage, { source: 'Bleed' });
-          spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
-        }
-        this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
-      }
-    }
-    
-    // Handle Rupture and Sinking when hit
-    ['Rupture', 'Sinking'].forEach((type) => {
-      const status = this.statuses.find((s) => s.type === type);
-      if (status) {
-        status.count -= 1;
-        if (type === 'Rupture') {
-          this.requestSelfDamage(status.potency, { source: 'Rupture' });
-          spawnDamageNumber(status.potency, this.pos.copy(), 1, false, 'rupture', false, 'status');
-        }
-      }
-    });
+    // No-op: server handles status consumption on hit authoritatively.
   }
 
   consumeStatusOnAttack() {
-    // Handle Bleed when attacking - deal damage by potency, then lose 1 count
-    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
-    if (bleedStatus && bleedStatus.potency > 0) {
-      // Deal damage by current potency
-      const damage = bleedStatus.potency;
-      this.requestSelfDamage(damage, { source: 'Bleed' });
-      spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
-      
-      // Then lose 1 count
-      bleedStatus.count -= 1;
-      if (bleedStatus.count <= 0) {
-        this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
-      }
-    }
+    // No-op: server handles bleed consumption on attack authoritatively.
   }
 
   consumeStatusOnAbility() {
-    // Handle Bleed when using an ability - deal damage by potency, then lose 1 count
-    const bleedStatus = this.statuses.find((s) => s.type === 'Bleed');
-    if (bleedStatus && bleedStatus.potency > 0) {
-      // Deal damage by current potency
-      const damage = bleedStatus.potency;
-      this.requestSelfDamage(damage, { source: 'Bleed' });
-      spawnDamageNumber(damage, this.pos.copy(), 1, false, 'bleed', false, 'status');
-      
-      // Then lose 1 count
-      bleedStatus.count -= 1;
-      if (bleedStatus.count <= 0) {
-        this.statuses = this.statuses.filter((s) => s.type !== 'Bleed');
-      }
-    }
+    // No-op: server handles bleed consumption on ability use authoritatively.
   }
 
   applyStatuses(dt) {
-    this.statuses.forEach((status) => {
-      status.timer += dt;
-      
-      // Burn: Every second, lose 1 count and take damage
-      if (status.type === 'Burn') {
-        if (status.timer >= 1) {
-          status.timer = 0;
-          status.count -= 1;
-          this.requestSelfDamage(status.potency, { source: 'Burn' });
-          spawnDamageNumber(status.potency, this.pos.copy(), 1, false, 'burn', false, 'status');
-          
-          // Status effects don't cause screen shake (only direct combat damage)
-        }
-      }
-      
-      // Tremor: Only lose count when bursted (handled elsewhere)
-      else if (status.type === 'Tremor') {
-        // No automatic count decrease - handled in burst logic
-        // When count expires, raise stagger by potency
-        if (status.count <= 0) {
-          this.stagger += status.potency;
-          this.staggerRecoveryTimer = 0;
-          // Remove expired status
-          this.statuses = this.statuses.filter((s) => s.type !== 'Tremor');
-        }
-      }
-      
-      // Rupture: When hit, lose 1 count (handled in receiveHit)
-      else if (status.type === 'Rupture') {
-        // No automatic count decrease - handled in receiveHit
-      }
-      
-      // Bleed: Lose 1 potency per second
-      else if (status.type === 'Bleed') {
-        if (status.timer >= 1) {
-          status.timer = 0;
-          status.potency = max(0, status.potency - 1);
-          if (status.potency <= 0) {
-            status.count = 0;
-          }
-        }
-      }
-      
-      // Sinking: When hit, lose 1 count (handled in receiveHit)
-      else if (status.type === 'Sinking') {
-        // No automatic count decrease - handled in receiveHit
-        // Apply ongoing effects
-        const resistancePenalty = 0.05 * Math.floor(status.potency / 5);
-        this.damageResistance = min(0.5, 1 - resistancePenalty);
-        const speedPenalty = 0.1 * Math.floor(status.potency / 10);
-        this.speed = max(1, this.speed - speedPenalty);
-      }
-      
-      // Charge: When used, lose 1 count (handled elsewhere)
-      else if (status.type === 'Charge') {
-        // No automatic count decrease - handled when used
-      }
-      
-      // Poise: On crit, lose 1 count (handled in calculateDamage)
-      else if (status.type === 'Poise') {
-        // No automatic count decrease - handled on crit
-        // Apply ongoing effects
-        this.critChance = this.critChance || 0;
-        this.critChance += 0.05 * status.potency;
-      }
-      
-      // Game Target: 5 hits or 10 seconds duration
-      else if (status.type === 'Game Target') {
-        this.speed = 1;
-        if (status.timer >= 10) {
-          status.count = 0;
-        }
-      }
-      
-      // Haste: Gain movement speed based on potency (max +5 bonus)
-      else if (status.type === 'Haste') {
-        // Calculate speed: baseSpeed + haste (capped at +5)
-        const hasteBonus = Math.min(status.potency * 0.01, 0.5);
-        //this.speed = (this.baseSpeed || this.speed) + hasteBonus;
-      }
-      
-      // Bind: Lose movement speed based on potency (max -5 penalty)
-      else if (status.type === 'Bind') {
-        // Calculate speed: baseSpeed - bind (capped at -5)
-        const bindPenalty = Math.min(status.potency * 0.01, 0.5);
-       // this.speed = max(1, (this.baseSpeed || this.speed) - bindPenalty);
-      }
-      
-      // Fragile: Take 10% more damage
-      else if (status.type === 'Fragile') {
-        // Damage multiplier applied in calculateDamage method
-        // No automatic count decrease - status persists until consumed
-      }
-      
-      // Protection: Take 10% less damage
-      else if (status.type === 'Protection') {
-        // Damage reduction applied in calculateDamage method
-        // No automatic count decrease - status persists until consumed
-      }
-      
-      // Precognition: Unique mechanics handled in character profile
-      else if (status.type === 'Precognition') {
-        // No automatic count decrease - handled in character profile
-      }
-      
-      // Overheat: Unique mechanics handled in character profile
-      else if (status.type === 'Overheat') {
-        // No automatic count decrease - handled in character profile
-      }
-      
-      // Remove status if count reaches 0
-      if (status.count <= 0) {
-        // Reset status-specific properties
-        if (status.type === 'Sinking') {
-          this.damageResistance = 1;
-        }
-        if (status.type === 'Poise') {
-          this.critChance = 0;
-        }
-        if (status.type === 'Game Target') {
-          this.speed = this.baseSpeed || 7.5;
-          this.gameTimeTarget = false;
-        }
-        
-        this.statuses.splice(this.statuses.indexOf(status), 1);
-      }
-    });
+    // No-op: server processes all status ticks, decay, and consumption authoritatively.
+    // Client receives authoritative status state through snapshot replication.
   }
 
   drawStatusEffects() {

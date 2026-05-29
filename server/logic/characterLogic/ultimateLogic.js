@@ -119,7 +119,11 @@ function updateJohnUltimate(fighter, ult, enemies, dt) {
       }
       break;
 
-    case 5: // End
+    case 5: // End - set phase to 11 to trigger endUltimate in match
+      // Wait for timer to expire
+      if (ult.timer <= 0) {
+        ult.timer = 0;
+      }
       break;
   }
 }
@@ -127,8 +131,26 @@ function updateJohnUltimate(fighter, ult, enemies, dt) {
 /**
  * ===== CALLISTO ULTIMATE (Closing Time) =====
  * 5-phase ultimate with multiple attack sequences
+ * Each phase transition sets a sprite for the client
  */
 function updateCallistoUltimate(fighter, ult, enemies, dt) {
+  // Set sprite based on current phase first
+  switch (ult.phase) {
+    case 0: ult.currentSprite = 'cpose'; break;
+    case 1: ult.currentSprite = 'cpose'; break;
+    case 2: ult.currentSprite = 'cuf1'; break;
+    case 3: ult.currentSprite = 'cuf2'; break;
+    case 4: ult.currentSprite = 'cuf3'; break;
+    case 5: ult.currentSprite = 'cuf4'; break;
+    case 6: ult.currentSprite = 'cuf4'; break;
+    case 7: ult.currentSprite = 'cuf5'; break;
+    case 8: ult.currentSprite = 'cuf6'; break;
+    case 9: ult.currentSprite = 'cs3f2'; break;
+    case 10: ult.currentSprite = 'cs3f2'; break;
+    case 11: ult.currentSprite = 'cuend'; break;
+    default: ult.currentSprite = 'cidle'; break;
+  }
+  
   const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
 
   targetEnemies.forEach(e => { if (e) { clampToArena(e); if (ult.gravityDisabled) { e.velocity.y = 0; } } });
@@ -343,8 +365,12 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
 
     case 11: // Final hold
       // Fade in red lines
-      ult.redLines.forEach(line => {
-        if (line.opacity < line.maxOpacity) line.opacity += line.fadeSpeed * dt;
+      ult.redLines.forEach(rl => {
+        if (rl.opacity < rl.maxOpacity) rl.opacity += rl.fadeSpeed * dt;
+      });
+      // Keep gravity disabled for enemies during final hold
+      targetEnemies.forEach(e => {
+        if (e) { e.velocity.y = 0; }
       });
       break;
   }
@@ -619,42 +645,38 @@ function clampY(y) { return Math.max(100, Math.min(ARENA_HEIGHT - 100, y)); }
 
 /**
  * Helper: deal damage during ultimate, prevent stagger gain
+ * Returns hit data for broadcasting hit events
  */
 function dealUltDamage(fighter, ult, enemy, damage, isFinal, phase, applyKnockback) {
-  if (!enemy || enemy.isDefeated) return;
+  if (!enemy || enemy.isDefeated) return null;
 
-  const prevProtected = enemy.ultimateProtected || false;
-  const prevCooldown = enemy.hitCooldown || 0;
   const originalStagger = enemy.stagger || 0;
-
-  // Temporarily disable protection to allow damage
-  enemy.ultimateProtected = false;
-
-  // Calculate knockback
   const knockbackAmount = !applyKnockback ? 0 : (isFinal ? 150 : 100);
 
-  // Apply damage
-  if (typeof enemy.receiveHit === 'function') {
-    enemy.receiveHit(damage, fighter, knockbackAmount);
-  } else {
-    enemy.hp = Math.max(0, enemy.hp - damage);
-    if (knockbackAmount > 0) {
-      const dir = enemy.position.x < fighter.position.x ? -1 : 1;
-      enemy.velocity.x = dir * knockbackAmount * 8;
-    }
-    if (enemy.hp <= 0) {
-      enemy.isDefeated = true;
-      enemy.velocity.x = 0;
-      enemy.velocity.y = 0;
-    }
+  // Apply damage directly to server game state
+  const actualDamage = Math.floor(damage);
+  enemy.hp = Math.max(0, enemy.hp - actualDamage);
+  
+  // Apply knockback
+  if (knockbackAmount > 0) {
+    const dir = enemy.position.x < fighter.position.x ? -1 : 1;
+    enemy.velocity.x = dir * knockbackAmount * 8;
   }
 
-  // Restore stagger (prevent any stagger gain)
-  enemy.stagger = originalStagger;
+  // Set enemy to hurt state
+  enemy.state = 'hit';
+  enemy.hitTimer = 0.18;
 
-  // Restore protection
-  enemy.ultimateProtected = prevProtected;
-  enemy.hitCooldown = prevCooldown;
+  // Check defeat
+  const defeated = enemy.hp <= 0;
+  if (defeated) {
+    enemy.isDefeated = true;
+    enemy.velocity.x = 0;
+    enemy.velocity.y = 0;
+  }
+
+  // Restore stagger (prevent any stagger gain during ultimate)
+  enemy.stagger = originalStagger;
 
   // Clamp after knockback
   clampToArena(enemy);
@@ -664,7 +686,14 @@ function dealUltDamage(fighter, ult, enemy, damage, isFinal, phase, applyKnockba
   fighter.velocity.x = 0;
   fighter.velocity.y = 0;
 
-  ult.totalDamage += damage;
+  ult.totalDamage += actualDamage;
+
+  return {
+    damage: actualDamage,
+    hp: enemy.hp,
+    defeated: defeated,
+    knockback: knockbackAmount
+  };
 }
 
 function random(min, max) {

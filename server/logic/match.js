@@ -206,6 +206,21 @@ tick() {
         // Update each player's authoritative state
         Object.values(this.players).forEach(player => {
             if (!player.gameState.isDefeated) {
+                // Skip GameplayEngine state processing if player is under ultimate protection
+                // This keeps enemies locked in their current state during ultimate sequences
+                if (player.gameState.ultimateProtected) {
+                    // Still update status effects, but skip state machine processing
+                    const events = this.engine.processStatuses(player.gameState, dt);
+                    this.handleEvents(player, events);
+                    // Don't process input, physics, or attacks for protected players
+                    // Just enforce boundary clamping
+                    // Keep them in hit state during ultimate
+                    if (player.gameState.state === 'hit') {
+                        player.gameState.hitTimer = 999; // Lock in hit state
+                    }
+                    return;
+                }
+                
                 // Update gameplay state through GameplayEngine FIRST
                 // This allows hit/stagger state to exit on input before input processing
                 const config = {
@@ -1747,7 +1762,9 @@ tick() {
                 ultimateDialogue: player.ultimate ? player.ultimate.dialogue : '',
                 // Ultimate visual effects data
                 ultimateRedLines: player.ultimate ? player.ultimate.redLines || [] : [],
-                ultimateSkulls: player.ultimate ? player.ultimate.skulls || [] : []
+                ultimateSkulls: player.ultimate ? player.ultimate.skulls || [] : [],
+                // Ultimate sprite for client animation
+                ultimateSprite: player.ultimate ? player.ultimate.currentSprite || '' : ''
             }))
         };
 
@@ -1764,17 +1781,29 @@ tick() {
     /**
      * Update ultimate sequences for all players
      * Server-authoritative timing, positioning, and damage
+     * Broadcasts hit events so client shows damage numbers and hurt reactions
      */
     updateUltimates(dt) {
         Object.values(this.players).forEach(player => {
             if (!player.ultimateActive || !player.ultimate || player.gameState.isDefeated) return;
             
+            // Track HP of enemies before update to detect individual hits
+            const enemyPrevHp = {};
+            Object.values(this.players)
+                .filter(p => p.clientId !== player.clientId && !p.gameState.isDefeated)
+                .forEach(enemy => {
+                    enemyPrevHp[enemy.clientId] = enemy.gameState.hp;
+                });
+            
             // Get enemies (all other non-defeated players)
             const enemies = Object.values(this.players)
                 .filter(p => p.clientId !== player.clientId && !p.gameState.isDefeated)
                 .map(p => p.gameState);
+            const enemyPlayers = Object.values(this.players)
+                .filter(p => p.clientId !== player.clientId && !p.gameState.isDefeated);
             
             // Update the appropriate ultimate sequence
+            const prevDamage = player.ultimate.totalDamage;
             switch (player.characterKey) {
                 case 'JOHN':
                     updateJohnUltimate(player.gameState, player.ultimate, enemies, dt);
@@ -1787,8 +1816,42 @@ tick() {
                     break;
             }
             
+            // Broadcast hit events for each enemy that lost HP
+            Object.values(this.players)
+                .filter(p => p.clientId !== player.clientId && !p.gameState.isDefeated)
+                .forEach(enemy => {
+                    const prevHp = enemyPrevHp[enemy.clientId];
+                    const damageTaken = prevHp - enemy.gameState.hp;
+                    if (damageTaken > 0) {
+                        this.broadcast({
+                            type: 'HIT',
+                            attackerId: player.clientId,
+                            targetId: enemy.clientId,
+                            damage: damageTaken,
+                            hp: enemy.gameState.hp,
+                            knockback: 0,
+                            statuses: [],
+                            defeated: enemy.gameState.isDefeated || false,
+                            isUltimate: true
+                        });
+                        
+                        // Track total damage correctly
+                        if (player.ultimate) {
+                            // The total is already tracked in dealUltDamage
+                        }
+                        
+                        if (enemy.gameState.isDefeated) {
+                            this.broadcast({
+                                type: 'FIGHTER_DEFEATED',
+                                fighterId: enemy.clientId,
+                                defeatedBy: player.clientId
+                            });
+                        }
+                    }
+                });
+            
             // Check if ultimate should end (phase 11+ means end sequence)
-            if (player.ultimate.phase >= 11 && player.ultimate.timer) {
+            if (player.ultimate.phase >= 11 && player.ultimate.timer !== undefined) {
                 if (player.ultimate.timer <= 0) {
                     this.endUltimate(player);
                 }

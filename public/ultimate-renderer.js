@@ -31,6 +31,12 @@ function applyUltimateState(fighter, state) {
   if (state.ultimateSkulls) {
     fighter.ultimateSkulls = state.ultimateSkulls;
   }
+  
+  // Apply ultimate sprite to fighter's current sprite for animation
+  if (fighter.ultimateActive && state.ultimateSprite) {
+    fighter.currentSprite = state.ultimateSprite;
+    fighter.state = 'ultimate';
+  }
 }
 
 /**
@@ -132,17 +138,17 @@ function drawUltimateRedLines(redLines) {
   strokeWeight(3);
   noFill();
   
-  redLines.forEach(line => {
-    if (line.opacity <= 0) return;
+  redLines.forEach(rl => {
+    if (rl.opacity <= 0) return;
     
     // Red lines with alpha
-    stroke(255, 50, 50, line.opacity * 255);
-    line(line.topX, line.topY, line.bottomX, line.bottomY);
+    stroke(255, 50, 50, rl.opacity * 255);
+    line(rl.topX, rl.topY, rl.bottomX, rl.bottomY);
     
     // Glow effect
-    stroke(255, 0, 0, line.opacity * 100);
+    stroke(255, 0, 0, rl.opacity * 100);
     strokeWeight(6);
-    line(line.topX, line.topY, line.bottomX, line.bottomY);
+    line(rl.topX, rl.topY, rl.bottomX, rl.bottomY);
   });
   
   pop();

@@ -774,6 +774,9 @@ class Fighter {
     } else if (this.state === 'attack' || this.state === 'attacking') {
       const frameDt = dt !== undefined ? dt : (typeof deltaTime !== 'undefined' ? deltaTime / 1000 : 1 / 60);
       this.updateAttackSprite(frameDt);
+    } else {
+      // Default case: Use stateMap for normal state transitions (idle, run, jump, guard, evade, etc.)
+      this.currentSprite = stateMap[this.state] || 'idle';
     }
   }
 

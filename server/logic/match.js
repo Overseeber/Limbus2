@@ -725,6 +725,9 @@ class Match {
                 if (player.gameState.state === 'attack') {
                     player.gameState.state = 'idle';
                     player.gameState.isAttacking = false;
+                    // Clear attack animation state to prevent sprite from lingering
+                    player.gameState.attackPhase = 'none';
+                    player.gameState.attackSequence = 0;
                 }
             }
         }
@@ -739,6 +742,9 @@ class Match {
                 if (player.gameState.state === 'attack') {
                     player.gameState.state = 'idle';
                     player.gameState.isAttacking = false;
+                    // Clear attack animation state to prevent sprite from lingering
+                    player.gameState.attackPhase = 'none';
+                    player.gameState.attackSequence = 0;
                 }
             }
         }

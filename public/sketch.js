@@ -2753,6 +2753,17 @@ function handleCPUConfigClick(mx, my) {
 function drawLobby() {
   background(20);
 
+  // Lobby connection status
+  if (typeof Network !== 'undefined' && !Network.isConnected) {
+    push();
+    textAlign(CENTER, CENTER);
+    textSize(18);
+    fill(255, 220, 100);
+    noStroke();
+    text('connecting', width / 2, height - 24);
+    pop();
+  }
+
   // Title and Room Info
   push();
   textAlign(CENTER, CENTER);

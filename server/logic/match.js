@@ -133,6 +133,7 @@ class Match {
                 attackCharge: false,      // Whether current attack is charged
                 attackCounter: 0,         // 1-3 rotation counter
                 hitTargetsThisAttack: [], // Track who we've hit this attack
+                comboHoldTimer: 0,        // Time remaining for combo-ready hold state
                 dashAttackActive: false,  // Whether dash attack animation is playing
                 // Slam state
                 isSlamAttacking: false,
@@ -440,11 +441,21 @@ tick() {
         const now = Date.now();
         const comboWindow = 750;
         const canChainAttack = !player.attackCharge && player.attackCounter > 0 && (now - player.lastAttackTime) < comboWindow;
+        const comboHoldActive = player.comboHoldTimer > 0 && player.attackPhase === 'comboHold';
         const canAttackNow = player.attackTimer <= 0 || canChainAttack;
 
         // Allow attack if not in hit state (stagger is OK with staggerTimer <= 0)
         const canAttack = state.state !== 'hit' && state.state !== 'slam' &&
                          (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
+
+        // Interrupt held combo state with any non-attack input.
+        if (comboHoldActive && (
+            input.left || input.right || input.up || input.down || input.guard ||
+            input.dash || input.slam || input.evade || input.abilityQ || input.abilityX
+        ) && !input.attack && !input.attackPressed && !input.attackReleased) {
+            this.clearComboHold(player);
+            state.state = 'idle';
+        }
 
         // IMPORTANT: Only set attackHoldStart ONCE per press, not every tick.
         // The client holds attackPressed sticky for 120ms. Without this check,
@@ -457,9 +468,10 @@ tick() {
         }
 
         // RESTORED: Start attack on release (like original game: press to charge, release to swing)
-        // Also handle the case where client sends continuous attack (no release detected at 20tps)
-        // If attack is held for more than one tick and we have an active request, start attack
-        if (player.attackRequestActive && state.state !== 'attack' && state.state !== 'attacking') {
+        // Allow next attack to begin immediately if the fighter is still in combo-hold state.
+        if (player.attackRequestActive && ((state.state !== 'attack' && state.state !== 'attacking') || comboHoldActive)) {
+            // Also handle the case where client sends continuous attack (no release detected at 20tps)
+            // If attack is held for more than one tick and we have an active request, start attack
             if (attackReleased) {
                 const now = Date.now();
                 const heldDuration = now - (player.attackHoldStart || now);
@@ -467,7 +479,6 @@ tick() {
                 
                 // Use attackCounter for 1-3 rotation like original game
                 const timeSinceLastAttack = now - player.lastAttackTime;
-                const comboWindow = 500;
                 let sequence = 1;
 
                 if (!isCharged && timeSinceLastAttack < comboWindow && player.attackCounter > 0) {
@@ -490,7 +501,6 @@ tick() {
                     const heldDuration = now - player.attackHoldStart;
                     const isCharged = heldDuration >= 300;
                     const timeSinceLastAttack = now - player.lastAttackTime;
-                    const comboWindow = 500;
                     let sequence = 1;
                     
                     if (!isCharged && timeSinceLastAttack < comboWindow && player.attackCounter > 0) {
@@ -720,6 +730,7 @@ tick() {
         player.attackFrameTimer = 0;
         player.attackFrame = 0;
         player.strikeActive = false;
+        player.comboHoldTimer = 0;
         player.lastAttackTime = now;
         player.attackCharge = isCharged;
         player.attackRequestActive = false;
@@ -924,6 +935,14 @@ tick() {
             // or when the fighter starts a new action
         }
 
+        if (player.comboHoldTimer > 0) {
+            player.comboHoldTimer -= dt;
+            if (player.comboHoldTimer <= 0) {
+                player.comboHoldTimer = 0;
+                this.clearComboHold(player);
+            }
+        }
+
         // DASH RECHARGE
         if (state.dashCharges >= 3) {
             state.dashTimer = 0;
@@ -1007,17 +1026,48 @@ tick() {
         // Clear the per-attack hit flag for next attack
         if (cs) cs.lastAttackHit = false;
 
+        const now = Date.now();
+        const comboWindow = 750;
+        const timeSinceAttack = now - player.lastAttackTime;
+        const attackKey = player.attackSequence === 1 ? 'light' : player.attackSequence === 2 ? 'medium' : 'heavy';
+        const attackDef = player.config.attacks ? player.config.attacks[attackKey] : null;
+
+        state.isAttacking = false;
+        player.attackCharge = false;
+        player.strikeActive = false;
+        player.lastAttackTime = now;
+
+        if (player.attackCounter > 0 && timeSinceAttack < comboWindow) {
+            state.state = 'attack';
+            player.attackPhase = 'comboHold';
+            player.attackFrameTimer = attackDef ? attackDef.recovery : 0;
+            player.comboHoldTimer = comboWindow;
+            console.log(`[Attack] ${player.clientId} attack complete, entering combo hold for ${player.comboHoldTimer}ms`);
+        } else {
+            state.state = 'idle';
+            player.attackSequence = 0;
+            player.attackPhase = 'none';
+            player.attackFrameTimer = 0;
+            player.attackFrame = 0;
+            player.comboHoldTimer = 0;
+            console.log(`[Attack] ${player.clientId} attack complete`);
+        }
+        // Don't reset attackTimer here; preserve any remaining cooldown so the combo timing is correct.
+    }
+
+    /**
+     * Helper: End combo hold and return to idle state when the combo window expires.
+     */
+    clearComboHold(player) {
+        const state = player.gameState;
         state.isAttacking = false;
         state.state = 'idle';
         player.attackSequence = 0;
         player.attackPhase = 'none';
         player.attackFrameTimer = 0;
         player.attackFrame = 0;
-        player.attackCharge = false;
         player.strikeActive = false;
-        player.lastAttackTime = Date.now();
-        // Don't reset attackTimer here; preserve any remaining cooldown so the combo timing is correct.
-        console.log(`[Attack] ${player.clientId} attack complete`);
+        player.comboHoldTimer = 0;
     }
 
     /**

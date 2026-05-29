@@ -814,7 +814,7 @@ class Fighter {
         visualFrame = 0;
       } else if (this.attackPhase === 'active') {
         visualFrame = 1;
-      } else if (this.attackPhase === 'recovery') {
+      } else if (this.attackPhase === 'recovery' || this.attackPhase === 'comboHold') {
         const recoveryFrames = sequence.slice(2);
         const recoveryDuration = attackDef ? attackDef.recovery : 0.32;
         const perFrame = recoveryFrames.length > 0 ? recoveryDuration / recoveryFrames.length : recoveryDuration;
@@ -833,7 +833,7 @@ class Fighter {
       let visualFrame = 0;
       if (this.attackPhase === 'startup' || this.attackPhase === 'active') {
         visualFrame = 0;
-      } else if (this.attackPhase === 'recovery') {
+      } else if (this.attackPhase === 'recovery' || this.attackPhase === 'comboHold') {
         const recoveryFrames = sequence.slice(1);
         const recoveryDuration = attackDef ? attackDef.recovery : 0.40;
         const perFrame = recoveryFrames.length > 0 ? recoveryDuration / recoveryFrames.length : recoveryDuration;
@@ -853,7 +853,7 @@ class Fighter {
         visualFrame = 0;
       } else if (this.attackPhase === 'active') {
         visualFrame = 1;
-      } else if (this.attackPhase === 'recovery') {
+      } else if (this.attackPhase === 'recovery' || this.attackPhase === 'comboHold') {
         visualFrame = 2;
       }
       this.currentSprite = sequence[Math.min(visualFrame, sequence.length - 1)];
@@ -895,7 +895,7 @@ class Fighter {
         visualFrame = 0;
       } else if (attackPhase === 'active') {
         visualFrame = 1;
-      } else if (attackPhase === 'recovery') {
+      } else if (attackPhase === 'recovery' || attackPhase === 'comboHold') {
         visualFrame = 2;
       }
       this.currentSprite = sequence1[Math.min(visualFrame, sequence1.length - 1)];
@@ -919,7 +919,7 @@ class Fighter {
       const damageFrames = [false, true];
       if (attackPhase === 'startup' || attackPhase === 'active') {
         visualFrame = 0;
-      } else if (attackPhase === 'recovery') {
+      } else if (attackPhase === 'recovery' || attackPhase === 'comboHold') {
         visualFrame = 1;
       }
       this.currentSprite = sequence2[Math.min(visualFrame, sequence2.length - 1)];
@@ -953,7 +953,7 @@ class Fighter {
         visualFrame = 0;
       } else if (attackPhase === 'active') {
         visualFrame = 1;
-      } else if (attackPhase === 'recovery') {
+      } else if (attackPhase === 'recovery' || attackPhase === 'comboHold') {
         const recoveryTime = this.attackFrameTimer || 0;
         visualFrame = recoveryTime < 0.2 ? 2 : 3;
       }

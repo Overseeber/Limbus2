@@ -507,12 +507,9 @@ class GameplayEngine {
         state.hitTimer = 0;
         events.push({ type: 'STATE_CHANGE', from: 'hit', to: 'idle' });
       } else {
-        state.hitTimer = (state.hitTimer || 0) - dt;
-        if (state.hitTimer <= 0) {
-          state.state = 'idle';
-          state.hitTimer = 0;
-          events.push({ type: 'STATE_CHANGE', from: 'hit', to: 'idle' });
-        }
+        // Hold hit state until the player provides input.
+        // Do not auto-transition out of hit by timer expiration.
+        state.hitTimer = Math.max(0, (state.hitTimer || 0) - dt);
       }
     }
     const su = this.updateStagger(state, dt, config);

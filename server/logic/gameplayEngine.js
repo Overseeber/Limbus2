@@ -123,20 +123,56 @@ class GameplayEngine {
   }
 
   updateStagger(fighter, dt, config) {
-    const threshold = config.staggerThreshold || 1000, length = config.staggerLength || 5;
-    if (fighter.state === 'staggered') {
-      if (fighter.staggerTimer > 0) {
-        fighter.staggerTimer -= dt; fighter.stagger = (fighter.staggerTimer / length) * threshold;
-        if (fighter.staggerTimer <= 0) { fighter.staggerRecoveryTimer = length; fighter.stagger = 0; return { state: 'recovering', recoveryTimer: length }; }
-        return { state: 'staggered', timer: fighter.staggerTimer };
+    const threshold = config.staggerThreshold || 1000;
+    const length = config.staggerLength || 5;
+    const recoveryDelay = config.staggerRecoveryDelay || 2.0;
+    const recoveryRate = config.staggerRecoveryRate || 12; // How much stagger decreases per second during recovery
+    
+    // PHASE 1: ACTIVE STAGGER - Fighter is completely locked
+    if (fighter.state === 'staggered' && fighter.staggerTimer > 0) {
+      fighter.staggerTimer -= dt;
+      
+      if (fighter.staggerTimer <= 0) {
+        // Stagger active duration expired - enter recovery delay phase
+        fighter.staggerTimer = 0;
+        fighter.staggerRecoveryTimer = recoveryDelay; // Reset to delay duration
+        return { state: 'staggered', timer: 0, phase: 'active' };
       }
+      
+      return { state: 'staggered', timer: fighter.staggerTimer, phase: 'active' };
     }
+    
+    // PHASE 2: RECOVERY DELAY - Fighter exits 'staggered' state but stagger still decreases slowly
     if (fighter.staggerRecoveryTimer > 0) {
       fighter.staggerRecoveryTimer -= dt;
-      if (fighter.staggerRecoveryTimer <= 0) { fighter.state = 'idle'; fighter.stagger = 0; return { state: 'idle' }; }
-      return { state: 'recovering' };
+      
+      // During delay, stagger decays very slowly (recovery hasn't started yet)
+      // This creates a "vulnerable" window where stagger doesn't recover fast
+      const delayRecoveryRate = recoveryRate * 0.2; // 20% of normal recovery during delay
+      fighter.stagger = Math.max(0, fighter.stagger - delayRecoveryRate * dt);
+      
+      // When delay expires, fighter is back to idle and stagger recovery can begin
+      if (fighter.staggerRecoveryTimer <= 0) {
+        fighter.state = 'idle';
+        fighter.staggerRecoveryTimer = 0;
+        return { state: 'idle', stagger: fighter.stagger, phase: 'recovered' };
+      }
+      
+      // Fighter was in staggered state, now transitioning to idle during recovery
+      if (fighter.state === 'staggered') {
+        fighter.state = 'idle';
+      }
+      
+      return { state: 'idle', stagger: fighter.stagger, phase: 'recovery' };
     }
-    return { state: fighter.state };
+    
+    // PHASE 3: CONTINUOUS RECOVERY - Stagger decays automatically over time
+    // Fighter is fully idle now, stagger just passively decreases
+    if (fighter.stagger > 0) {
+      fighter.stagger = Math.max(0, fighter.stagger - recoveryRate * dt);
+    }
+    
+    return { state: fighter.state, stagger: fighter.stagger, phase: 'decay' };
   }
 
   applyStatus(target, type, count, potency, duration) {
@@ -406,8 +442,8 @@ class GameplayEngine {
     if (!hit.hit) { result.reason = 'Missed'; return result; }
     result.hit = true;
 
-    let base = attackData.baseDamage || attacker.baseDamage, knock = attackData.knockback || 0, stagger = attackData.staggerDamage || 0;
-    if (defender.isGuarding) { base *= 0.5; knock = Math.floor(knock * 0.5); stagger = 0; result.wasGuarded = true; }
+    let base = attackData.baseDamage || attacker.baseDamage, knock = attackData.knockback || 0;
+    if (defender.isGuarding) { base *= 0.5; knock = Math.floor(knock * 0.5); result.wasGuarded = true; }
 
     const dmgResult = this.calculateDamage(base, attacker, defender);
     const ap = this.applyDamage(defender, dmgResult.damage);
@@ -419,7 +455,25 @@ class GameplayEngine {
 
     if (defender.state !== 'staggered') { defender.state = 'hit'; defender.hitTimer = 0.18; }
     if (knock) { const dir = defender.position.x < attacker.position.x ? -1 : 1; const fk = this.calculateKnockback(knock, attacker); this.applyKnockback(defender, fk, dir, attacker); result.knockback = fk; }
-    if (stagger && defender.state !== 'staggered') { defender.stagger += stagger; result.staggerResult = { staggered: false, stagger: defender.stagger }; if (defender.stagger >= (config.staggerThreshold || 1000)) { defender.state = 'staggered'; defender.staggerTimer = config.staggerLength || 5; defender.stagger = config.staggerThreshold || 1000; result.staggerResult = { staggered: true, duration: config.staggerLength || 5 }; } }
+    
+    // STAGGER SYSTEM: Buildup is based on ACTUAL DAMAGE TAKEN * 1.2
+    // When guarding, no stagger is applied
+    if (!result.wasGuarded && defender.state !== 'staggered') {
+      const staggerBuildup = Math.floor(result.damage * 1.2);
+      defender.stagger += staggerBuildup;
+      // Reset recovery timer when taking damage - recovery only starts after delay
+      defender.staggerRecoveryTimer = (config.staggerRecoveryDelay || 2.0);
+      result.staggerResult = { staggered: false, stagger: defender.stagger };
+      
+      // Check if stagger threshold reached
+      if (defender.stagger >= (config.staggerThreshold || 1000)) {
+        defender.state = 'staggered';
+        defender.staggerTimer = config.staggerLength || 5;
+        defender.stagger = config.staggerThreshold || 1000;
+        defender.staggerRecoveryTimer = 0; // Reset recovery when entering stagger
+        result.staggerResult = { staggered: true, duration: config.staggerLength || 5 };
+      }
+    }
     if (attackData.statusEffects) attackData.statusEffects.forEach(s => { this.applyStatus(defender, s.type, s.count, s.potency); result.statuses.push(s.type); });
     // Call character-specific onSuccessfulHit for per-hit status application
     const hitEffects = this.callOnSuccessfulHit(attacker, defender, result.damage, config);

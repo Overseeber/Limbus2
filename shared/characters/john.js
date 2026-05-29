@@ -19,6 +19,8 @@ const JOHN_CONFIG = {
   knockbackMultiplier: 1.0,
   staggerThreshold: 1000,
   staggerLength: 5,
+  staggerRecoveryDelay: 2.0,    // Delay before stagger recovery begins (seconds)
+  staggerRecoveryRate: 12,      // Stagger decay rate per second during recovery
   // MOVEMENT PHYSICS (defaults for John)
   friction: 0.85,
   jumpHeight: 1200,       // Jump initial velocity (pixels/s) - OLD CLIENT: jumpStrength = -20 at 60fps

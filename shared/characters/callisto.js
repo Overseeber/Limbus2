@@ -21,6 +21,8 @@ const CALLISTO_CONFIG = {
   knockbackMultiplier: 2.0,
   staggerThreshold: 1409,
   staggerLength: 6,
+  staggerRecoveryDelay: 2.0,    // Delay before stagger recovery begins (seconds)
+  staggerRecoveryRate: 12,      // Stagger decay rate per second during recovery
   
   // MOVEMENT PHYSICS
   friction: 0.85,         // Friction multiplier (0-1)

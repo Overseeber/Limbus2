@@ -21,6 +21,8 @@ const VALENCINA_CONFIG = {
   knockbackMultiplier: 1.0,
   staggerThreshold: 1300,
   staggerLength: 5,
+  staggerRecoveryDelay: 2.0,    // Delay before stagger recovery begins (seconds)
+  staggerRecoveryRate: 12,      // Stagger decay rate per second during recovery
   
   // MOVEMENT PHYSICS
   friction: 0.85,         // Friction multiplier (0-1) - applied each tick

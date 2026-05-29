@@ -943,6 +943,10 @@ tick() {
             }
         }
 
+        if (state.state === 'attack' && player.attackPhase === 'comboHold' && player.comboHoldTimer <= 0) {
+            this.clearComboHold(player);
+        }
+
         // DASH RECHARGE
         if (state.dashCharges >= 3) {
             state.dashTimer = 0;
@@ -1027,8 +1031,8 @@ tick() {
         if (cs) cs.lastAttackHit = false;
 
         const now = Date.now();
-        const comboWindow = 750;
-        const timeSinceAttack = now - player.lastAttackTime;
+        const comboWindow = 750; // ms used for combo chain detection
+        const comboHoldSeconds = comboWindow / 1000; // attack timer uses seconds
         const attackKey = player.attackSequence === 1 ? 'light' : player.attackSequence === 2 ? 'medium' : 'heavy';
         const attackDef = player.config.attacks ? player.config.attacks[attackKey] : null;
 
@@ -1037,12 +1041,12 @@ tick() {
         player.strikeActive = false;
         player.lastAttackTime = now;
 
-        if (player.attackCounter > 0 && timeSinceAttack < comboWindow) {
+        if (player.attackCounter > 0) {
             state.state = 'attack';
             player.attackPhase = 'comboHold';
             player.attackFrameTimer = attackDef ? attackDef.recovery : 0;
-            player.comboHoldTimer = comboWindow;
-            console.log(`[Attack] ${player.clientId} attack complete, entering combo hold for ${player.comboHoldTimer}ms`);
+            player.comboHoldTimer = comboHoldSeconds;
+            console.log(`[Attack] ${player.clientId} attack complete, entering combo hold for ${player.comboHoldTimer}s`);
         } else {
             state.state = 'idle';
             player.attackSequence = 0;

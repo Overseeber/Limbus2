@@ -130,7 +130,12 @@ class Match {
                 // Dash attack state
                 dashAttackQueued: false,  // Whether dash attack is pending
                 dashAttackInitiated: false, // Whether dash attack was triggered
-                dashAttackResolved: false  // Whether dash attack damage has been applied
+                dashAttackResolved: false,  // Whether dash attack damage has been applied
+                // Ability state (character-specific animation and timing)
+                installationArtActive: false,   // Callisto Installation Art animation active
+                installationArtTimer: 0,        // Timer for Installation Art animation
+                timeToHuntCasting: false,       // Valencina Time to Hunt casting animation
+                timeToHuntCastTimer: 0          // Timer for Time to Hunt casting
             };
         });
     }
@@ -193,6 +198,9 @@ class Match {
 
                 // Handle events from GameplayEngine
                 this.handleEvents(player, events);
+
+                // Update ability animation timers
+                this.updateAbilityAnimations(player, dt);
 
                 // Now process input with edge detection (after state updates)
                 // Skip AI input during opening phase
@@ -481,6 +489,34 @@ class Match {
             this.startEvade(player);
         }
 
+        // ABILITY INPUT - Q and X keys for character-specific abilities
+        // These are edge-triggered to prevent repeated activation
+        const abilityQEdge = input.abilityQ && !prevInput.abilityQ;
+        const abilityXEdge = input.abilityX && !prevInput.abilityX;
+
+        // Check if fighter can use abilities (not in certain states)
+        const canUseAbility = state.state !== 'hit' && state.state !== 'slam' &&
+                             (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
+                             !state.isDefeated;
+
+        // Execute Character-specific abilities
+        if (canUseAbility) {
+            if (abilityQEdge) {
+                if (player.characterKey === 'CALLISTO') {
+                    this.executeAbility(player.clientId, 'installationArt', null);
+                } else if (player.characterKey === 'VALENCINA') {
+                    this.executeAbility(player.clientId, 'timeToHunt', null);
+                }
+            }
+            if (abilityXEdge) {
+                if (player.characterKey === 'CALLISTO') {
+                    // Reserved for future Callisto ability
+                } else if (player.characterKey === 'VALENCINA') {
+                    // Reserved for future Valencina ability (disposial)
+                }
+            }
+        }
+
         // EVADE INTERRUPTION: Any player input OR being hit ends evade immediately
         // Check if currently evading
         if (state.isEvading) {
@@ -672,6 +708,40 @@ class Match {
         player.attackCounter = sequence;
         
         console.log(`[Attack] ${player.clientId} started attack ${sequence} (${attackKey}), phase=startup`);
+    }
+
+    /**
+     * Update ability animation timers - manages animation state during ability execution
+     * Decrements timers and resets animation flags when timers expire
+     */
+    updateAbilityAnimations(player, dt) {
+        // Update Installation Art animation timer (Callisto)
+        if (player.installationArtActive) {
+            player.installationArtTimer -= dt;
+            if (player.installationArtTimer <= 0) {
+                player.installationArtActive = false;
+                player.installationArtTimer = 0;
+                // Return to idle state after ability animation completes
+                if (player.gameState.state === 'attack') {
+                    player.gameState.state = 'idle';
+                    player.gameState.isAttacking = false;
+                }
+            }
+        }
+
+        // Update Time to Hunt casting animation timer (Valencina)
+        if (player.timeToHuntCasting) {
+            player.timeToHuntCastTimer -= dt;
+            if (player.timeToHuntCastTimer <= 0) {
+                player.timeToHuntCasting = false;
+                player.timeToHuntCastTimer = 0;
+                // Return to idle state after ability animation completes
+                if (player.gameState.state === 'attack') {
+                    player.gameState.state = 'idle';
+                    player.gameState.isAttacking = false;
+                }
+            }
+        }
     }
 
     /**
@@ -1516,6 +1586,19 @@ class Match {
                 .map(p => p.gameState);
         }
 
+        // Set ability animation states BEFORE executing to ensure state is sent in next snapshot
+        if (abilityId === 'installationArt') {
+            attacker.installationArtActive = true;
+            attacker.installationArtTimer = 1.0; // 1 second animation
+            attacker.gameState.state = 'attack';
+            attacker.gameState.isAttacking = true;
+        } else if (abilityId === 'timeToHunt') {
+            attacker.timeToHuntCasting = true;
+            attacker.timeToHuntCastTimer = 0.8; // 0.8 second casting animation
+            attacker.gameState.state = 'attack';
+            attacker.gameState.isAttacking = true;
+        }
+
         const result = this.engine.executeAbility(
             attacker.gameState,
             abilityId,
@@ -1619,7 +1702,16 @@ class Match {
                 combo: (this.engine.combatState[player.clientId] || {}).combo || 0,
                 comboTimer: (this.engine.combatState[player.clientId] || {}).comboTimer || 0,
                 // Stagger state (authoritative)
-                stagger: player.gameState.stagger || 0
+                stagger: player.gameState.stagger || 0,
+                // Ability cooldowns (for UI countdown timers)
+                abilityCooldowns: { ...player.gameState.abilityCooldowns } || {},
+                // Character-specific ability resources
+                resources: { ...player.gameState.resources } || {},
+                // Ability animation states (for synced ability visuals)
+                installationArtActive: !!player.installationArtActive,
+                installationArtTimer: player.installationArtTimer || 0,
+                timeToHuntCasting: !!player.timeToHuntCasting,
+                timeToHuntCastTimer: player.timeToHuntCastTimer || 0
             }))
         };
 

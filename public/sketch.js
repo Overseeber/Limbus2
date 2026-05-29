@@ -479,8 +479,40 @@ function processSnapshot(snapshot) {
         if (state.attackSequence > 0 && fighter.attackSequence !== state.attackSequence) {
             fighter.slashEffectsSpawned = false;
         }
+
+        // Apply ability cooldowns from server snapshot
+        // These are used for UI countdown timers and ability state
+        if (state.abilityCooldowns) {
+            fighter.installationArtCooldown = state.abilityCooldowns.installationArt || 0;
+            fighter.timeToHuntCooldown = state.abilityCooldowns.timeToHunt || 0;
+            fighter.allAbilityCooldowns = { ...state.abilityCooldowns };
+        } else {
+            fighter.installationArtCooldown = fighter.installationArtCooldown || 0;
+            fighter.timeToHuntCooldown = fighter.timeToHuntCooldown || 0;
+        }
+
+        // Apply character-specific resources from server snapshot
+        // These drive resource-dependent mechanics (Corpus for Callisto, Precognition for Valencina)
+        if (state.resources) {
+            if (fighter.characterKey === 'CALLISTO') {
+                fighter.corpusIngredient = state.resources.corpusIngredient || 0;
+                fighter.maxCorpusIngredient = state.resources.maxCorpusIngredient || 100;
+            } else if (fighter.characterKey === 'VALENCINA') {
+                fighter.precognition = state.resources.precognition || 0;
+                fighter.maxPrecognition = state.resources.maxPrecognition || 100;
+                fighter.shinActive = state.resources.shinActive || false;
+            }
+        }
+
+        // Apply ability animation states (for synced ability visuals)
+        // These states drive which sprites are shown during abilities
+        fighter.installationArtActive = !!state.installationArtActive;
+        fighter.installationArtTimer = state.installationArtTimer || 0;
+        fighter.timeToHuntCasting = !!state.timeToHuntCasting;
+        fighter.timeToHuntCastTimer = state.timeToHuntCastTimer || 0;
     }
 }
+
 
 // ============================================================
 // INPUT SYSTEM - RESTORED for reliable edge detection at 20tps

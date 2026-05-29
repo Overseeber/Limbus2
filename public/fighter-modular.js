@@ -651,15 +651,6 @@ class Fighter {
       }
     }
     
-    // RESTORED: Map attack phase to animation frame for proper visual feedback
-    if (this.state === 'attack' || this.state === 'attacking') {
-      if (this.attackSequence > 0) {
-        const frameDt = dt !== undefined ? dt : (typeof deltaTime !== 'undefined' ? deltaTime / 1000 : 1 / 60);
-        this.updateAttackSprite(frameDt);
-        return;
-      }
-    }
-
     // State to sprite mapping for Callisto
     if (this.characterKey === 'CALLISTO') {
       const callistoStateMap = {
@@ -676,6 +667,12 @@ class Fighter {
         duck: 'cidle',
         ultimate: 'cuend'
       };
+
+      // Installation Art ability animation - show cguard sprite during casting
+      if (this.installationArtActive) {
+        this.currentSprite = 'cguard';
+        return;
+      }
 
       // Handle special states for Callisto
       // Hurt/hit states take priority over slam to ensure correct hurt sprite when hit during slam
@@ -708,12 +705,11 @@ class Fighter {
       } else if (this.usePostDashSprite && !this.isDashing) {
         this.usePostDashSprite = false;
         this.currentSprite = callistoStateMap[this.state] || 'cidle';
+      } else if (this.state === 'attack' || this.state === 'attacking') {
+        const frameDt = dt !== undefined ? dt : (typeof deltaTime !== 'undefined' ? deltaTime / 1000 : 1 / 60);
+        this.updateAttackSprite(frameDt);
       } else {
-        if (this.installationArtActive) {
-          // Don't override sprite during Installation Art
-        } else {
-          this.currentSprite = callistoStateMap[this.state] || 'cidle';
-        }
+        this.currentSprite = callistoStateMap[this.state] || 'cidle';
       }
       return;
     }
@@ -734,8 +730,9 @@ class Fighter {
       ultimate: 'dist1'
     };
 
-    // For Valencina, respect currentSprite during Time to Hunt casting
-    if (this.characterKey === 'VALENCINA' && this.timeToHuntCasting) {
+    // Time to Hunt ability animation - show dist1 sprite during casting
+    if (this.timeToHuntCasting) {
+      this.currentSprite = 'dist1';
       return;
     }
 
@@ -774,29 +771,18 @@ class Fighter {
     } else if (this.usePostDashSprite && !this.isDashing) {
       this.usePostDashSprite = false;
       this.currentSprite = stateMap[this.state] || 'idle';
-    } else {
-      this.currentSprite = stateMap[this.state] || 'idle';
+    } else if (this.state === 'attack' || this.state === 'attacking') {
+      const frameDt = dt !== undefined ? dt : (typeof deltaTime !== 'undefined' ? deltaTime / 1000 : 1 / 60);
+      this.updateAttackSprite(frameDt);
     }
   }
 
   /**
    * RESTORED: Update attack sprite based on frame timing (client-side animation)
    * Animates attack frames independently using frame duration timing.
-   * Server provides attackSequence (which attack) and attackPhase (startup/active/recovery),
-   * but the client advances through visual frames on its own timer for smooth animation.
-   * Slash effects are spawned at specific frames matching the reference game feel.
    */
   updateAttackSprite(dt) {
     if (this.attackSequence <= 0) return;
-
-    // Use server-provided attack phase timing; the client may still smooth if dt is available.
-    if (typeof this.attackVisualTimer === 'undefined') {
-      this.attackVisualTimer = this.attackFrameTimer || 0;
-    }
-    this.attackVisualTimer = this.attackFrameTimer || this.attackVisualTimer;
-    if (dt !== undefined) {
-      this.attackVisualTimer += dt;
-    }
 
     // Callisto uses its own attack sequence mapping and frame progression.
     if (this.characterKey === 'CALLISTO') {

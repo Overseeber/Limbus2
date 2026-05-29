@@ -24,6 +24,18 @@
  */
 
 const GameplayEngine = require('./gameplayEngine');
+const { 
+  initUltimate, 
+  updateJohnUltimate, 
+  updateCallistoUltimate, 
+  updateValencinaUltimate,
+  dealUltDamage,
+  clampToArena,
+  clampX,
+  clampY
+} = require('./characterLogic/ultimateLogic');
+const ARENA_WIDTH = 1400;
+const ARENA_HEIGHT = 700;
 const SLAM_ATTACK_RADIUS = 80;
 const EVADE_DISTANCE = 230; // ~1 attack range
 const EVADE_MAX_DURATION = 1.0; // max 1 second
@@ -135,7 +147,10 @@ class Match {
                 installationArtActive: false,   // Callisto Installation Art animation active
                 installationArtTimer: 0,        // Timer for Installation Art animation
                 timeToHuntCasting: false,       // Valencina Time to Hunt casting animation
-                timeToHuntCastTimer: 0          // Timer for Time to Hunt casting
+                timeToHuntCastTimer: 0,          // Timer for Time to Hunt casting
+                // Ultimate state
+                ultimate: null,                 // null = not active, object = active with sequence data
+                ultimateActive: false           // Quick check flag for ultimate state
             };
         });
     }
@@ -167,16 +182,19 @@ class Match {
         console.log(`Match stopped in room ${this.room.id}`);
     }
 
-    /**
-     * Main game tick - runs every 50ms
-     */
-    tick() {
-        if (!this.running) return;
+/**
+ * Main game tick - runs every 50ms
+ */
+tick() {
+    if (!this.running) return;
 
-        const dt = this.tickRate / 1000; // Convert to seconds
+    const dt = this.tickRate / 1000; // Convert to seconds
 
-        // Update combo timers and combat state once per tick
-        this.engine.updateCombos(dt);
+    // Update combo timers and combat state once per tick
+    this.engine.updateCombos(dt);
+
+    // Update ultimate sequences for all players
+    this.updateUltimates(dt);
 
         // Track match start time for opening phase (first 2.5 seconds)
         if (!this.matchStartTime) {
@@ -509,11 +527,9 @@ class Match {
                 }
             }
             if (abilityXEdge) {
-                if (player.characterKey === 'CALLISTO') {
-                    // Reserved for future Callisto ability
-                } else if (player.characterKey === 'VALENCINA') {
-                    // Reserved for future Valencina ability (disposial)
-                }
+                // X key activates ultimate for all characters
+                // Always available for testing
+                this.activateUltimate(player);
             }
         }
 
@@ -1717,7 +1733,21 @@ class Match {
                 installationArtActive: !!player.installationArtActive,
                 installationArtTimer: player.installationArtTimer || 0,
                 timeToHuntCasting: !!player.timeToHuntCasting,
-                timeToHuntCastTimer: player.timeToHuntCastTimer || 0
+                timeToHuntCastTimer: player.timeToHuntCastTimer || 0,
+                // Ultimate state (server-authoritative)
+                ultimateActive: !!player.ultimateActive,
+                ultimatePhase: player.ultimate ? player.ultimate.phase : 0,
+                ultimateTimer: player.ultimate ? player.ultimate.timer : 0,
+                ultimateAttackFrame: player.ultimate ? player.ultimate.attackFrame : 0,
+                ultimateAttackTimer: player.ultimate ? player.ultimate.attackTimer : 0,
+                ultimateTotalDamage: player.ultimate ? player.ultimate.totalDamage : 0,
+                ultimateCameraZoom: player.ultimate ? player.ultimate.cameraZoom : 1,
+                ultimateBackgroundDim: player.ultimate ? player.ultimate.backgroundDim : 0,
+                ultimateName: player.ultimate ? player.ultimate.name : '',
+                ultimateDialogue: player.ultimate ? player.ultimate.dialogue : '',
+                // Ultimate visual effects data
+                ultimateRedLines: player.ultimate ? player.ultimate.redLines || [] : [],
+                ultimateSkulls: player.ultimate ? player.ultimate.skulls || [] : []
             }))
         };
 
@@ -1729,6 +1759,152 @@ class Match {
      */
     broadcast(event) {
         this.io.to(this.room.id).emit('event', event);
+    }
+
+    /**
+     * Update ultimate sequences for all players
+     * Server-authoritative timing, positioning, and damage
+     */
+    updateUltimates(dt) {
+        Object.values(this.players).forEach(player => {
+            if (!player.ultimateActive || !player.ultimate || player.gameState.isDefeated) return;
+            
+            // Get enemies (all other non-defeated players)
+            const enemies = Object.values(this.players)
+                .filter(p => p.clientId !== player.clientId && !p.gameState.isDefeated)
+                .map(p => p.gameState);
+            
+            // Update the appropriate ultimate sequence
+            switch (player.characterKey) {
+                case 'JOHN':
+                    updateJohnUltimate(player.gameState, player.ultimate, enemies, dt);
+                    break;
+                case 'CALLISTO':
+                    updateCallistoUltimate(player.gameState, player.ultimate, enemies, dt);
+                    break;
+                case 'VALENCINA':
+                    updateValencinaUltimate(player.gameState, player.ultimate, enemies, dt);
+                    break;
+            }
+            
+            // Check if ultimate should end (phase 11+ means end sequence)
+            if (player.ultimate.phase >= 11 && player.ultimate.timer) {
+                if (player.ultimate.timer <= 0) {
+                    this.endUltimate(player);
+                }
+            }
+        });
+    }
+
+    /**
+     * Activate ultimate - server authoritative
+     * Teleports user to center, locks targets, sets up sequence
+     */
+    activateUltimate(player) {
+        if (player.ultimateActive) return;
+        if (player.gameState.isDefeated) return;
+        
+        const state = player.gameState;
+        const config = player.config;
+        
+        // Create ultimate state
+        player.ultimate = initUltimate(state);
+        player.ultimateActive = true;
+        
+        // Set ultimate name and dialogue based on character
+        switch (player.characterKey) {
+            case 'JOHN':
+                player.ultimate.name = 'BASIC ULTIMATE';
+                player.ultimate.dialogue = 'Basic ultimate sequence!';
+                player.ultimate.timer = 1.0;
+                break;
+            case 'CALLISTO':
+                player.ultimate.name = 'CLOSING TIME';
+                player.ultimate.dialogue = "Installation Art no. 1: Your Flesh and Bones as the Gallery's Seats";
+                player.ultimate.timer = 1.5;
+                break;
+            case 'VALENCINA':
+                player.ultimate.name = 'DISPOSAL';
+                player.ultimate.dialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all!";
+                player.ultimate.timer = 1.0;
+                break;
+        }
+        
+        // Protect enemies - they can't act during ultimate
+        Object.values(this.players).forEach(other => {
+            if (other.clientId === player.clientId) return;
+            other.gameState.ultimateProtected = true;
+            other.gameState.state = 'idle';
+            other.gameState.isAttacking = false;
+            other.gameState.velocity.x = 0;
+            other.gameState.velocity.y = 0;
+        });
+        
+        // Disable collision for all players
+        Object.values(this.players).forEach(other => {
+            other.gameState.collisionEnabled = false;
+        });
+        
+        // Teleport to center of arena
+        state.position.x = ARENA_WIDTH / 2;
+        state.position.y = ARENA_HEIGHT - 100;
+        state.velocity.x = 0;
+        state.velocity.y = 0;
+        
+        // Set facing direction based on enemy positions
+        const enemy = this.findClosestEnemy(player);
+        if (enemy) {
+            state.facing = enemy.gameState.position.x > state.position.x ? 1 : -1;
+        }
+        
+        console.log(`[ULTIMATE] ${player.clientId} activated ${player.ultimate.name}`);
+        
+        // Broadcast ultimate start
+        this.broadcast({
+            type: 'ULTIMATE_START',
+            fighterId: player.clientId,
+            characterKey: player.characterKey,
+            ultimateName: player.ultimate.name,
+            ultimateDialogue: player.ultimate.dialogue
+        });
+    }
+
+    /**
+     * End ultimate - restore normal gameplay state
+     */
+    endUltimate(player) {
+        if (!player.ultimateActive) return;
+        
+        const state = player.gameState;
+        
+        // Remove protection from all enemies
+        Object.values(this.players).forEach(other => {
+            if (other.clientId === player.clientId) return;
+            other.gameState.ultimateProtected = false;
+            other.gameState.state = 'idle';
+            other.gameState.isAttacking = false;
+        });
+        
+        // Restore collision
+        Object.values(this.players).forEach(other => {
+            other.gameState.collisionEnabled = true;
+        });
+        
+        // Reset ultimate state
+        player.ultimateActive = false;
+        player.ultimate = null;
+        
+        // Reset camera
+        state.ultimateCameraZoom = 1;
+        state.ultimateBackgroundDim = 0;
+        
+        console.log(`[ULTIMATE] ${player.clientId} ultimate ended`);
+        
+        // Broadcast ultimate end
+        this.broadcast({
+            type: 'ULTIMATE_END',
+            fighterId: player.clientId
+        });
     }
 
     /**

@@ -510,6 +510,11 @@ function processSnapshot(snapshot) {
         fighter.installationArtTimer = state.installationArtTimer || 0;
         fighter.timeToHuntCasting = !!state.timeToHuntCasting;
         fighter.timeToHuntCastTimer = state.timeToHuntCastTimer || 0;
+        
+        // Apply ultimate state from server (for synced ultimate sequences)
+        if (typeof applyUltimateState === 'function') {
+            applyUltimateState(fighter, state);
+        }
     }
 }
 
@@ -1270,9 +1275,13 @@ function draw() {
     beginCamera();
     drawArena();
     
-    // Draw ultimate name behind characters
-    if (ultimateActive && ultimateFighters[0] && ultimateFighters[0].ultimateName) {
-      drawUltimateName(ultimateFighters[0]);
+    // Draw ultimate render behind characters (name, dialogue, effects)
+    if (window.allFighters) {
+      window.allFighters.forEach(fighter => {
+        if (typeof renderUltimate === 'function') {
+          renderUltimate(fighter);
+        }
+      });
     }
     
     // Update interpolation targets before rendering
@@ -1297,18 +1306,15 @@ function draw() {
     // Draw vignette effect on vertical edges
     drawVignette();
     
-    // Draw black edge covers to mask areas where the background doesn't reach
-    //drawEdgeCovers();
-    
     // Draw overhead healthbars for non-player fighters
     drawOverheadHealthbars();
     
-    // Draw ultimate damage counter
-    if (ultimateActive && ultimateFighters[0]) {
-      drawUltimateDamageCounter(ultimateFighters[0]);
-    }
-    
     endCamera();
+    
+    // Draw ultimate UI overlay (damage counter, etc.)
+    if (typeof renderUltimateUI === 'function') {
+      renderUltimateUI();
+    }
     
     // Draw pause menu if open
     if (pauseSettingsOpen) {

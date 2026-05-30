@@ -18,9 +18,7 @@ const Match = require('./server/logic/match');
 // Create authoritative gameplay engine for all matches
 //const gameplayEngine = new GameplayEngine();
 
-
 console.log("Server is Running");
-
 class Client {
     constructor(id)
     {
@@ -193,8 +191,6 @@ const EVENT_TYPES = {
 
 io.sockets.on('connection', (socket) => {
   
-    console.log(socket.id + ' ' + 'is connected');
-
     const client = new Client(socket.id);
 //    const fighter = new ServerFighter({ class: 'JOHN', hp: null, maxHp: null, speed: null, jumpHeight: null, baseDamage: null, staggerThreshold: null, staggerLength: null, weapon: 'Sword', knockbackMultiplier: 1 }, socket.id, null);
 //    client.fighter = fighter;
@@ -212,11 +208,6 @@ io.sockets.on('connection', (socket) => {
 //         fighter.staggerLength = defaultConfig.staggerLength;
 //     }
 //     fighter._initializeGameState();
-
-    console.log(socket.id + ' connected (no room assigned)');
-
-    console.log('Current Rooms:', Object.keys(roomList));
-    console.log('Current Clients:', Object.keys(clientList));
 
     socket.emit('roomsList', getRoomsData());
 
@@ -239,10 +230,6 @@ io.sockets.on('connection', (socket) => {
             room.clients.push(socket.id);
             client.room = room.id;
             socket.join(room.id);
-            console.log('JOIN ROOM:', socket.id, '->', room.id);
-            io.in(room.id).allSockets().then(sockets => {
-                console.log('room sockets after join:', room.id, sockets);
-            });
         }
         socket.emit('joinedRoom', room.id);
         emitRoomState(room.id);
@@ -271,10 +258,6 @@ io.sockets.on('connection', (socket) => {
             room.clients.push(socket.id);
             client.room = room.id;
             socket.join(room.id);
-            console.log('JOIN ROOM:', socket.id, '->', room.id);
-            io.in(room.id).allSockets().then(sockets => {
-                console.log('room sockets after join:', room.id, sockets);
-            });
         }
         socket.emit('joinedRoom', room.id);
         emitRoomState(room.id);
@@ -341,12 +324,6 @@ socket.on('toggleReady', () => {
             io.to(client.room).emit('battleStart', {
                 slots: state.slots
             });
-            console.log('Battle started in room ' + client.room);
-            io.in(client.room).allSockets().then(sockets => {
-                console.log('room sockets:', sockets);
-            }).catch(err => {
-                console.error('Failed to read room sockets for', client.room, err);
-            });
         }
     });
 
@@ -373,7 +350,6 @@ socket.on('toggleReady', () => {
             room.clients.push(socket.id);
             client.room = room.id;
             socket.join(room.id);
-            console.log('JOIN CPU ROOM:', socket.id, '->', room.id);
         }
 
         client.ready = true;
@@ -485,12 +461,10 @@ socket.on('toggleReady', () => {
             }
         }
         delete clientList[socket.id];
-        console.log('Client has disconnected', socket.id);
     });
 
     socket.on("changeState", (newState) => {
         client.state = newState;
-        console.log(socket.id + " -> " + newState);
     });
 });
 

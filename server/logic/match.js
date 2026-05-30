@@ -166,8 +166,6 @@ class Match {
         
         this.running = true;
         this.interval = setInterval(() => this.tick(), this.tickRate);
-        
-        console.log(`Match started in room ${this.room.id} with ${Object.keys(this.players).length} players`);
     }
 
     /**
@@ -181,8 +179,6 @@ class Match {
             clearInterval(this.interval);
             this.interval = null;
         }
-        
-        console.log(`Match stopped in room ${this.room.id}`);
     }
 
 /**
@@ -198,7 +194,6 @@ tick() {
             if (this.hitstopTimer <= 0) {
                 this.hitstopTimer = 0;
                 this.hitstopActive = false;
-                console.log('[Hitstop] ended');
             }
             // Even during hitstop, advance ultimate sequences so cinematic ultimates
             // (and their timers/phases) continue to progress and don't softlock.
@@ -332,7 +327,6 @@ tick() {
         if (hitstopDuration <= 0) return;
         this.hitstopTimer = hitstopDuration;
         this.hitstopActive = true;
-        console.log(`[Hitstop] started ${hitstopDuration.toFixed(3)}s${source ? ` (${source})` : ''}`);
     }
 
     /**
@@ -716,8 +710,6 @@ tick() {
         state.isEvading = true;
         state.evadeTimer = EVADE_MAX_DURATION;
         state.state = 'evade';
-        
-        console.log(`[Evade] ${player.clientId} started evade, backing away from enemy`);
     }
 
     /**
@@ -756,8 +748,6 @@ tick() {
         } else {
             state.state = 'idle';
         }
-        
-        console.log(`[Evade] ${player.clientId} ended evade, state=${state.state}`);
     }
 
     /**
@@ -807,8 +797,6 @@ tick() {
         
         // Update attack counter for rotation
         player.attackCounter = sequence;
-        
-        console.log(`[Attack] ${player.clientId} started attack ${sequence} (${attackKey}), phase=startup`);
     }
 
     /**
@@ -871,8 +859,6 @@ tick() {
             radius: SLAM_ATTACK_RADIUS,
             damage: player.config.baseDamage * 2
         };
-        
-        console.log(`[Slam] ${player.clientId} started slam attack`);
     }
 
     /**
@@ -1107,7 +1093,6 @@ tick() {
             player.attackPhase = 'comboHold';
             player.attackFrameTimer = attackDef ? attackDef.recovery : 0;
             player.comboHoldTimer = comboHoldSeconds;
-            console.log(`[Attack] ${player.clientId} attack complete, entering combo hold for ${player.comboHoldTimer}s`);
         } else {
             state.state = 'idle';
             player.attackSequence = 0;
@@ -1115,7 +1100,6 @@ tick() {
             player.attackFrameTimer = 0;
             player.attackFrame = 0;
             player.comboHoldTimer = 0;
-            console.log(`[Attack] ${player.clientId} attack complete`);
         }
         // Don't reset attackTimer here; preserve any remaining cooldown so the combo timing is correct.
     }
@@ -2094,7 +2078,6 @@ tick() {
             state.facing = enemy.gameState.position.x > state.position.x ? 1 : -1;
         }
         
-        console.log(`[ULTIMATE] ${player.clientId} activated ${player.ultimate.name}`);
         
         // Broadcast ultimate start
         this.broadcast({
@@ -2135,7 +2118,6 @@ tick() {
         state.ultimateCameraZoom = 1;
         state.ultimateBackgroundDim = 0;
         
-        console.log(`[ULTIMATE] ${player.clientId} ultimate ended`);
         
         // Broadcast ultimate end
         this.broadcast({
@@ -2161,7 +2143,6 @@ tick() {
             forfeiterId: options.forfeiterId || null
         });
         
-        console.log(`Match ended in room ${this.room.id}. Winner: ${winner ? winner.characterKey : 'None'}`);
     }
 
     /**

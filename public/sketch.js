@@ -55,6 +55,40 @@ let combatOverLine = '';
 // Client-side snapshot interpolation (ms)
 const SNAPSHOT_INTERVAL_MS = 50; // server tick at 50ms
 
+// Combat Impact Zoom System
+// Client-side camera effects driven by server-authoritative state
+// DO NOT calculate gameplay here - only visual zoom effects
+const COMBAT_ZOOM = {
+    // Normal attack zoom in target (fractional, 1.0 = normal)
+    ZOOM_IN_LIGHT: 0.92,      // Subtle zoom for light attacks
+    ZOOM_IN_MEDIUM: 0.88,     // Medium zoom for medium attacks  
+    ZOOM_IN_HEAVY: 0.82,      // Strong zoom for heavy/charged attacks
+    ZOOM_IN_DASH: 0.83,       // Dash attack zoom
+    ZOOM_IN_SLAM: 0.80,       // Slam attack zoom
+    ZOOM_IN_ULTIMATE: 0.65,   // Cinematic ultimate zoom
+    
+    // Timing
+    WINDUP_ZOOM_DURATION: 0.015, // Time to reach full windup zoom (seconds) - fast snap for noticeable impact
+    RECOVERY_ZOOM_SPEED: 50.0, // How fast zoom returns after hitstop ends (seconds^-1) - snappy
+    HIT_HOLD_DURATION: 0.8,  // Brief hold at max zoom before hitstop (to show impact frame)
+};
+
+// Combat zoom state
+let combatZoom = {
+    targetZoom: 1.0,           // Desired zoom level
+    currentZoom: 1.0,          // Current interpolated zoom
+    zoomTarget: 1.0,           // What we're lerping toward
+    active: false,             // Whether combat zoom is active
+    windupActive: false,       // Whether windup phase is active
+    hitHoldTimer: 0,           // Timer for pre-hitstop impact frame hold
+    recoveryTimer: 0,          // Timer for zoom recovery after hit
+    needMissReset: false,      // Flag to trigger miss zoom-out
+    prevAttackPhase: {},       // Track per-fighter previous attack phase
+    prevHitstopActive: false,  // Track hitstop state transitions
+    lastHitTime: 0,            // Timestamp of last hit for cooldown
+};
+
+
 // Character intro animation sequences
 const INTRO_ANIMATIONS = {
   VALENCINA: {
@@ -564,6 +598,115 @@ function processSnapshot(snapshot) {
     }
 }
 
+
+// ============================================================
+// COMBAT IMPACT ZOOM SYSTEM
+// Client-side camera zoom driven by server-authoritative state
+// ============================================================
+
+/**
+ * COMBAT IMPACT ZOOM - Aggressive camera zoom for attack anticipation and impact.
+ * 
+ * Multiplicative zoom factor: 1.0 = no effect, < 1.0 = zoom IN (magnifies scene).
+ * 
+ * Flow:
+ *   Windup starts → zoomTarget immediately set to desiredZoom
+ *                    currentZoom snaps toward it aggressively
+ *   Attack misses  → zoomTarget back to 1.0, smooth recovery
+ *   Attack hits    → hitstop starts (attack sprite + slash already visible)
+ *                    zoom freezes at current level during hitstop
+ *                    hitstop ends → zoomTarget back to 1.0, smooth recovery
+ *   No attack      → currentZoom = 1.0 exactly (zero camera influence)
+ * 
+ * ALL reads from server-authoritative snapshot data only.
+ */
+function updateCombatZoom(dt) {
+    if (!window.allFighters || window.allFighters.length === 0) return;
+    
+    const snapDt = dt || (1/60);
+    const now = Date.now();
+    
+    // === STEP 1: Read server-authoritative state ===
+    let anyAttacking = false;
+    let desiredZoom = 1.0;
+    let zoomPriority = 0;
+    
+    window.allFighters.forEach(fighter => {
+        if (fighter.isDefeated) return;
+        const isAttacking = fighter.isAttacking || false;
+        const seq = fighter.attackSequence || 0;
+        const isDash = fighter.dashAttackActive || false;
+        const isSlam = fighter.isSlamAttacking || false;
+        const isUlt = fighter.ultimateActive || false;
+        const hasValid = (seq > 0 || isDash || isSlam || isUlt) && isAttacking;
+        if (!hasValid) return;
+        
+        let target = 1.0, pri = 0;
+        if (isUlt)      { target = COMBAT_ZOOM.ZOOM_IN_ULTIMATE; pri = 5; }
+        else if (isSlam) { target = COMBAT_ZOOM.ZOOM_IN_SLAM; pri = 4; }
+        else if (isDash) { target = COMBAT_ZOOM.ZOOM_IN_DASH; pri = 3; }
+        else if (seq === 3 || fighter.chargeAttack) { target = COMBAT_ZOOM.ZOOM_IN_HEAVY; pri = 3; }
+        else if (seq === 2) { target = COMBAT_ZOOM.ZOOM_IN_MEDIUM; pri = 2; }
+        else if (seq === 1) { target = COMBAT_ZOOM.ZOOM_IN_LIGHT; pri = 1; }
+        
+        if (pri > zoomPriority) { zoomPriority = pri; desiredZoom = target; anyAttacking = true; }
+    });
+    
+    // === STEP 2: Hitstop state ===
+    const hitstopNow = serverHitstopActive && serverHitstopTimer > 0;
+    const hitstopEdge = hitstopNow && !combatZoom.prevHitstopActive;
+    if (hitstopEdge) {
+        combatZoom.recoveryTimer = 0.15; // brief post-hitstop pause
+    }
+    if (combatZoom.recoveryTimer > 0 && !hitstopNow) {
+        combatZoom.recoveryTimer -= snapDt;
+        if (combatZoom.recoveryTimer < 0) combatZoom.recoveryTimer = 0;
+    }
+    
+    // === STEP 3: Set zoomTarget ===
+    if (anyAttacking && !hitstopNow) {
+        // WINDUP: aggressively push zoomTarget toward desiredZoom
+        // Use 1/lamp = 3 frames at 60fps to reach target (snappy)
+        combatZoom.zoomTarget = lerp(combatZoom.zoomTarget, desiredZoom, 10 * snapDt);
+    } else if (hitstopNow) {
+        // HIT: freeze zoom during hitstop (maintain impact frame)
+        combatZoom.zoomTarget = combatZoom.currentZoom;
+    } else if (combatZoom.recoveryTimer > 0) {
+        // POST-HIT PAUSE: hold current level briefly
+        combatZoom.zoomTarget = combatZoom.currentZoom;
+    } else {
+        // MISS / RECOVERY / IDLE: return to 1.0 (no influence)
+        combatZoom.zoomTarget = 1.0;
+    }
+    
+    // === STEP 4: Aggressive tracking toward zoomTarget ===
+    // Use exponential approach: each frame covers 60% of remaining distance
+    // This reaches ~98% of target in 4 frames (visible within 1-2 frames)
+    if (hitstopNow) {
+        // Freeze during hitstop - no zoom change
+    } else if (anyAttacking) {
+        // During windup: quick aggressive zoom toward target
+        combatZoom.currentZoom += (combatZoom.zoomTarget - combatZoom.currentZoom) * Math.min(1, 8 * snapDt);
+    } else {
+        // Recovery/idle: snappy return to 1.0
+        combatZoom.currentZoom += (1.0 - combatZoom.currentZoom) * Math.min(1, 10 * snapDt);
+    }
+    
+    // Clamp
+    combatZoom.currentZoom = Math.max(0.6, Math.min(1.0, combatZoom.currentZoom));
+    
+    // Snap to exactly 1.0 when close (clean multiplicative identity = no effect)
+    if (combatZoom.zoomTarget === 1.0 && Math.abs(combatZoom.currentZoom - 1.0) < 0.01) {
+        combatZoom.currentZoom = 1.0;
+    }
+    
+    // Track active state
+    combatZoom.active = combatZoom.currentZoom < 0.995;
+    
+    // State persistence
+    combatZoom.prevHitstopActive = hitstopNow;
+    combatZoom.wasAttacking = anyAttacking;
+}
 
 // ============================================================
 // INPUT SYSTEM - RESTORED for reliable edge detection at 20tps
@@ -1367,6 +1510,16 @@ function draw() {
       // Lerp toward fighter midpoint for smooth vertical centering
       if (typeof cameraY === 'undefined') cameraY = ARENA_HEIGHT / 2;
       cameraY = lerp(cameraY, fighterMidpointY, 0.1); // Smooth transition
+    }
+    
+    // Update combat impact zoom (client-side visual, reads server-authoritative state)
+    updateCombatZoom(deltaTime / 1000);
+    // Apply combat zoom as a DIVISIVE factor on top of existing camera zoom.
+    // combatZoom.currentZoom is < 1.0 for "zoom in" (e.g. 0.82 = 1/0.82 = 1.22x magnification).
+    // Division converts the <1 values into >1 magnification factors.
+    // When no attack is happening, currentZoom = 1.0 and camera is unaffected.
+    if (combatZoom.active) {
+        cameraZoom = cameraZoom / combatZoom.currentZoom;
     }
     
     beginCamera();

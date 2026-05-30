@@ -48,7 +48,7 @@ export class BaseState extends IState {
   
   transition(newState, context) {
     // Default transition logic
-    console.log(`State transition: ${this.currentState} -> ${newState}`);
+    // Debug logging removed for performance
   }
 }
 

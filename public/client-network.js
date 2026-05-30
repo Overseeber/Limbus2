@@ -1,17 +1,28 @@
 // Client networking abstraction and local simulator fallback
 window.Network = {
   socket: null,
-  myClientId: null, // Stable client ID set once on connection
   isConnected: false,
   isLocalAuthority: true, // fallback until server authoritative mode available
   eventHandlers: {},
 
   init() {
-    // Try to connect if socket.io is available
+    // Prefer an externally-created socket (index.html) via window._externalSocket
+    if (window._externalSocket) {
+      this.socket = window._externalSocket;
+      this.isConnected = true;
+      this.isLocalAuthority = false;
+      this.socket.on('connect', () => { this.isConnected = true; this.isLocalAuthority = false; console.log('[Network] connected (external)', this.socket.id); });
+      this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
+      this.socket.on('event', (ev) => this._emit('event', ev));
+      this._setupSocketHandlers(this.socket);
+      return;
+    }
+
+    // Try to connect if socket.io is available and no external socket provided
     if (typeof io !== 'undefined') {
       // Try each server address in order until one connects
       const serverAddresses = [
-        'http://10.21.70.172:3000',  // school Pi
+        'http://10.21.69.171:3000',  // school Pi
         'http://192.168.50.60:3000',  // home Pi
         'http://localhost:3000'       // local testing
       ];
@@ -33,17 +44,12 @@ window.Network = {
         sock.on('connect', () => {
           connected = true;
           this.socket = sock;
-          this.myClientId = sock.id; // Set stable client ID once
           this.isConnected = true;
           this.isLocalAuthority = false;
           console.log('[Network] connected', sock.id, 'to', address);
-          console.log('CLIENT SOCKET ID:', sock.id);
-          console.log('[Network] myClientId set to:', this.myClientId);
-
           this.socket.on('stateUpdate', (state) => this._emit('stateUpdate', state));
           this.socket.on('event', (ev) => this._emit('event', ev));
           this._setupSocketHandlers(this.socket);
-
         });
 
         sock.on('connect_error', () => {
@@ -82,9 +88,12 @@ window.Network = {
     });
     socket.on('roomState', (state) => {
       // state: { id, slots: [{clientId, character}] }
-      console.log('roomState received:', state);
       window.myRoomState = state;
       this._emit('roomState', state);
+    });
+    socket.on('joinedRoom', (roomId) => {
+      window.myRoomId = roomId;
+      this._emit('joinedRoom', roomId);
     });
     socket.on('battleStart', (data) => {
       this._emit('battleStart', data);
@@ -97,17 +106,6 @@ window.Network = {
     });
     socket.on('attackResult', (result) => {
       this._emit('attackResult', result);
-    });
-    socket.on('snapshot', (snapshot) => {
-      console.log('SNAPSHOT RECEIVED');
-      this._emit('snapshot', snapshot);
-    });
-    socket.on('disconnect', (reason) => {
-      console.warn('[Network] disconnected:', reason);
-      this.isConnected = false;
-    });
-    socket.on('connect_error', (error) => {
-      console.warn('[Network] connect_error:', error);
     });
   },
 
@@ -125,14 +123,10 @@ window.Network = {
     if (this.socket) this.socket.emit('changeCharacter', characterKey);
   },
   toggleReady() {
-    console.log('Network.toggleReady called, socket:', this.socket?.id, 'isConnected:', this.isConnected);
     if (this.socket) this.socket.emit('toggleReady');
   },
   startBattle() {
     if (this.socket) this.socket.emit('startBattle');
-  },
-  startCpuBattle(config) {
-    if (this.socket) this.socket.emit('startCpuBattle', config);
   },
   claimSlot(slotIndex) {
     if (this.socket) this.socket.emit('claimSlot', slotIndex);

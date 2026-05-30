@@ -994,6 +994,9 @@ function handleNetworkEvent(event) {
     case 'dashAttackResult':
       handleDashAttackNetworkEvent(event);
       break;
+    case 'ULTIMATE_SLASH':
+      handleUltimateSlashEvent(event);
+      break;
     case 'MATCH_END':
       // Server signaled match end — start ending sequence
       startEndingSequence(event.winnerId, event.winnerCharacter, {
@@ -1003,6 +1006,29 @@ function handleNetworkEvent(event) {
     default:
       // Ignore unhandled server event types here
       break;
+  }
+}
+
+function handleUltimateSlashEvent(event) {
+  // Spawn slash effect on the fighter that triggered it
+  const fighter = window.allFighters.find(f => f.clientId === event.fighterId);
+  if (!fighter) return;
+  
+  // Spawn the slash effect using the fighter's spawnSlashEffect method
+  if (typeof fighter.spawnSlashEffect === 'function') {
+    fighter.spawnSlashEffect(event.slashType, { x: event.offsetX || 0, y: event.offsetY || 0 });
+  } else {
+    // Fallback: manually add slash effect
+    if (!fighter.slashEffects) fighter.slashEffects = [];
+    fighter.slashEffects.push({
+      type: event.slashType,
+      pos: { x: fighter.pos.x, y: fighter.pos.y },
+      facing: fighter.facing,
+      timer: 0.4,
+      targetOffset: { x: event.offsetX || 0, y: event.offsetY || 0 },
+      owner: fighter,
+      rotation: null
+    });
   }
 }
 
@@ -1770,8 +1796,8 @@ function drawVignette() {
   // Vignette width in pixels
   const vignetteWidth = 150;
   const bgHeight = window.bgScaledHeight || height;
-  const bgTop = Math.max(0, (height - bgHeight) / 2);
-  const bgBottom = Math.min(height, bgTop + bgHeight);
+  const bgTop = (height / 2) - (bgHeight / 2);
+  const bgBottom = bgTop + bgHeight;
   
   // Draw left vignette
   for (let x = 0; x < vignetteWidth; x++) {
@@ -1789,7 +1815,7 @@ function drawVignette() {
     rect(width - vignetteWidth + x, 0, 1, height);
   }
 
-  // Draw top vignette at the top edge of the arena background image
+  // Draw top vignette at the top edge of the battle background image
   for (let y = 0; y < vignetteWidth; y++) {
     const alpha = map(y, 0, vignetteWidth, 255, 0);
     fill(0, 0, 0, alpha);
@@ -1797,7 +1823,7 @@ function drawVignette() {
     rect(0, bgTop + y, width, 1);
   }
 
-  // Draw bottom vignette at the bottom edge of the arena background image
+  // Draw bottom vignette at the bottom edge of the battle background image
   for (let y = 0; y < vignetteWidth; y++) {
     const alpha = map(y, 0, vignetteWidth, 0, 255);
     fill(0, 0, 0, alpha);

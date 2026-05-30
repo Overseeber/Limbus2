@@ -213,8 +213,27 @@ tick() {
                     // Still update status effects, but skip state machine processing
                     const events = this.engine.processStatuses(player.gameState, dt);
                     this.handleEvents(player, events);
-                    // Don't process input, physics, or attacks for protected players
-                    // Just enforce boundary clamping
+                    
+                    // CRITICAL: Apply knockback velocity to position so enemies actually move
+                    // Velocity is set by dealUltDamage but physics is skipped for protected players
+                    player.gameState.position.x += player.gameState.velocity.x * dt;
+                    
+                    // Apply friction to knockback so it decays naturally
+                    player.gameState.velocity.x *= 0.92;
+                    if (Math.abs(player.gameState.velocity.x) < 1) {
+                        player.gameState.velocity.x = 0;
+                    }
+                    
+                    // Clamp to arena after knockback movement
+                    if (player.gameState.position.x < 50) {
+                        player.gameState.position.x = 50;
+                        player.gameState.velocity.x = 0;
+                    }
+                    if (player.gameState.position.x > 1350) {
+                        player.gameState.position.x = 1350;
+                        player.gameState.velocity.x = 0;
+                    }
+                    
                     // Keep them in hit state during ultimate
                     if (player.gameState.state === 'hit') {
                         player.gameState.hitTimer = 999; // Lock in hit state
@@ -740,6 +759,10 @@ tick() {
         const cs = this.engine.combatState[state.id];
         if (cs) cs.lastAttackHit = false;
         
+        // Apply a subtle startup windup impulse for attack weight.
+        const startupBackward = attackDef.startupBackward || attackDef.windupBackward || 100;
+        state.velocity.x = -state.facing * startupBackward;
+        
         state.isAttacking = true;
         state.state = 'attacking';
         
@@ -994,6 +1017,8 @@ tick() {
                     player.attackPhase = 'active';
                     player.attackFrameTimer = 0;
                     player.strikeActive = true;
+                    const activeForward = attackDef.attackForward || attackDef.activeForward || 320;
+                    state.velocity.x = state.facing * activeForward;
                 }
             } else if (player.attackPhase === 'active') {
                 if (player.attackFrameTimer >= attackDef.active) {
@@ -1836,6 +1861,7 @@ tick() {
      * Update ultimate sequences for all players
      * Server-authoritative timing, positioning, and damage
      * Broadcasts hit events so client shows damage numbers and hurt reactions
+     * Also broadcasts slash events for client visual effects
      */
     updateUltimates(dt) {
         Object.values(this.players).forEach(player => {
@@ -1856,6 +1882,11 @@ tick() {
             const enemyPlayers = Object.values(this.players)
                 .filter(p => p.clientId !== player.clientId && !p.gameState.isDefeated);
             
+            // Clear slash events from previous tick before updating
+            if (player.ultimate.slashEvents) {
+                player.ultimate.slashEvents = [];
+            }
+            
             // Update the appropriate ultimate sequence
             const prevDamage = player.ultimate.totalDamage;
             switch (player.characterKey) {
@@ -1868,6 +1899,20 @@ tick() {
                 case 'VALENCINA':
                     updateValencinaUltimate(player.gameState, player.ultimate, enemies, dt);
                     break;
+            }
+            
+            // Broadcast slash events for this tick
+            if (player.ultimate.slashEvents && player.ultimate.slashEvents.length > 0) {
+                player.ultimate.slashEvents.forEach(slashEvent => {
+                    this.broadcast({
+                        type: 'ULTIMATE_SLASH',
+                        fighterId: player.clientId,
+                        slashType: slashEvent.type,
+                        offsetX: slashEvent.offsetX || 0,
+                        offsetY: slashEvent.offsetY || 0,
+                        frame: slashEvent.frame || 0
+                    });
+                });
             }
             
             // Broadcast hit events for each enemy that lost HP
@@ -1883,16 +1928,11 @@ tick() {
                             targetId: enemy.clientId,
                             damage: damageTaken,
                             hp: enemy.gameState.hp,
-                            knockback: 0,
+                            knockback: enemy.gameState.hitTimer > 0.3 ? 300 : 100, // Detect strong knockback
                             statuses: [],
                             defeated: enemy.gameState.isDefeated || false,
                             isUltimate: true
                         });
-                        
-                        // Track total damage correctly
-                        if (player.ultimate) {
-                            // The total is already tracked in dealUltDamage
-                        }
                         
                         if (enemy.gameState.isDefeated) {
                             this.broadcast({
@@ -1904,7 +1944,7 @@ tick() {
                     }
                 });
             
-            // Check if ultimate should end (phase 11+ means end sequence)
+            // Check if ultimate should end (phase >= 11 and timer expired)
             if (player.ultimate.phase >= 11 && player.ultimate.timer !== undefined) {
                 if (player.ultimate.timer <= 0) {
                     this.endUltimate(player);
@@ -1943,7 +1983,7 @@ tick() {
             case 'VALENCINA':
                 player.ultimate.name = 'DISPOSAL';
                 player.ultimate.dialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all!";
-                player.ultimate.timer = 1.0;
+                player.ultimate.timer = 3.0; // Opening pose lasts 3 seconds (per spec)
                 break;
         }
         

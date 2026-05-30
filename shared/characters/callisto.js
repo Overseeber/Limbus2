@@ -57,7 +57,9 @@ const CALLISTO_CONFIG = {
       damage: 1.0,
       knockback: 40,        // More knockback
       staggerDamage: 60,
-      combo: 1
+      combo: 1,
+      startupBackward: 110,
+      attackForward: 340
     },
     medium: {
       startup: 0.10,
@@ -67,7 +69,9 @@ const CALLISTO_CONFIG = {
       damage: 1.25,
       knockback: 65,        // Higher knockback
       staggerDamage: 90,
-      combo: 2
+      combo: 2,
+      startupBackward: 130,
+      attackForward: 380
     },
     heavy: {
       startup: 0.18,
@@ -77,7 +81,9 @@ const CALLISTO_CONFIG = {
       damage: 1.8,          // High damage
       knockback: 100,       // Significant knockback
       staggerDamage: 150,   // Heavy stagger damage
-      combo: 3
+      combo: 3,
+      startupBackward: 150,
+      attackForward: 440
     }
   },
   

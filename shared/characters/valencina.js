@@ -58,7 +58,9 @@ const VALENCINA_CONFIG = {
       damage: 1.0,          // Damage multiplier
       knockback: 30,        // Knockback amount
       staggerDamage: 50,    // Stagger damage
-      combo: 1              // Combo sequence position
+      combo: 1,
+      startupBackward: 110,
+      attackForward: 360
     },
     medium: {
       startup: 0.12,
@@ -68,7 +70,9 @@ const VALENCINA_CONFIG = {
       damage: 1.2,
       knockback: 50,
       staggerDamage: 75,
-      combo: 2
+      combo: 2,
+      startupBackward: 130,
+      attackForward: 400
     },
     heavy: {
       startup: 0.20,
@@ -78,7 +82,9 @@ const VALENCINA_CONFIG = {
       damage: 1.6,
       knockback: 80,
       staggerDamage: 120,
-      combo: 3
+      combo: 3,
+      startupBackward: 150,
+      attackForward: 460
     }
   },
   

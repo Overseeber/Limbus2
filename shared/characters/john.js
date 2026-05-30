@@ -55,7 +55,9 @@ const JOHN_CONFIG = {
       range: 120,        // Attack range in pixels
       damage: 1.0,       // Damage multiplier
       knockback: 12,     // Knockback force
-      staggerDamage: 60  // Stagger damage dealt
+      staggerDamage: 60,  // Stagger damage dealt
+      startupBackward: 100, // Subtle backward movement during windup
+      attackForward: 280   // Forward momentum when strike hits
     },
     medium: {
       startup: 0.15,
@@ -64,7 +66,9 @@ const JOHN_CONFIG = {
       range: 140,
       damage: 1.2,
       knockback: 15,
-      staggerDamage: 80
+      staggerDamage: 80,
+      startupBackward: 120,
+      attackForward: 320
     },
     heavy: {
       startup: 0.2,
@@ -73,7 +77,9 @@ const JOHN_CONFIG = {
       range: 160,
       damage: 1.5,
       knockback: 18,
-      staggerDamage: 100
+      staggerDamage: 100,
+      startupBackward: 140,
+      attackForward: 380
     }
   },
 

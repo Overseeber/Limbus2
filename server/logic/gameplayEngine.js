@@ -29,7 +29,17 @@ class GameplayEngine {
       position: { x: 0, y: 0 }, velocity: { x: 0, y: 0 }, facing: 1,
       onGround: true, canDash: true, dashCooldown: 0,
       isAttacking: false, isGuarding: false, isDashing: false,
-      state: 'idle', stagger: 0, staggerTimer: 0, staggerRecoveryTimer: 0, isDefeated: false,
+      state: 'idle',
+      // === STAGGER SYSTEM (authoritative) ===
+      stagger: 0,                    // Current stagger buildup
+      staggerThreshold: config.staggerThreshold || 1000,  // Stagger threshold
+      staggerTimer: 0,               // Timer for active stagger duration
+      staggerRecoveryTimer: 0,       // Delay before stagger recovery begins
+      staggerRecoveryRate: config.staggerRecoveryRate || 12,  // Decay rate per second
+      staggerRecoveryDelay: config.staggerRecoveryDelay || 2.0, // Recovery delay in seconds
+      staggerDuration: 0,            // Total stagger duration when staggered
+      // ==========================
+      isDefeated: false,
       attackCooldown: 0, abilityCooldowns: {}, statuses: [],
       combo: 0, comboTimer: 0, attackCounter: 0, resources: {}
     };
@@ -82,6 +92,7 @@ class GameplayEngine {
     d += (cs.combo || 0) * COMBO_DAMAGE_PER_STACK;
     if (cs.attackCounter === 3) d *= 2;
     if (cs.chargeAttack) d *= 1.4;
+    // DOUBLE DAMAGE while staggered (authoritative server-side)
     if (defender.state === 'staggered') d *= 2;
     if (attacker.characterKey === 'CALLISTO' && attacker.resources.artworkTibiaStacks > 0) d *= 1 + 0.1 * attacker.resources.artworkTibiaStacks;
     // Sinking on attacker: lose 1% damage dealt per potency
@@ -111,68 +122,117 @@ class GameplayEngine {
     fighter.position.x = Math.max(60, Math.min(ARENA_WIDTH - 60, fighter.position.x));
   }
 
+  /**
+   * Authoritative stagger application
+   * Adds stagger buildup, checks threshold, emits events
+   * @returns {{ staggered: boolean, duration: number, events: Array, stagger: number }}
+   */
   applyStagger(fighter, amount, config) {
+    const events = [];
+    const threshold = config.staggerThreshold || fighter.staggerThreshold || 1000;
+    const length = config.staggerLength || 5;
+    
     fighter.stagger += amount;
-    if (fighter.stagger >= (config.staggerThreshold || 1000) && fighter.state !== 'staggered') {
-      fighter.state = 'staggered'; fighter.staggerTimer = config.staggerLength || 5; fighter.stagger = config.staggerThreshold || 1000;
-      // Tremor: consume on burst (stagger threshold reached)
-      const tremorEvents = this.consumeTremor(fighter, config);
-      return { staggered: true, duration: config.staggerLength || 5, tremorEvents };
+    
+    // Clamp stagger to 0..threshold (never exceed threshold when not staggered)
+    if (fighter.stagger > threshold && fighter.state !== 'staggered') {
+      fighter.stagger = threshold;
     }
-    return { staggered: false, stagger: fighter.stagger };
+    
+    // Reset recovery timer when taking stagger damage - recovery only starts after delay
+    fighter.staggerRecoveryTimer = config.staggerRecoveryDelay || fighter.staggerRecoveryDelay || 2.0;
+    
+    // Check if stagger threshold reached
+    if (fighter.stagger >= threshold && fighter.state !== 'staggered') {
+      // Enter staggered state
+      fighter.state = 'staggered';
+      fighter.staggerTimer = length;
+      fighter.staggerDuration = length;
+      fighter.stagger = threshold; // Set to exactly threshold
+      fighter.staggerRecoveryTimer = 0; // Reset recovery when entering stagger
+      
+      // Tremor: consume on burst (stagger threshold reached) - original game behavior
+      const tremorEvents = this.consumeTremor(fighter, config);
+      
+      events.push({ type: 'STAGGER_START', duration: length });
+      
+      return { staggered: true, duration: length, events, tremorEvents };
+    }
+    
+    events.push({ type: 'STAGGER_INCREASE', amount: amount, stagger: fighter.stagger });
+    return { staggered: false, stagger: fighter.stagger, events };
   }
 
+  /**
+   * Authoritative stagger state machine update
+   * Called each server tick with authoritative dt
+   * 
+   * Three phases:
+   * 1. ACTIVE STAGGER - fighter is locked, timer counts down
+   * 2. RECOVERY DELAY - stagger exits but buildup still decays slowly
+   * 3. CONTINUOUS DECAY - normal passive decay
+   * 
+   * @returns {{ state: string, stagger: number, phase: string, events: Array }}
+   */
   updateStagger(fighter, dt, config) {
-    const threshold = config.staggerThreshold || 1000;
-    const length = config.staggerLength || 5;
-    const recoveryDelay = config.staggerRecoveryDelay || 2.0;
-    const recoveryRate = config.staggerRecoveryRate || 12; // How much stagger decreases per second during recovery
+    const events = [];
+    const threshold = config.staggerThreshold || fighter.staggerThreshold || 1000;
+    const length = config.staggerLength || fighter.staggerDuration || 5;
+    const recoveryDelay = config.staggerRecoveryDelay || fighter.staggerRecoveryDelay || 2.0;
+    const recoveryRate = config.staggerRecoveryRate || fighter.staggerRecoveryRate || 12;
     
-    // PHASE 1: ACTIVE STAGGER - Fighter is completely locked
+    // PHASE 1: ACTIVE STAGGER - Fighter is completely locked, timer counts down
     if (fighter.state === 'staggered' && fighter.staggerTimer > 0) {
       fighter.staggerTimer -= dt;
       
       if (fighter.staggerTimer <= 0) {
         // Stagger active duration expired - enter recovery delay phase
         fighter.staggerTimer = 0;
-        fighter.staggerRecoveryTimer = recoveryDelay; // Reset to delay duration
-        return { state: 'staggered', timer: 0, phase: 'active' };
+        fighter.staggerRecoveryTimer = recoveryDelay;
+        
+        // Emit stagger end event
+        events.push({ type: 'STAGGER_END' });
+        
+        return { state: 'staggered', stagger: fighter.stagger, phase: 'active_end', events };
       }
       
-      return { state: 'staggered', timer: fighter.staggerTimer, phase: 'active' };
+      return { state: 'staggered', stagger: fighter.stagger, phase: 'active', events };
     }
     
-    // PHASE 2: RECOVERY DELAY - Fighter exits 'staggered' state but stagger still decreases slowly
+    // PHASE 2: RECOVERY DELAY - Exiting stagger, slow decay before normal recovery
     if (fighter.staggerRecoveryTimer > 0) {
       fighter.staggerRecoveryTimer -= dt;
       
-      // During delay, stagger decays very slowly (recovery hasn't started yet)
-      // This creates a "vulnerable" window where stagger doesn't recover fast
+      // During delay, stagger decays very slowly
       const delayRecoveryRate = recoveryRate * 0.2; // 20% of normal recovery during delay
       fighter.stagger = Math.max(0, fighter.stagger - delayRecoveryRate * dt);
       
-      // When delay expires, fighter is back to idle and stagger recovery can begin
+      // When delay expires, fighter returns to idle
       if (fighter.staggerRecoveryTimer <= 0) {
-        fighter.state = 'idle';
         fighter.staggerRecoveryTimer = 0;
-        return { state: 'idle', stagger: fighter.stagger, phase: 'recovered' };
+        // Exit staggered state if still in it
+        if (fighter.state === 'staggered') {
+          fighter.state = 'idle';
+          events.push({ type: 'STAGGER_EXIT', reason: 'recovery_delay_expired' });
+        }
+        return { state: 'idle', stagger: fighter.stagger, phase: 'recovered', events };
       }
       
-      // Fighter was in staggered state, now transitioning to idle during recovery
+      // Fighter was in staggered state, transitioning to idle during recovery
       if (fighter.state === 'staggered') {
         fighter.state = 'idle';
+        events.push({ type: 'STAGGER_EXIT', reason: 'recovery_began' });
       }
       
-      return { state: 'idle', stagger: fighter.stagger, phase: 'recovery' };
+      return { state: 'idle', stagger: fighter.stagger, phase: 'recovery_delay', events };
     }
     
-    // PHASE 3: CONTINUOUS RECOVERY - Stagger decays automatically over time
-    // Fighter is fully idle now, stagger just passively decreases
+    // PHASE 3: CONTINUOUS DECAY - Stagger decreases passively over time
     if (fighter.stagger > 0) {
       fighter.stagger = Math.max(0, fighter.stagger - recoveryRate * dt);
     }
     
-    return { state: fighter.state, stagger: fighter.stagger, phase: 'decay' };
+    return { state: fighter.state, stagger: fighter.stagger, phase: 'decay', events };
   }
 
   applyStatus(target, type, count, potency, duration) {
@@ -217,8 +277,19 @@ class GameplayEngine {
           return true;
         case 'Tremor':
           if (s.count <= 0) {
+            // Tremor burst: add potency to stagger
             fighter.stagger += s.potency;
-            events.push({ type: 'STAGGER_INCREASE', statusType: 'Tremor', amount: s.potency });
+            events.push({ type: 'STAGGER_INCREASE', statusType: 'Tremor', amount: s.potency, stagger: fighter.stagger });
+            // Check if tremor burst triggers stagger
+            const threshold = fighter.staggerThreshold || 1000;
+            if (fighter.stagger >= threshold && fighter.state !== 'staggered') {
+              fighter.state = 'staggered';
+              fighter.staggerTimer = 5;
+              fighter.staggerDuration = 5;
+              fighter.stagger = threshold;
+              fighter.staggerRecoveryTimer = 0;
+              events.push({ type: 'STAGGER_START', duration: 5 });
+            }
             events.push({ type: 'STATUS_EXPIRED', statusType: 'Tremor' });
             return false;
           }
@@ -434,8 +505,15 @@ class GameplayEngine {
     return { success: true, damage, defeated: false, finalHp: target.hp };
   }
 
+  /**
+   * Authoritative attack resolution with full stagger integration
+   * 
+   * Stagger buildup = damage * 1.2 (original game behavior)
+   * Taking damage resets recovery timer
+   * Double damage while staggered is in calculateDamage
+   */
   resolveAttack(attacker, defender, attackData, config) {
-    const result = { success: false, hit: false, damage: 0, knockback: 0, staggerResult: null, statuses: [], defenderHp: defender.hp, defeated: false, wasGuarded: false };
+    const result = { success: false, hit: false, damage: 0, knockback: 0, staggerResult: null, statuses: [], defenderHp: defender.hp, defeated: false, wasGuarded: false, staggerEvents: [] };
     const range = attackData.range || 100;
     const attackRange = attackData.hitArea === 'circle' ? range : (attackData.isDashAttack ? range * 1.5 : range);
     const hit = this.checkAttackHit(attacker.position, defender.position, attackRange, attacker.facing, defender.hitCooldown || 0, attackData.hitArea);
@@ -453,36 +531,67 @@ class GameplayEngine {
     // Reset defender's combo when they get hit (getting hit breaks offensive momentum)
     this.resetCombo(defender.id);
 
+    // Set hit state only if not staggered (staggered state takes priority)
     if (defender.state !== 'staggered') { defender.state = 'hit'; defender.hitTimer = 0.18; }
+    
+    // Apply knockback
     if (knock) { const dir = defender.position.x < attacker.position.x ? -1 : 1; const fk = this.calculateKnockback(knock, attacker); this.applyKnockback(defender, fk, dir, attacker); result.knockback = fk; }
     
-    // STAGGER SYSTEM: Buildup is based on ACTUAL DAMAGE TAKEN * 1.2
-    // When guarding, no stagger is applied
-    if (!result.wasGuarded && defender.state !== 'staggered') {
+    // STAGGER SYSTEM: Buildup is based on ACTUAL DAMAGE TAKEN * 1.2 (original game)
+    // When guarding, no stagger is applied (guarded hits don't build stagger)
+    if (!result.wasGuarded) {
       const staggerBuildup = Math.floor(result.damage * 1.2);
       defender.stagger += staggerBuildup;
-      // Reset recovery timer when taking damage - recovery only starts after delay
-      defender.staggerRecoveryTimer = (config.staggerRecoveryDelay || 2.0);
+      
+      // RESET recovery timer when taking damage - recovery only starts after delay expires
+      // This is critical: every hit resets the recovery process
+      const recoveryDelay = config.staggerRecoveryDelay || defender.staggerRecoveryDelay || 2.0;
+      defender.staggerRecoveryTimer = recoveryDelay;
+      
+      // Clamp stagger to 0..threshold (never exceed threshold unless staggered)
+      const threshold = config.staggerThreshold || defender.staggerThreshold || 1000;
+      if (defender.stagger > threshold && defender.state !== 'staggered') {
+        defender.stagger = threshold;
+      }
+      
       result.staggerResult = { staggered: false, stagger: defender.stagger };
       
       // Check if stagger threshold reached
-      if (defender.stagger >= (config.staggerThreshold || 1000)) {
+      if (defender.stagger >= threshold && defender.state !== 'staggered') {
+        const length = config.staggerLength || defender.staggerDuration || 5;
         defender.state = 'staggered';
-        defender.staggerTimer = config.staggerLength || 5;
-        defender.stagger = config.staggerThreshold || 1000;
+        defender.staggerTimer = length;
+        defender.staggerDuration = length;
+        defender.stagger = threshold;
         defender.staggerRecoveryTimer = 0; // Reset recovery when entering stagger
-        result.staggerResult = { staggered: true, duration: config.staggerLength || 5 };
+        
+        // Emit stagger start event
+        result.staggerEvents.push({ type: 'STAGGER_START', targetId: defender.id, duration: length });
+        result.staggerResult = { staggered: true, duration: length };
+        
+        // Tremor: consume on burst (stagger threshold reached)
+        const tremorEvents = this.consumeTremor(defender, config);
+        if (tremorEvents.length) result.staggerEvents = result.staggerEvents.concat(tremorEvents);
+      } else {
+        result.staggerEvents.push({ type: 'STAGGER_INCREASE', targetId: defender.id, amount: staggerBuildup });
       }
     }
+    
+    // Apply status effects from attack
     if (attackData.statusEffects) attackData.statusEffects.forEach(s => { this.applyStatus(defender, s.type, s.count, s.potency); result.statuses.push(s.type); });
+    
     // Call character-specific onSuccessfulHit for per-hit status application
     const hitEffects = this.callOnSuccessfulHit(attacker, defender, result.damage, config);
     if (hitEffects) {
       if (hitEffects.statusesApplied) hitEffects.statusesApplied.forEach(s => result.statuses.push(s));
       else if (hitEffects.statusApplied) result.statuses.push(hitEffects.statusApplied);
     }
+    
+    // Consume status effects on hit
     const ce = this.consumeOnHit(defender); if (ce.length) result.consumeEvents = ce;
     const be = this.consumeBleedOnAttack(attacker); if (be.length) result.bleedAttackEvents = be;
+    
+    // Track charge attack and combo
     const cs = this.combatState[attacker.id] || {}; cs.chargeAttack = !!attackData.chargeAttack; this.combatState[attacker.id] = cs;
     this.addCombo(attacker.id); this.incrementAttackCounter(attacker.id);
     result.chargeAttack = cs.chargeAttack; result.success = true;
@@ -512,8 +621,14 @@ class GameplayEngine {
         state.hitTimer = Math.max(0, (state.hitTimer || 0) - dt);
       }
     }
+    // Update stagger state machine (handles all three phases)
     const su = this.updateStagger(state, dt, config);
-    if (su.state !== state.state) events.push({ type: 'STATE_CHANGE', from: state.state, to: su.state });
+    if (su.events && su.events.length) {
+      su.events.forEach(ev => events.push(ev));
+    }
+    if (su.state !== state.state && su.state) {
+      events.push({ type: 'STATE_CHANGE', from: state.state, to: su.state });
+    }
     events.push(...this.processStatuses(state, dt));
     events.push(...this.updateCharacterSystems(state, dt));
     return events;
@@ -587,6 +702,11 @@ class GameplayEngine {
     return events;
   }
 
+  /**
+   * Consume Tremor status on stagger burst
+   * Tremor adds its potency to stagger when consumed
+   * If this pushes stagger to threshold, triggers stagger
+   */
   consumeTremor(fighter, config) {
     const events = [];
     const tremor = fighter.statuses.find(s => s.type === 'Tremor');
@@ -594,8 +714,22 @@ class GameplayEngine {
       tremor.count -= 1;
       events.push({ type: 'STATUS_CONSUMED', statusType: 'Tremor', remaining: tremor.count });
       if (tremor.count <= 0) {
+        // Add tremor potency to stagger
         fighter.stagger += tremor.potency;
-        events.push({ type: 'STAGGER_INCREASE', statusType: 'Tremor', amount: tremor.potency });
+        events.push({ type: 'STAGGER_INCREASE', statusType: 'Tremor', amount: tremor.potency, stagger: fighter.stagger });
+        
+        // Check if tremor burst triggers stagger
+        const threshold = config.staggerThreshold || fighter.staggerThreshold || 1000;
+        if (fighter.stagger >= threshold && fighter.state !== 'staggered') {
+          const length = config.staggerLength || fighter.staggerDuration || 5;
+          fighter.state = 'staggered';
+          fighter.staggerTimer = length;
+          fighter.staggerDuration = length;
+          fighter.stagger = threshold;
+          fighter.staggerRecoveryTimer = 0;
+          events.push({ type: 'STAGGER_START', duration: length });
+        }
+        
         fighter.statuses = fighter.statuses.filter(s => s.type !== 'Tremor');
         events.push({ type: 'STATUS_EXPIRED', statusType: 'Tremor' });
       }
@@ -609,7 +743,19 @@ class GameplayEngine {
   isDefeated(s) { return s.hp <= 0; }
 
   getStateSnapshot(state) {
-    return { id: state.id, characterKey: state.characterKey, hp: state.hp, maxHp: state.maxHp, position: { ...state.position }, velocity: { ...state.velocity }, facing: state.facing, state: state.state, stagger: state.stagger, isDefeated: state.isDefeated, statuses: state.statuses.map(s => ({ ...s })), resources: { ...state.resources }, abilityCooldowns: { ...state.abilityCooldowns } };
+    return { 
+      id: state.id, characterKey: state.characterKey, hp: state.hp, maxHp: state.maxHp, 
+      position: { ...state.position }, velocity: { ...state.velocity }, facing: state.facing, 
+      state: state.state, 
+      // Full stagger snapshot data
+      stagger: state.stagger, 
+      staggerThreshold: state.staggerThreshold,
+      staggerTimer: state.staggerTimer,
+      staggerRecoveryTimer: state.staggerRecoveryTimer,
+      staggerDuration: state.staggerDuration,
+      isDefeated: state.isDefeated, statuses: state.statuses.map(s => ({ ...s })), 
+      resources: { ...state.resources }, abilityCooldowns: { ...state.abilityCooldowns } 
+    };
   }
 }
 

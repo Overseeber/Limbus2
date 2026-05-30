@@ -362,6 +362,43 @@ function processSnapshot(snapshot) {
         fighter.combo = state.combo || 0;
         fighter.comboTimer = state.comboTimer || 0;
         
+        // Apply authoritative stagger state from server (client renders only)
+        fighter.stagger = typeof state.stagger !== 'undefined' ? state.stagger : (fighter.stagger || 0);
+        fighter.staggerThreshold = typeof state.staggerThreshold !== 'undefined' ? state.staggerThreshold : (fighter.staggerThreshold || 1000);
+        fighter.staggerTimer = typeof state.staggerTimer !== 'undefined' ? state.staggerTimer : (fighter.staggerTimer || 0);
+        fighter.staggerRecoveryTimer = typeof state.staggerRecoveryTimer !== 'undefined' ? state.staggerRecoveryTimer : (fighter.staggerRecoveryTimer || 0);
+        fighter.staggerDuration = typeof state.staggerDuration !== 'undefined' ? state.staggerDuration : (fighter.staggerDuration || 0);
+        
+        // Track stagger visual display for UI (smoothed for client)
+        if (typeof fighter._staggerDisplay === 'undefined') {
+            fighter._staggerDisplay = fighter.stagger;
+        }
+        // Lerp the display value for smooth UI updates
+        fighter._staggerDisplay += (fighter.stagger - fighter._staggerDisplay) * 0.3;
+        
+        // Detect stagger state changes for visual effects
+        const wasStaggered = fighter._wasStaggered || false;
+        const isStaggered = state.state === 'staggered';
+        if (isStaggered && !wasStaggered) {
+            // Just entered stagger - trigger visual effects
+            fighter._staggeredDisplay = 1;
+            fighter._staggeredDisplayTimer = 2.0;
+            // Set state for client sprite rendering
+            fighter.state = 'staggered';
+        }
+        if (!isStaggered && wasStaggered) {
+            // Exited stagger - clear visual effects
+            fighter._staggeredDisplay = 0;
+            fighter._staggeredDisplayTimer = 0;
+        }
+        fighter._wasStaggered = isStaggered;
+        // Update stagger display timer
+        if (fighter._staggeredDisplayTimer > 0) {
+            fighter._staggeredDisplayTimer -= 1/60; // Approximate client dt
+            if (fighter._staggeredDisplayTimer < 0) fighter._staggeredDisplayTimer = 0;
+            fighter._staggeredDisplay = fighter._staggeredDisplayTimer / 2.0;
+        }
+        
         // Apply remote input state for non-local players
         fighter.remoteInput = {
             left: !!state.input?.left,
@@ -1307,6 +1344,31 @@ function draw() {
     background(0);
     
     updateBattle();
+    
+    // Position camera to keep characters centered vertically
+    // Calculate the vertical midpoint of all active fighters
+    if (window.allFighters && window.allFighters.length > 0) {
+      let totalY = 0;
+      let activeCount = 0;
+      
+      window.allFighters.forEach(fighter => {
+        if (!fighter.isDefeated) {
+          totalY += (fighter.pos && typeof fighter.pos.y !== 'undefined') ? fighter.pos.y : (fighter.y || 0);
+          activeCount++;
+        }
+      });
+      
+      const fighterMidpointY = activeCount > 0 ? totalY / activeCount : ARENA_HEIGHT / 2;
+      
+      // Initialize camera variables if not already set
+      if (typeof cameraX === 'undefined') cameraX = ARENA_WIDTH / 2;
+      if (typeof cameraZoom === 'undefined') cameraZoom = 1;
+      
+      // Lerp toward fighter midpoint for smooth vertical centering
+      if (typeof cameraY === 'undefined') cameraY = ARENA_HEIGHT / 2;
+      cameraY = lerp(cameraY, fighterMidpointY, 0.1); // Smooth transition
+    }
+    
     beginCamera();
     drawArena();
     

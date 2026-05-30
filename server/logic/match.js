@@ -200,6 +200,14 @@ tick() {
                 this.hitstopActive = false;
                 console.log('[Hitstop] ended');
             }
+            // Even during hitstop, advance ultimate sequences so cinematic ultimates
+            // (and their timers/phases) continue to progress and don't softlock.
+            try {
+                this.updateUltimates(dt);
+            } catch (e) {
+                console.error('[updateUltimates] error during hitstop:', e);
+            }
+
             this.checkWinCondition();
             this.broadcastSnapshot();
             return;
@@ -250,13 +258,15 @@ tick() {
                     return;
                 }
                 
-                // Update gameplay state through GameplayEngine FIRST
-                // This allows hit/stagger state to exit on input before input processing
-                const config = {
-                    staggerThreshold: player.config.staggerThreshold,
-                    staggerLength: player.config.staggerLength
-                };
-                const events = this.engine.updateFighter(player.gameState, dt, config, player.input);
+        // Update gameplay state through GameplayEngine FIRST
+        // This allows hit/stagger state to exit on input before input processing
+        const config = {
+            staggerThreshold: player.config.staggerThreshold,
+            staggerLength: player.config.staggerLength,
+            staggerRecoveryDelay: player.config.staggerRecoveryDelay || 2.0,
+            staggerRecoveryRate: player.config.staggerRecoveryRate || 12
+        };
+        const events = this.engine.updateFighter(player.gameState, dt, config, player.input);
 
                 // Handle events from GameplayEngine
                 this.handleEvents(player, events);
@@ -300,6 +310,14 @@ tick() {
                 }
             }
         });
+
+        // Update ultimate sequences each tick so cinematic ultimates progress
+        // even when no hitstop is active.
+        try {
+            this.updateUltimates(dt);
+        } catch (e) {
+            console.error('[updateUltimates] error during tick:', e);
+        }
 
         // Check win condition
         this.checkWinCondition();
@@ -1226,6 +1244,14 @@ tick() {
                         fighterId: player.clientId
                     });
                     break;
+                    
+                case 'STAGGER_EXIT':
+                    this.broadcast({
+                        type: 'STAGGER_EXIT',
+                        fighterId: player.clientId,
+                        reason: event.reason || ''
+                    });
+                    break;
             }
         });
     }
@@ -1861,8 +1887,12 @@ tick() {
                 // Combo state (authoritative, for UI rendering)
                 combo: (this.engine.combatState[player.clientId] || {}).combo || 0,
                 comboTimer: (this.engine.combatState[player.clientId] || {}).comboTimer || 0,
-                // Stagger state (authoritative)
+                // Stagger state (authoritative - full snapshot for client rendering)
                 stagger: player.gameState.stagger || 0,
+                staggerThreshold: player.gameState.staggerThreshold || 1000,
+                staggerTimer: player.gameState.staggerTimer || 0,
+                staggerRecoveryTimer: player.gameState.staggerRecoveryTimer || 0,
+                staggerDuration: player.gameState.staggerDuration || 0,
                 // Ability cooldowns (for UI countdown timers)
                 abilityCooldowns: { ...player.gameState.abilityCooldowns } || {},
                 // Character-specific ability resources

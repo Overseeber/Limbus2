@@ -15,6 +15,7 @@ function initUltimate(fighter) {
     attackFrame: 0,
     attackTimer: 0,
     totalDamage: 0,
+    lastHitstop: 0,
     cameraZoom: 2.5,
     backgroundDim: 0.7,
     name: 'ULTIMATE',

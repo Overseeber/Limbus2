@@ -2014,8 +2014,8 @@ class Fighter {
     }
     
     // Check hitbox collision with opponent and push back if overlapping
-    const myBox = { x: this.pos.x - 25, y: this.pos.y - 36, w: 50, h: 72 };
-    const oppBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
+    const myBox = { x: this.pos.x - 25, y: this.pos.y - 72, w: 50, h: 144 };
+    const oppBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 72, w: 50, h: 144 };
     
     // Only check horizontal overlap to allow jumping over enemies
     const horizontalOverlap = !(myBox.x + myBox.w < oppBox.x || oppBox.x + oppBox.w < myBox.x);
@@ -2371,8 +2371,8 @@ class Fighter {
 
   calcAttackBox(range) {
     const x = this.pos.x + this.facing * (range / 2);
-    const y = this.pos.y - 28;
-    return { x, y, w: range, h: 70 };
+    const y = this.pos.y - 56;
+    return { x, y, w: range, h: 140 };
   }
 
   hitOpponent(opponent, box) {
@@ -2381,7 +2381,7 @@ class Fighter {
     if (opponent.isEvading || opponent.state === 'evade') {
       return false;
     }
-    const playerBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 36, w: 50, h: 72 };
+    const playerBox = { x: opponent.pos.x - 25, y: opponent.pos.y - 72, w: 50, h: 144 };
     const attackBox = { x: box.x - box.w / 2, y: box.y, w: box.w, h: box.h };
     return this.rectOverlap(playerBox, attackBox) && opponent.hitCooldown <= 0;
   }
@@ -2892,10 +2892,8 @@ addCombo(attacker) {
         const scaleFactor = 144 / 512;
 
         // Align feet to hitbox bottom
-        
-        // Position Valencina's feet at the bottom of her hitbox
-        // Hitbox bottom is at this.pos.y + 36, so feet should be at y = 36
-        const hitboxBottomY = 36;
+        // Hitbox bottom is at this.pos.y + 72, so feet should be at y = 72
+        const hitboxBottomY = 72;
         drawSpriteScaled(this.currentSprite, 0, hitboxBottomY, scaleFactor);
       }
       pop();
@@ -2910,12 +2908,12 @@ addCombo(attacker) {
       const scaleFactor = targetHeight / this.sprite.height;
       const scaledWidth = this.sprite.width * scaleFactor;
       
-      image(this.sprite, 0, -30, scaledWidth, targetHeight);
+      image(this.sprite, 0, 0, scaledWidth, targetHeight);
       pop();
     } else {
       fill(this.color);
       noStroke();
-      ellipse(0, -30, 52, 72);
+      ellipse(0, 0, 50, 144);
       fill(30);
       rectMode(CENTER);
       rect(this.facing * 20, -42, 20, 6, 4);
@@ -2924,7 +2922,7 @@ addCombo(attacker) {
       stroke('#90ee90');
       strokeWeight(3);
       noFill();
-      ellipse(0, -30, 72, 88);
+      ellipse(0, 0, 72, 168);
     }
     if (this.state === 'attack' && this.attackTimer > 0) {
       const progress = constrain(this.attackTimer / this.attackInterval, 0, 1);
@@ -2932,19 +2930,19 @@ addCombo(attacker) {
       noFill();
       stroke(255, 220, 80, 180);
       strokeWeight(3);
-      ellipse(0, -70, 46 + (1 - progress) * 26, 18 + (1 - progress) * 12);
+      ellipse(0, -40, 46 + (1 - progress) * 26, 18 + (1 - progress) * 12);
       strokeWeight(2);
-      arc(0, -70, 38, 14, PI, PI + progress * PI);
+      arc(0, -40, 38, 14, PI, PI + progress * PI);
       pop();
     }
     if (this.state === 'attack') {
       stroke('#ffd24d');
       strokeWeight(4);
-      line(this.facing * 22, -50, this.facing * 70, -60);
+      line(this.facing * 22, -20, this.facing * 70, -30);
     }
     if (this.state === 'evade') {
       fill('#8a8a8a');
-      ellipse(0, -40, 12, 12);
+      ellipse(0, -10, 12, 12);
     }
     pop();
     

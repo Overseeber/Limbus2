@@ -50,6 +50,8 @@ class Match {
         this.running = false;
         this.interval = null;
         this.tickRate = 50; // 50ms = 20 ticks per second
+        this.hitstopTimer = 0;
+        this.hitstopActive = false;
     }
 
     /**
@@ -191,11 +193,18 @@ tick() {
 
     const dt = this.tickRate / 1000; // Convert to seconds
 
-    // Update combo timers and combat state once per tick
-    this.engine.updateCombos(dt);
+        if (this.hitstopTimer > 0) {
+            this.hitstopTimer = Math.max(0, this.hitstopTimer - dt);
+            if (this.hitstopTimer <= 0) {
+                this.hitstopTimer = 0;
+                this.hitstopActive = false;
+                console.log('[Hitstop] ended');
+            }
+            this.checkWinCondition();
+            this.broadcastSnapshot();
+            return;
+        }
 
-    // Update ultimate sequences for all players
-    this.updateUltimates(dt);
 
         // Track match start time for opening phase (first 2.5 seconds)
         if (!this.matchStartTime) {
@@ -297,6 +306,15 @@ tick() {
 
         // Broadcast snapshot to all clients
         this.broadcastSnapshot();
+    }
+
+    startHitstop(duration, source = '') {
+        if (!duration || duration <= 0) return;
+        const hitstopDuration = Math.max(this.hitstopTimer, duration);
+        if (hitstopDuration <= 0) return;
+        this.hitstopTimer = hitstopDuration;
+        this.hitstopActive = true;
+        console.log(`[Hitstop] started ${hitstopDuration.toFixed(3)}s${source ? ` (${source})` : ''}`);
     }
 
     /**
@@ -1387,6 +1405,18 @@ tick() {
 
             if (!result.hit) return;
 
+            let hitstopSeconds = attackDef.hitstop || 0;
+            if (!hitstopSeconds) {
+                hitstopSeconds = attackType === 'light' ? 0.04 : attackType === 'medium' ? 0.06 : 0.10;
+            }
+            if (result.staggerResult && result.staggerResult.staggered) {
+                hitstopSeconds = Math.max(hitstopSeconds, 0.14);
+            }
+            if (result.defeated) {
+                hitstopSeconds = Math.max(hitstopSeconds, 0.18);
+            }
+            this.startHitstop(hitstopSeconds, `attack-${attackType}`);
+
             // Broadcast hit result
             this.broadcast({
                 type: 'HIT',
@@ -1636,9 +1666,19 @@ tick() {
                         staggerLength: config.staggerLength
                     }
                 );
-                
+
                 hitAny = true;
-                
+                if (result.hit) {
+                    let slamHitstop = 0.14;
+                    if (result.staggerResult && result.staggerResult.staggered) {
+                        slamHitstop = Math.max(slamHitstop, 0.18);
+                    }
+                    if (result.defeated) {
+                        slamHitstop = Math.max(slamHitstop, 0.22);
+                    }
+                    this.startHitstop(slamHitstop, 'slam');
+                }
+
                 this.broadcast({
                     type: 'slamHit',
                     attackerId: player.clientId,
@@ -1764,6 +1804,10 @@ tick() {
         });
 
         const snapshot = {
+            hitstop: {
+                active: this.hitstopTimer > 0,
+                timer: this.hitstopTimer
+            },
             players: Object.values(this.players).map(player => ({
                 id: player.clientId,
                 x: player.gameState.position.x,
@@ -1915,6 +1959,12 @@ tick() {
                 });
             }
             
+            // Start ultimate hitstop if an ultimate damage event requested it
+            if (player.ultimate && player.ultimate.lastHitstop > 0) {
+                this.startHitstop(player.ultimate.lastHitstop, 'ultimate');
+                player.ultimate.lastHitstop = 0;
+            }
+
             // Broadcast hit events for each enemy that lost HP
             Object.values(this.players)
                 .filter(p => p.clientId !== player.clientId && !p.gameState.isDefeated)

@@ -458,6 +458,12 @@ function dealUltDamage(fighter, ult, enemy, damage, isFinal, phase, applyKnockba
   clampToArena(fighter);
   fighter.velocity.x = 0; fighter.velocity.y = 0;
   ult.totalDamage += actualDamage;
+
+  if (ult) {
+    const ultHitstop = isFinal ? 0.20 : 0.08;
+    ult.lastHitstop = Math.max(ult.lastHitstop || 0, ultHitstop);
+  }
+
   return { damage: actualDamage, hp: enemy.hp, defeated, knockback: knockbackAmount };
 }
 

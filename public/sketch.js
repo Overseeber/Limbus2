@@ -271,6 +271,8 @@ function setup() {//test
 // Snapshot buffer for handling race conditions during initialization
 let snapshotBuffer = [];
 let snapshotsEnabled = false;
+let serverHitstopActive = false;
+let serverHitstopTimer = 0;
 
 function applySnapshot(snapshot) {
     // If fighters not initialized yet, buffer the snapshot
@@ -294,6 +296,13 @@ function applySnapshot(snapshot) {
 }
 
 function processSnapshot(snapshot) {
+    if (snapshot.hitstop) {
+        serverHitstopActive = !!snapshot.hitstop.active;
+        serverHitstopTimer = snapshot.hitstop.timer || 0;
+    } else {
+        serverHitstopActive = false;
+        serverHitstopTimer = 0;
+    }
     for (const state of snapshot.players) {
         const fighter = allFighters.find(
             f => f.clientId === state.id

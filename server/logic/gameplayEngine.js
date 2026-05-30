@@ -186,14 +186,15 @@ class GameplayEngine {
       fighter.staggerTimer -= dt;
       
       if (fighter.staggerTimer <= 0) {
-        // Stagger active duration expired - enter recovery delay phase
+        // Stagger active duration expired - RESET stagger to 0 and enter recovery delay phase
         fighter.staggerTimer = 0;
-        fighter.staggerRecoveryTimer = recoveryDelay;
+        fighter.stagger = 0; // RESET stagger to 0 - must build up again
+        fighter.staggerRecoveryTimer = recoveryDelay * 0.5; // Shorter recovery delay after reset
         
         // Emit stagger end event
         events.push({ type: 'STAGGER_END' });
         
-        return { state: 'staggered', stagger: fighter.stagger, phase: 'active_end', events };
+        return { state: 'staggered', stagger: 0, phase: 'active_end', events };
       }
       
       return { state: 'staggered', stagger: fighter.stagger, phase: 'active', events };

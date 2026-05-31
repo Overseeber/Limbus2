@@ -1113,7 +1113,7 @@ class Fighter {
             // Regular slash effects - flip with facing
             push();
             tint(255, 255, 255, alpha);
-            translate(baseX + offsetX * facing, baseY + offsetY + 60);
+            translate(baseX + offsetX * facing, baseY + offsetY + 84);
             if (facing === -1) {
               scale(-1, 1); // Flip horizontally when facing right
             }
@@ -1125,7 +1125,7 @@ class Fighter {
           push();
           scale(scaleFactor * facing, 1);
           noStroke();
-          ellipse(baseX + offsetX, baseY + offsetY + 60, 15, 15);
+          ellipse(baseX + offsetX, baseY + offsetY + 84, 15, 15);
           pop();
         }
       } else {

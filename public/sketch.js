@@ -59,18 +59,23 @@ const SNAPSHOT_INTERVAL_MS = 50; // server tick at 50ms
 // Client-side camera effects driven by server-authoritative state
 // DO NOT calculate gameplay here - only visual zoom effects
 const COMBAT_ZOOM = {
-    // Normal attack zoom in target (fractional, 1.0 = normal)
-    ZOOM_IN_LIGHT: 0.92,      // Subtle zoom for light attacks
-    ZOOM_IN_MEDIUM: 0.88,     // Medium zoom for medium attacks  
-    ZOOM_IN_HEAVY: 0.82,      // Strong zoom for heavy/charged attacks
-    ZOOM_IN_DASH: 0.83,       // Dash attack zoom
-    ZOOM_IN_SLAM: 0.80,       // Slam attack zoom
-    ZOOM_IN_ULTIMATE: 0.65,   // Cinematic ultimate zoom
+    // Unified zoom intensities - all attacks use same slam-level intensity
+    // Magnification: target / divisor, e.g., 1.0 / 0.70 = 1.43x
+    ZOOM_IN_UNIFIED: 0.70,    // All normal attacks (light, medium, heavy, dash, slam) = 1.43x magnification
+    ZOOM_IN_COMBO3: 0.72,     // Combo finisher (sequence 3 attacks) = 1.39x magnification
+    ZOOM_IN_ULTIMATE: 0.60,   // Cinematic ultimate zoom = 1.67x magnification
     
     // Timing
-    WINDUP_ZOOM_DURATION: 0.015, // Time to reach full windup zoom (seconds) - fast snap for noticeable impact
+    WINDUP_TRACKING_SPEED: 25, // Fast tracking toward zoom target during windup (per-frame lerp factor)
     RECOVERY_ZOOM_SPEED: 50.0, // How fast zoom returns after hitstop ends (seconds^-1) - snappy
     HIT_HOLD_DURATION: 0.8,  // Brief hold at max zoom before hitstop (to show impact frame)
+};
+
+// Per-character damage phase arrays for ultimate sync
+const ULTIMATE_DAMAGE_PHASES = {
+    JOHN: [2, 3],                          // John: phases 2 and 3
+    CALLISTO: [2, 4, 6, 8, 10],           // Callisto: phases 2, 4, 6, 8, 10
+    VALENCINA: [3, 5, 7, 9],              // Valencina: phases 3, 5, 7, 9
 };
 
 // Combat zoom state
@@ -86,6 +91,7 @@ let combatZoom = {
     prevAttackPhase: {},       // Track per-fighter previous attack phase
     prevHitstopActive: false,  // Track hitstop state transitions
     lastHitTime: 0,            // Timestamp of last hit for cooldown
+    maxSafeZoom: 1.0,          // Clamped zoom to maintain fighter visibility
 };
 
 
@@ -611,22 +617,66 @@ function processSnapshot(snapshot) {
  * 
  * Flow:
  *   Windup starts → zoomTarget immediately set to desiredZoom
- *                    currentZoom snaps toward it aggressively
- *   Attack misses  → zoomTarget back to 1.0, smooth recovery
+ *                    currentZoom snaps toward it aggressively (25 tracking speed)
+ *   Attack misses  → zoomTarget back to 1.0, immediate recovery
  *   Attack hits    → hitstop starts (attack sprite + slash already visible)
  *                    zoom freezes at current level during hitstop
  *                    hitstop ends → zoomTarget back to 1.0, smooth recovery
  *   No attack      → currentZoom = 1.0 exactly (zero camera influence)
  * 
+ * Visibility safety: zoom is clamped to never hide any fighter hitbox.
  * ALL reads from server-authoritative snapshot data only.
  */
+
+// Calculate maximum safe zoom level to keep all fighters visible
+// Visibility safety clamp: ensures all fighter hitboxes stay 100% on-screen
+function calculateMaxSafeZoom() {
+    if (!window.allFighters || window.allFighters.length === 0) return 1.0;
+    
+    // Fighter hitbox dimensions
+    const HITBOX_W = 50;
+    const HITBOX_H = 72;
+    const SCREEN_MARGIN = 50; // pixels around scene to maintain visibility
+    
+    // Calculate bounding box of ALL active fighter hitboxes
+    let minX = Infinity, maxX = -Infinity;
+    let minY = Infinity, maxY = -Infinity;
+    
+    window.allFighters.forEach(f => {
+        if (f.pos) {
+            minX = Math.min(minX, f.pos.x - HITBOX_W / 2);
+            maxX = Math.max(maxX, f.pos.x + HITBOX_W / 2);
+            minY = Math.min(minY, f.pos.y - HITBOX_H / 2);
+            maxY = Math.max(maxY, f.pos.y + HITBOX_H / 2);
+        }
+    });
+    
+    if (minX === Infinity) return 1.0;
+    
+    // Add 50px screen margin on all sides
+    const requiredWidth = (maxX - minX) + (SCREEN_MARGIN * 2);
+    const requiredHeight = (maxY - minY) + (SCREEN_MARGIN * 2);
+    
+    // Compute maximum safe zoom to keep all hitboxes visible
+    // If zoom exceeds this, fighter edges go off-screen
+    const maxSafeZoomX = ARENA_WIDTH / requiredWidth;
+    const maxSafeZoomY = ARENA_HEIGHT / requiredHeight;
+    
+    // Return the most restrictive limit, ensuring all fighters stay on-screen
+    const safeZoom = Math.min(maxSafeZoomX, maxSafeZoomY);
+    return safeZoom;
+}
+
 function updateCombatZoom(dt) {
     if (!window.allFighters || window.allFighters.length === 0) return;
     
     const snapDt = dt || (1/60);
-    const now = Date.now();
     
-    // === STEP 1: Read server-authoritative state ===
+    // === STEP 1: Recalculate visibility limits ===
+    combatZoom.maxSafeZoom = calculateMaxSafeZoom();
+    const minSafeZoom = 1.0 / combatZoom.maxSafeZoom; // Minimum zoom factor allowed
+    
+    // === STEP 2: Read server-authoritative state ===
     let anyAttacking = false;
     let desiredZoom = 1.0;
     let zoomPriority = 0;
@@ -642,32 +692,61 @@ function updateCombatZoom(dt) {
         if (!hasValid) return;
         
         let target = 1.0, pri = 0;
-        if (isUlt)      { target = COMBAT_ZOOM.ZOOM_IN_ULTIMATE; pri = 5; }
-        else if (isSlam) { target = COMBAT_ZOOM.ZOOM_IN_SLAM; pri = 4; }
-        else if (isDash) { target = COMBAT_ZOOM.ZOOM_IN_DASH; pri = 3; }
-        else if (seq === 3 || fighter.chargeAttack) { target = COMBAT_ZOOM.ZOOM_IN_HEAVY; pri = 3; }
-        else if (seq === 2) { target = COMBAT_ZOOM.ZOOM_IN_MEDIUM; pri = 2; }
-        else if (seq === 1) { target = COMBAT_ZOOM.ZOOM_IN_LIGHT; pri = 1; }
+        
+        if (isUlt) {
+            const charKey = fighter.characterKey;
+            const damagePhases = ULTIMATE_DAMAGE_PHASES[charKey] || [];
+            const isInDamagePhase = damagePhases.includes(fighter.ultimatePhase);
+            target = isInDamagePhase ? COMBAT_ZOOM.ZOOM_IN_ULTIMATE : COMBAT_ZOOM.ZOOM_IN_UNIFIED;
+            pri = 5;
+        } else if (isSlam) {
+            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
+            pri = 4;
+        } else if (isDash) {
+            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
+            pri = 3;
+        } else if (seq === 3 || fighter.chargeAttack) {
+            target = COMBAT_ZOOM.ZOOM_IN_COMBO3;
+            pri = 3;
+        } else if (seq === 2) {
+            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
+            pri = 2;
+        } else if (seq === 1) {
+            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
+            pri = 1;
+        }
         
         if (pri > zoomPriority) { zoomPriority = pri; desiredZoom = target; anyAttacking = true; }
     });
     
-    // === STEP 2: Hitstop state ===
+    // === STEP 3: Apply distance-based scaling ===
+    // Farther camera = weaker impact zoom (zoom out already happened, don't emphasize further)
+    // Closer camera = stronger impact zoom (make impact feel more dramatic)
+    // Scale desired zoom toward 1.0 based on current camera distance
+    let scaledZoom = desiredZoom;
+    if (typeof cameraZoom !== 'undefined' && cameraZoom > 1.0) {
+        // Camera is zoomed out (cameraZoom > 1.0 = farther)
+        // Reduce impact zoom strength: scale toward 1.0
+        const zoomDistance = cameraZoom;
+        const scaleFactor = 1.0 / zoomDistance; // e.g., if cameraZoom=2.0, scale by 0.5
+        scaledZoom = 1.0 - (1.0 - desiredZoom) * scaleFactor;
+    }
+    
+    // === STEP 4: Hitstop state ===
     const hitstopNow = serverHitstopActive && serverHitstopTimer > 0;
     const hitstopEdge = hitstopNow && !combatZoom.prevHitstopActive;
     if (hitstopEdge) {
-        combatZoom.recoveryTimer = 0.15; // brief post-hitstop pause
+        combatZoom.recoveryTimer = 0.1;
     }
     if (combatZoom.recoveryTimer > 0 && !hitstopNow) {
         combatZoom.recoveryTimer -= snapDt;
         if (combatZoom.recoveryTimer < 0) combatZoom.recoveryTimer = 0;
     }
     
-    // === STEP 3: Set zoomTarget ===
+    // === STEP 5: Set zoomTarget ===
     if (anyAttacking && !hitstopNow) {
-        // WINDUP: aggressively push zoomTarget toward desiredZoom
-        // Use 1/lamp = 3 frames at 60fps to reach target (snappy)
-        combatZoom.zoomTarget = lerp(combatZoom.zoomTarget, desiredZoom, 10 * snapDt);
+        // WINDUP: aggressively zoom toward desired zoom at 50 speed
+        combatZoom.zoomTarget = lerp(combatZoom.zoomTarget, scaledZoom, Math.min(1, 50 * snapDt));
     } else if (hitstopNow) {
         // HIT: freeze zoom during hitstop (maintain impact frame)
         combatZoom.zoomTarget = combatZoom.currentZoom;
@@ -675,28 +754,33 @@ function updateCombatZoom(dt) {
         // POST-HIT PAUSE: hold current level briefly
         combatZoom.zoomTarget = combatZoom.currentZoom;
     } else {
-        // MISS / RECOVERY / IDLE: return to 1.0 (no influence)
+        // MISS / RECOVERY / IDLE: return to 1.0
         combatZoom.zoomTarget = 1.0;
     }
     
-    // === STEP 4: Aggressive tracking toward zoomTarget ===
-    // Use exponential approach: each frame covers 60% of remaining distance
-    // This reaches ~98% of target in 4 frames (visible within 1-2 frames)
+    // === STEP 6: Track toward zoomTarget ===
     if (hitstopNow) {
         // Freeze during hitstop - no zoom change
     } else if (anyAttacking) {
-        // During windup: quick aggressive zoom toward target
-        combatZoom.currentZoom += (combatZoom.zoomTarget - combatZoom.currentZoom) * Math.min(1, 8 * snapDt);
+        // During windup: aggressive tracking toward target (50 speed)
+        const trackingSpeed = Math.min(1, 50 * snapDt);
+        combatZoom.currentZoom = combatZoom.zoomTarget * trackingSpeed + combatZoom.currentZoom * (1 - trackingSpeed);
     } else {
         // Recovery/idle: snappy return to 1.0
-        combatZoom.currentZoom += (1.0 - combatZoom.currentZoom) * Math.min(1, 10 * snapDt);
+        combatZoom.currentZoom += (1.0 - combatZoom.currentZoom) * Math.min(1, 15 * snapDt);
     }
     
-    // Clamp
-    combatZoom.currentZoom = Math.max(0.6, Math.min(1.0, combatZoom.currentZoom));
+    // === STEP 7: Visibility safety clamp ===
+    // Prevent zoom from exceeding the limit where fighters would go off-screen
+    // minSafeZoom = 1.0 / maxSafeZoom (e.g., if maxSafeZoom=1.5, then minSafeZoom=0.67)
+    // Clamp: ensure currentZoom never goes below minSafeZoom (never magnifies more than allowed)
+    combatZoom.currentZoom = Math.max(minSafeZoom, combatZoom.currentZoom);
     
-    // Snap to exactly 1.0 when close (clean multiplicative identity = no effect)
-    if (combatZoom.zoomTarget === 1.0 && Math.abs(combatZoom.currentZoom - 1.0) < 0.01) {
+    // Clamp to valid range [0.55, 1.0]
+    combatZoom.currentZoom = Math.max(0.55, Math.min(1.0, combatZoom.currentZoom));
+    
+    // === STEP 8: Zero camera influence when idle ===
+    if (!anyAttacking && Math.abs(combatZoom.currentZoom - 1.0) < 0.01) {
         combatZoom.currentZoom = 1.0;
     }
     

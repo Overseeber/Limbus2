@@ -333,7 +333,20 @@ tick() {
      * Process player input with proper attack system
      * RESTORED: Original game input handling for responsive combat
      */
+    /**
+     * Check if any player has an active ultimate — locks all controls
+     */
+    isUltimateActive() {
+        return Object.values(this.players).some(p => p.ultimateActive);
+    }
+
     processInput(player, dt) {
+        // CRITICAL: If any ultimate is active, block ALL player input
+        // The ultimate user shouldn't move, and enemies shouldn't fight back
+        if (this.isUltimateActive()) {
+            return;
+        }
+
         const input = player.input;
         const prevInput = player.prevInput;
         const state = player.gameState;

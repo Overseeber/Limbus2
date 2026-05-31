@@ -21,16 +21,21 @@ function initUltimate(fighter) {
     name: 'ULTIMATE',
     dialogue: '',
     currentSprite: '',
+    // Callisto-specific
     redLines: [],
     skulls: [],
     damageInstances: 0,
     gravityDisabled: false,
+    // Valencina-specific
     alternateCounter: 0,
     enemySide: 'right',
     facingLocked: false,
     movingToEnemy: false,
     restrictOrigin: null,
+    // Slash effects to spawn on clients
     slashEvents: [],
+    debrisEvents: [],
+    // Track whether we've changed phase (for slash spawning)
     prevPhase: -1,
     prevAttackFrame: -1
   };
@@ -80,102 +85,316 @@ function updateJohnUltimate(fighter, ult, enemies, dt) {
   }
 }
 
+/**
+ * CALLISTO ULTIMATE (Closing Time - Installation Art no. 1)
+ * Server-authoritative, faithfully recreated from oldclientgameplay reference.
+ *
+ * Timing: 0.3s per frame, 1.0s between attacks (per spec)
+ *
+ * Phase 0: cpose — 1.5s centered pose
+ * Phase 1: Attack 1 setup — teleport enemy 100px right, zoom to 1.8
+ * Phase 2: Attack 1 — cuf1 + cus1 (damage + slash), zoom to 1.5
+ * Phase 3: Attack 2 setup — cuf2, enemy at (x+88, y-180), zoom 1.3, hold 0.5s
+ * Phase 4: Attack 2 — cuf3 + cus2 (damage + slash), zoom 1.2
+ * Phase 5: Attack 3 setup — teleport enemy to ground 200px in front, cuf4 + cus3 (damage + slash), zoom 1.8
+ * Phase 6: Attack 3 cooldown
+ * Phase 7: Attack 4 setup — Callisto teleport upward 400px, drift toward enemy, cuf5, hold 1s
+ * Phase 8: Attack 4 — teleport 300px in front of enemy, cuf6 + cus4 (damage + slash), zoom 1.3
+ * Phase 9: Attack 5 setup — center, enemy in front, cs3f2 + cs3s1, zoom 3.0
+ * Phase 10: Attack 5 — 20 damage instances at 0.05s each, red lines
+ * Phase 11: Final hold — cuend, 21 debris, zoom 1.0, hold 3s
+ */
 function updateCallistoUltimate(fighter, ult, enemies, dt) {
   const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+
   targetEnemies.forEach(e => { if (e) { clampToArena(e); if (ult.gravityDisabled) e.velocity.y = 0; } });
   clampToArena(fighter);
-  if (ult.phase === 0 || ult.phase === 1 || ult.phase === 3 || ult.phase === 5 || ult.phase === 7 || ult.phase === 9 || ult.phase === 11) ult.timer -= dt;
+
+  // Timer decrement (non-attack phases only)
+  if (ult.phase === 0 || ult.phase === 1 || ult.phase === 3 || ult.phase === 5 || ult.phase === 7 || ult.phase === 9 || ult.phase === 11)
+    ult.timer -= dt;
+
+  // Set sprite based on current phase
+  // Sprites per phase: cpose(0,1), cuf1(2), cuf2(3), cuf3(4), cuf4(5,6), cuf5(7), cuf6(8), cs3f2(9,10), cuend(11)
   ult.prevPhase = ult.phase;
-  const sprites = ['cpose','cpose','cuf1','cuf2','cuf3','cuf4','cuf4','cuf5','cuf6','cs3f2','cs3f2','cuend'];
-  ult.currentSprite = sprites[ult.phase] || 'cidle';
-  // (full callisto implementation preserved from earlier - shortened for file size)
-  // Full implementation follows with same logic as before
+
   switch (ult.phase) {
+    // ============ PHASE 0: OPENING POSE - "cpose" for 1.5 seconds ============
     case 0:
-      if (ult.timer <= 0) { ult.phase = 1; ult.timer = 0.3; fighter.facing = 1; }
+      ult.currentSprite = 'cpose';
+      ult.cameraZoom = 2.5;
+      ult.backgroundDim = 0.7;
+      if (ult.timer <= 0) {
+        ult.phase = 1;
+        ult.timer = 0.3; // Brief delay before attack 1
+      }
       break;
+
+    // ============ PHASE 1: ATTACK 1 SETUP ============
     case 1:
+      ult.currentSprite = 'cpose';
       if (ult.timer <= 0) {
-        targetEnemies.forEach(e => { if (e) { e.position.x = clampX(fighter.position.x + 100); e.position.y = fighter.position.y; e.velocity.x = 0; e.velocity.y = 0; } });
-        ult.cameraZoom = 1.8; ult.phase = 2; ult.attackFrame = 0; ult.attackTimer = 0.3;
-      }
-      break;
-    case 2:
-      ult.attackTimer -= dt;
-      if (ult.attackTimer <= 0) {
-        ult.attackFrame++;
-        if (ult.attackFrame === 1) { targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 1, false); }); ult.slashEvents.push({ type: 'cus1', frame: 1 }); ult.cameraZoom = 1.5; ult.attackTimer = 0.3; }
-        else { ult.phase = 3; ult.timer = 1.0; }
-      }
-      break;
-    case 3:
-      if (ult.timer <= 0) {
-        ult.cameraZoom = 1.3;
-        targetEnemies.forEach(e => { if (e) { e.position.x = clampX(fighter.position.x + 88); e.position.y = clampY(fighter.position.y - 180); e.velocity.x = 0; e.velocity.y = 0; ult.gravityDisabled = true; } });
-        ult.phase = 4; ult.attackFrame = 0; ult.attackTimer = 0.5;
-      }
-      break;
-    case 4:
-      ult.attackTimer -= dt;
-      if (ult.attackTimer <= 0) {
-        ult.attackFrame++;
-        if (ult.attackFrame === 1) { targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 2, false); }); ult.slashEvents.push({ type: 'cus2', frame: 1 }); ult.cameraZoom = 1.2; ult.attackTimer = 0.3; }
-        else { ult.phase = 5; ult.timer = 1.0; }
-      }
-      break;
-    case 5:
-      if (ult.timer <= 0) {
-        targetEnemies.forEach(e => { if (e) { e.position.x = clampX(fighter.position.x + (fighter.facing * 200)); e.position.y = clampY(ARENA_HEIGHT - 100); e.velocity.x = 0; e.velocity.y = 0; ult.gravityDisabled = false; } });
+        // Teleport opponent to 100 pixels to the RIGHT of Callisto (matching old client)
+        targetEnemies.forEach(e => {
+          if (e) {
+            e.position.x = clampX(fighter.position.x + 100);
+            e.position.y = fighter.position.y;
+            e.velocity.x = 0;
+            e.velocity.y = 0;
+          }
+        });
         ult.cameraZoom = 1.8;
-        targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 3, true); });
-        ult.slashEvents.push({ type: 'cus3', frame: 1 }); ult.phase = 6; ult.attackFrame = 1; ult.attackTimer = 0.3;
+        ult.phase = 2;
+        ult.attackFrame = 0;
+        ult.attackTimer = 0.3;
+        // Set cuf1 sprite
+        ult.currentSprite = 'cuf1';
       }
       break;
-    case 6:
-      ult.attackTimer -= dt;
-      if (ult.attackTimer <= 0) { ult.phase = 7; ult.timer = 1.0; }
-      break;
-    case 7:
-      if (ult.timer <= 0) {
-        fighter.position.y = clampY(fighter.position.y - 400); fighter.velocity.x = fighter.facing * 2; fighter.velocity.y = 0;
-        ult.cameraZoom = 1.8; ult.gravityDisabled = true; ult.phase = 8; ult.attackFrame = 0; ult.attackTimer = 1.0;
-      }
-      break;
-    case 8:
+
+    // ============ PHASE 2: ATTACK 1 - cuf1 + cus1 ============
+    case 2:
+      ult.currentSprite = 'cuf1';
       ult.attackTimer -= dt;
       if (ult.attackTimer <= 0) {
         ult.attackFrame++;
         if (ult.attackFrame === 1) {
-          ult.gravityDisabled = false;
-          targetEnemies.forEach(e => { if (e) { const teleX = clampX(e.position.x + (e.facing * 300)); fighter.position.x = teleX; fighter.position.y = e.position.y; fighter.velocity.x = 0; fighter.velocity.y = 0; } });
-          ult.cameraZoom = 1.3;
-          targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 4, false); });
-          ult.slashEvents.push({ type: 'cus4', frame: 1 }); ult.attackTimer = 0.3;
-        } else { ult.phase = 9; ult.timer = 1.0; }
+          // Deal damage with cus1
+          targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 1, false); });
+          ult.slashEvents.push({ type: 'cus1', frame: 1, offsetX: 0, offsetY: -10 });
+          ult.cameraZoom = 1.5;
+          ult.attackTimer = 0.3;
+        } else {
+          // End attack sequence
+          ult.phase = 3;
+          ult.timer = 1.0; // 1 second before next attack
+        }
       }
       break;
-    case 9:
+
+    // ============ PHASE 3: ATTACK 2 SETUP ============
+    case 3:
       if (ult.timer <= 0) {
-        fighter.position.x = clampX(ARENA_WIDTH / 2); fighter.position.y = clampY(ARENA_HEIGHT - 100); fighter.velocity.x = 0; fighter.velocity.y = 0;
-        targetEnemies.forEach(e => { if (e) { e.position.x = clampX(fighter.position.x + 120); e.position.y = fighter.position.y; e.velocity.x = 0; e.velocity.y = 0; ult.gravityDisabled = true; } });
-        ult.cameraZoom = 3.0; ult.damageInstances = 0; ult.phase = 10; ult.attackFrame = 0; ult.attackTimer = 0.05;
+        // Switch to cuf2 AND teleport enemy simultaneously
+        ult.currentSprite = 'cuf2';
+        ult.cameraZoom = 1.3;
+        // Position enemy at Callisto's position offset (x+88, y-180) — matching old client
+        targetEnemies.forEach(e => {
+          if (e) {
+            e.position.x = clampX(fighter.position.x + 88);
+            e.position.y = clampY(fighter.position.y - 180);
+            e.velocity.x = 0;
+            e.velocity.y = 0;
+            ult.gravityDisabled = true; // Keep enemy suspended
+          }
+        });
+        ult.phase = 4;
+        ult.attackFrame = 0;
+        ult.attackTimer = 0.5; // Hold cuf2 for 0.5 seconds
       }
       break;
-    case 10:
+
+    // ============ PHASE 4: ATTACK 2 - cuf3 + cus2 ============
+    case 4:
+      ult.currentSprite = 'cuf3';
       ult.attackTimer -= dt;
       if (ult.attackTimer <= 0) {
-        ult.attackFrame++; ult.damageInstances++;
-        if (ult.damageInstances <= 20) {
-          targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, Math.floor(fighter.baseDamage / 20), false, 5, false); });
-          const bottomX = random(100, ARENA_WIDTH - 100);
-          const topX = clampX(bottomX + random(-100, 100));
-          ult.redLines.push({ topX, bottomX, topY: 0, bottomY: ARENA_HEIGHT, opacity: 0, maxOpacity: 1, fadeSpeed: 2 });
-          ult.attackTimer = 0.05;
-        } else { ult.cameraZoom = 1.0; ult.phase = 11; ult.timer = 3.0; }
+        ult.attackFrame++;
+        if (ult.attackFrame === 1) {
+          // Deal damage with cus2
+          targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 2, false); });
+          ult.slashEvents.push({ type: 'cus2', frame: 1, offsetX: 0, offsetY: -10 });
+          ult.cameraZoom = 1.2;
+          ult.attackTimer = 0.3;
+        } else {
+          ult.phase = 5;
+          ult.timer = 1.0; // 1 second before next attack
+        }
       }
       break;
+
+    // ============ PHASE 5: ATTACK 3 SETUP + IMMEDIATE DAMAGE ============
+    case 5:
+      if (ult.timer <= 0) {
+        // Teleport enemy to ground 200 pixels in front of Callisto (matching old client)
+        targetEnemies.forEach(e => {
+          if (e) {
+            e.position.x = clampX(fighter.position.x + (fighter.facing * 200));
+            e.position.y = clampY(ARENA_HEIGHT - 100);
+            e.velocity.x = 0;
+            e.velocity.y = 0;
+            ult.gravityDisabled = false;
+          }
+        });
+        ult.cameraZoom = 1.8;
+        ult.currentSprite = 'cuf4';
+        // Deal damage with cus3
+        targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 3, true); });
+        ult.slashEvents.push({ type: 'cus3', frame: 1, offsetX: 0, offsetY: -10 });
+        ult.phase = 6;
+        ult.attackFrame = 1;
+        ult.attackTimer = 0.3;
+      }
+      break;
+
+    // ============ PHASE 6: ATTACK 3 COOLDOWN ============
+    case 6:
+      ult.currentSprite = 'cuf4';
+      ult.attackTimer -= dt;
+      if (ult.attackTimer <= 0) {
+        ult.phase = 7;
+        ult.timer = 1.0; // 1 second before next attack
+      }
+      break;
+
+    // ============ PHASE 7: ATTACK 4 SETUP - Teleport upward, drift ============
+    case 7:
+      if (ult.timer <= 0) {
+        // Teleport Callisto upward by 500 pixels
+        fighter.position.y = clampY(fighter.position.y - 500);
+        fighter.velocity.x = fighter.facing * 2; // Slow drift toward enemy
+        fighter.velocity.y = 0;
+        ult.currentSprite = 'cuf5';
+        ult.cameraZoom = 1.8;
+        ult.gravityDisabled = true; // Prevent gravity during ascent
+        ult.phase = 8;
+        ult.attackFrame = 0;
+        ult.attackTimer = 1.0; // Hold for 1 second
+      }
+      break;
+
+    // ============ PHASE 8: ATTACK 4 - cuf5 hold, then teleport + cuf6 + cus4 ============
+    case 8:
+      // Set sprite based on attackFrame so cuf6 is never overridden
+      if (ult.attackFrame === 0) {
+        ult.currentSprite = 'cuf5'; // Show cuf5 during the 1-second hold
+      } else {
+        ult.currentSprite = 'cuf6'; // Show cuf6 after teleport + damage
+      }
+      ult.attackTimer -= dt;
+      if (ult.attackTimer <= 0) {
+        if (ult.attackFrame === 0) {
+          // Hold expired: teleport 300 pixels IN FRONT of enemy, switch to cuf6, deal damage
+          ult.attackFrame = 1;
+          ult.gravityDisabled = false;
+          targetEnemies.forEach(e => {
+            if (e) {
+              const teleX = clampX(e.position.x + (e.facing * 300));
+              fighter.position.x = teleX;
+              fighter.position.y = e.position.y;
+              fighter.velocity.x = 0;
+              fighter.velocity.y = 0;
+            }
+          });
+          ult.cameraZoom = 1.3;
+          ult.currentSprite = 'cuf6';
+          targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 4, false); });
+          ult.slashEvents.push({ type: 'cus4', frame: 1, offsetX: 0, offsetY: -10 });
+          // Show cuf6 for a brief moment before moving on
+          ult.attackTimer = 0.3;
+        } else {
+          // Done showing cuf6, move to attack 5
+          ult.phase = 9;
+          ult.timer = 1.0;
+        }
+      }
+      break;
+
+    // ============ PHASE 9: ATTACK 5 SETUP - Center, zoom in ============
+    case 9:
+      if (ult.timer <= 0) {
+        // Teleport Callisto to center
+        fighter.position.x = clampX(ARENA_WIDTH / 2);
+        fighter.position.y = clampY(ARENA_HEIGHT - 100);
+        fighter.velocity.x = 0;
+        fighter.velocity.y = 0;
+        // Position enemy directly in front of Callisto
+        targetEnemies.forEach(e => {
+          if (e) {
+            e.position.x = clampX(fighter.position.x + 120);
+            e.position.y = fighter.position.y;
+            e.velocity.x = 0;
+            e.velocity.y = 0;
+            ult.gravityDisabled = true;
+          }
+        });
+        ult.currentSprite = 'cs3f2';
+        ult.slashEvents.push({ type: 'cs3s1', frame: 1, offsetX: 0, offsetY: -10 });
+        ult.cameraZoom = 3.0; // Zoom in
+        ult.damageInstances = 0;
+        ult.phase = 10;
+        ult.attackFrame = 0;
+        ult.attackTimer = 0.05; // 20 instances over 1 second = 0.05s each
+      }
+      break;
+
+    // ============ PHASE 10: ATTACK 5 - 20 damage instances with red lines ============
+    case 10:
+      ult.currentSprite = 'cs3f2';
+      ult.attackTimer -= dt;
+      if (ult.attackTimer <= 0) {
+        ult.attackFrame++;
+        ult.damageInstances++;
+        if (ult.damageInstances <= 20) {
+          // Deal 1/20th of base damage per instance
+          targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, Math.floor(fighter.baseDamage / 20), false, 5, false); });
+          // Spawn red line effect
+          const bottomX = random(100, ARENA_WIDTH - 100);
+          const topX = clampX(bottomX + random(-100, 100));
+          ult.redLines.push({
+            topX, bottomX,
+            topY: 0,
+            bottomY: ARENA_HEIGHT,
+            opacity: 0,
+            maxOpacity: 1,
+            fadeSpeed: 2
+          });
+          ult.attackTimer = 0.05;
+        } else {
+          // All 20 instances done
+          ult.phase = 11;
+          ult.timer = 3.0; // Hold for 3 seconds
+        }
+      }
+      break;
+
+    // ============ PHASE 11: FINAL HOLD - cuend, debris, zoom out ============
     case 11:
-      ult.redLines.forEach(rl => { if (rl.opacity < rl.maxOpacity) rl.opacity += rl.fadeSpeed * dt; });
+      ult.currentSprite = 'cuend';
+      ult.cameraZoom = 1.0; // Zoom out
+      ult.backgroundDim = 0;
+      
+      // Fade in red lines
+      ult.redLines.forEach(rl => {
+        if (rl.opacity < rl.maxOpacity) rl.opacity += rl.fadeSpeed * dt;
+      });
+
+      // On first entry, spawn 21 debris instances
+      if (ult.damageInstances > 0 && (!ult.skulls || ult.skulls.length === 0)) {
+        const skullTypes = ['cbsk1', 'cbsk2', 'cbsk3'];
+        for (let i = 0; i < 21; i++) {
+          const randomSkull = skullTypes[Math.floor(random(0, 3))];
+          const randomScale = random(1.0, 3.0);
+          const randomX = clampX(fighter.position.x + random(-500, 500));
+          // Y starts 500 pixels UNDER the arena
+          const randomY = ARENA_HEIGHT + random(100, 500);
+          const randomRotation = random(-Math.PI / 3, Math.PI / 3);
+
+          ult.skulls = ult.skulls || [];
+          ult.skulls.push({
+            type: randomSkull,
+            x: randomX,
+            y: randomY,
+            scale: randomScale,
+            rotation: randomRotation,
+            timer: 3.0
+          });
+        }
+        // Mark damageInstances as 0 so we only spawn once
+        ult.damageInstances = 0;
+      }
+
+      // Keep enemies in place
       targetEnemies.forEach(e => { if (e) e.velocity.y = 0; });
       break;
   }
@@ -184,12 +403,6 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
 /**
  * VALENCINA ULTIMATE (Disposal)
  * All timing, positioning, damage server-authoritative.
- * Knockback is always purely horizontal and applied instantly on hit.
- *
- * ATTACK 4: d2+diss1(no dmg) → teleport 50px right → de1+s1s3(dmg+KB) hold 1s
- * ATTACK 5: de2 + alternating s1s3/js1 (5 hits, all with knockback)
- *   Each hit: slash → 0.1s → damage+knockback
- *   Final: de3 + 2x dmg + strong horizontal KB, zoom out, hold 3s
  */
 function updateValencinaUltimate(fighter, ult, enemies, dt) {
   const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
@@ -201,28 +414,20 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
 
   ult.prevPhase = ult.phase;
 
-  // Helper: only lock position if not being knocked back (velocity < 50 threshold)
   const lockOrRelease = (e) => {
     if (!e) return;
-    if (Math.abs(e.velocity.x) < 50) {
-      return true; // can lock
-    }
-    return false; // being knocked back, don't override velocity
+    if (Math.abs(e.velocity.x) < 50) return true;
+    return false;
   };
 
   switch (ult.phase) {
-    // ============ PHASE 0: OPENING POSE - "dist1" for 3 seconds ============
     case 0:
       ult.currentSprite = 'dist1';
       ult.cameraZoom = 2.5;
       ult.backgroundDim = 0.7;
-      if (ult.timer <= 0) {
-        ult.phase = 1;
-        ult.timer = 0.1;
-      }
+      if (ult.timer <= 0) { ult.phase = 1; ult.timer = 0.1; }
       break;
 
-    // ============ PHASE 1: ATTACK 1 SETUP ============
     case 1:
       ult.currentSprite = 'dist1';
       if (ult.timer <= 0 && !ult.movingToEnemy) {
@@ -236,7 +441,6 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
       }
       break;
 
-    // ============ PHASE 2: ATTACK 1 (s1f1+s1s1 → s1f2+s1s2 → s1f3) ============
     case 2:
       targetEnemies.forEach(e => { if (e && lockOrRelease(e)) { e.position.x = clampX(fighter.position.x + 100); e.position.y = fighter.position.y; e.velocity.x = 0; e.velocity.y = 0; } });
       fighter.facing = 1;
@@ -263,7 +467,6 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
       }
       break;
 
-    // ============ PHASE 3: ATTACK 2 SETUP ============
     case 3:
       ult.currentSprite = 's1f3';
       if (ult.timer <= 0) {
@@ -272,7 +475,6 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
       }
       break;
 
-    // ============ PHASE 4: ATTACK 2 (s4f2 → s4f1+s1s4) ============
     case 4:
       targetEnemies.forEach(e => { if (e && lockOrRelease(e)) { e.position.x = clampX(fighter.position.x + 100); e.position.y = fighter.position.y; e.velocity.x = 0; e.velocity.y = 0; } });
       fighter.facing = 1;
@@ -291,7 +493,6 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
       }
       break;
 
-    // ============ PHASE 5: ATTACK 3 SETUP ============
     case 5:
       ult.currentSprite = 's4f1';
       if (ult.timer <= 0) {
@@ -301,7 +502,6 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
       }
       break;
 
-    // ============ PHASE 6: ATTACK 3 (s3f1 → s3f2+s1s4 → s3f3, then 1s → repos) ============
     case 6:
       targetEnemies.forEach(e => { if (e && lockOrRelease(e)) { e.position.x = clampX(fighter.position.x + 100); e.position.y = fighter.position.y; e.velocity.x = 0; e.velocity.y = 0; } });
       fighter.facing = 1;
@@ -333,7 +533,6 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
       }
       break;
 
-    // ============ PHASE 7: ATTACK 4 SETUP ============
     case 7:
       ult.currentSprite = 'd1';
       if (ult.timer <= 0) {
@@ -342,9 +541,7 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
       }
       break;
 
-    // ============ PHASE 8: ATTACK 4 (d2+diss1(no dmg) → teleport 50px right → de1+s1s3(dmg+KB) hold 1s) ============
     case 8:
-      // Don't override velocity during knockback phases
       targetEnemies.forEach(e => { if (e && lockOrRelease(e)) { e.position.x = clampX(fighter.position.x - 80); e.position.y = fighter.position.y; e.velocity.x = 0; e.velocity.y = 0; } });
       fighter.facing = -1;
       ult.attackTimer -= dt;
@@ -365,11 +562,10 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
             ult.currentSprite = 'de1';
             ult.attackTimer = 0.1; break;
           case 3:
-            // Deal damage WITHOUT knockback — hold enemy in place during Attack 4
             targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 4, false); });
             ult.slashEvents.push({ type: 's1s3', frame: 3, offsetX: 15, offsetY: -5 });
             ult.cameraZoom = 3.5; ult.backgroundDim = 0.8;
-            ult.attackTimer = 1.0; // Hold de1 pose for 1 second
+            ult.attackTimer = 1.0;
             break;
           case 4:
             ult.phase = 9; ult.timer = 0.05; break;
@@ -377,15 +573,12 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
       }
       break;
 
-    // ============ PHASE 9: ATTACK 5 SETUP - de2 ============
     case 9:
       ult.currentSprite = 'de2';
       ult.phase = 10; ult.attackFrame = 0; ult.attackTimer = 0.1; ult.alternateCounter = 0;
       break;
 
-    // ============ PHASE 10: ATTACK 5 (de2 + 5 hits, all with knockback) ============
     case 10:
-      // Lock only if not being knocked back - let knockback persist through frames
       targetEnemies.forEach(e => { if (e && lockOrRelease(e)) { e.position.x = clampX(fighter.position.x - 80); e.position.y = fighter.position.y; e.velocity.x = 0; e.velocity.y = 0; } });
       fighter.facing = -1;
       ult.attackTimer -= dt;
@@ -397,7 +590,6 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
             else ult.slashEvents.push({ type: 'js1', frame: hitIndex + 1, offsetX: 0, offsetY: -10 });
             ult.attackTimer = 0.1;
           } else {
-            // Deal damage WITHOUT knockback — hold enemy in place during Attack 5 rapid hits
             targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 5, false); });
             ult.attackTimer = 0.1;
           }
@@ -420,7 +612,6 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
       }
       break;
 
-    // ============ PHASE 11: FINAL HOLD — 3 seconds ============
     case 11:
       ult.currentSprite = 'de3';
       targetEnemies.forEach(e => { if (e) clampToArena(e); });

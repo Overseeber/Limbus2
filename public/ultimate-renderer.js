@@ -155,29 +155,38 @@ function drawUltimateRedLines(redLines) {
 }
 
 /**
- * Draw skull effects (Callisto ultimate ending)
+ * Draw skull/debris effects (Callisto ultimate ending)
+ * Uses actual sprite atlas sprites (cbsk1, cbsk2, cbsk3) instead of emoji text
  */
 function drawUltimateSkulls(skulls) {
   if (!skulls || skulls.length === 0) return;
   
-  push();
-  textAlign(CENTER, CENTER);
-  textSize(32);
+  const targetHeight = 144;
+  const baseScale = targetHeight / 512;
   
   skulls.forEach(skull => {
     push();
     translate(skull.x, skull.y);
     rotate(skull.rotation || 0);
-    scale(skull.scale || 1);
     
-    // Skull emoji or text
-    fill(255, 255, 255, 200);
-    text("💀", 0, 0);
+    // Apply the skull's scale on top of the base sprite scale
+    const finalScale = baseScale * (skull.scale || 1);
+    scale(finalScale);
+    
+    // Draw the actual sprite from atlas
+    if (skull.type && typeof drawSprite === 'function') {
+      drawSprite(skull.type, 0, 0);
+    } else {
+      // Fallback: simple colored rectangle
+      fill(200, 50, 50, 200);
+      noStroke();
+      rectMode(CENTER);
+      rect(0, 0, 64, 64);
+      rectMode(CORNER);
+    }
     
     pop();
   });
-  
-  pop();
 }
 
 /**

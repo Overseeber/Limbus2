@@ -365,7 +365,8 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
             ult.currentSprite = 'de1';
             ult.attackTimer = 0.1; break;
           case 3:
-            targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 4, true); });
+            // Deal damage WITHOUT knockback — hold enemy in place during Attack 4
+            targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 4, false); });
             ult.slashEvents.push({ type: 's1s3', frame: 3, offsetX: 15, offsetY: -5 });
             ult.cameraZoom = 3.5; ult.backgroundDim = 0.8;
             ult.attackTimer = 1.0; // Hold de1 pose for 1 second
@@ -396,7 +397,8 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
             else ult.slashEvents.push({ type: 'js1', frame: hitIndex + 1, offsetX: 0, offsetY: -10 });
             ult.attackTimer = 0.1;
           } else {
-            targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 5, true); });
+            // Deal damage WITHOUT knockback — hold enemy in place during Attack 5 rapid hits
+            targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 5, false); });
             ult.attackTimer = 0.1;
           }
           ult.attackFrame++;

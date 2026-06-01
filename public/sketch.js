@@ -132,7 +132,13 @@ let localSlotSelections = [];
 let roomCharacterSelectSlot = -1;
 let availableCharacterKeys = () => {
   const registry = (typeof CHARACTERS !== 'undefined') ? CHARACTERS : (window.CHARACTERS || {});
-  return Object.keys(registry || {}).filter(key => key !== 'JOHN');
+  return Object.keys(registry || {}).filter(key => {
+    if (key === 'JOHN') return false;
+    if (/initialize/i.test(key)) return false;
+    const data = registry[key];
+    if (data && data.name && /initialize/i.test(data.name)) return false;
+    return true;
+  });
 };
 // Current previewed character for the new selection flow
 let previewCharacterKey = null;
@@ -2788,6 +2794,7 @@ function drawCharacterSelectMenu() {
   pop();
 
   const keys = availableCharacterKeys();
+  console.log('CHARACTER SELECT KEYS:', keys);
   // Responsive card sizing
   const cardW = 180;
   const cardH = 96;

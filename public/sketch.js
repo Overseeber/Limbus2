@@ -2800,7 +2800,6 @@ function drawCharacterSelectMenu() {
   pop();
 
   const keys = availableCharacterKeys();
-  console.log('CHARACTER SELECT KEYS:', keys);
   // Responsive card sizing
   const cardW = 180;
   const cardH = 96;

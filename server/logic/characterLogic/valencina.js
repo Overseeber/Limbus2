@@ -3,121 +3,87 @@
  * Complete kit restoration from oldclientgameplay reference.
  * ALL calculations are server-authoritative.
  * 
- * Systems implemented:
- * - Basic Attacks with combo scaling: Damage = 21 + (3 × ComboCount)
- * - On Hit Effects: 2 Burn Pot/Count, 2 Tremor Pot/Count
- * - Attack 1: Gain 3 Poise Count
- * - Attack 2: Gain 1 Poise Potency
- * - Attack 3: Consume 1 Acceleration Round → Trigger Tremor Burst, Bonus Damage
- * - Acceleration Round Consume: +100% range, +30% damage, 4 Poise Pot/Count, Tremor Burst
- * - Time to Hunt (Q, 30s CD): Game Target status (speed=1, no jump/dash, 10s)
- * - Disposal Ultimate: Full phase execution with proper status applications
- * - Eye of Precognition: 3% × Precognition evade chance, lose 1 on evade
- * - Overheat: Enter at 0 Precognition, -20% damage, lose 1 per hit/5s, restore at 0
- * - Accelerating Future: +0.5 speed/stack (max +5), -2.5% interval/stack (max -80%)
- * - Shin (心): HP<50% OR Ultimate available → 1 Protection, +3% damage per Poise Pot (max 15%)
+ * All unique passives/resources are managed as proper statuses
+ * so they render visually on the client status row like Burn/Bleed.
  */
 
 //====================================================================
 // UTILITY FUNCTIONS
 //====================================================================
 
-/**
- * Get status from a fighter's statuses array
- */
 function getStatus(fighter, type) {
   if (!fighter || !fighter.statuses) return null;
   return fighter.statuses.find(s => s.type === type);
 }
 
-/**
- * Check if a fighter has a specific status
- */
-function hasStatus(fighter, type) {
-  return getStatus(fighter, type) !== null;
-}
-
-/**
- * Get status potency value
- */
 function getStatusPotency(fighter, type) {
   const s = getStatus(fighter, type);
   return s ? (s.potency || 0) : 0;
 }
 
-/**
- * Get status count value
- */
 function getStatusCount(fighter, type) {
   const s = getStatus(fighter, type);
   return s ? (s.count || 0) : 0;
 }
 
-//====================================================================
-// DAMAGE CALCULATION
-//====================================================================
+function ensureStatus(fighter, type, count, potency) {
+  const existing = fighter.statuses.find(s => s.type === type);
+  if (existing) {
+    existing.count = (existing.count || 0) + (count || 0);
+    existing.potency = (existing.potency || 0) + (potency || 0);
+    return existing;
+  }
+  const status = { type, count: count || 0, potency: potency || 0, timer: 0 };
+  fighter.statuses.push(status);
+  return status;
+}
+
+function setStatusCount(fighter, type, count) {
+  const existing = fighter.statuses.find(s => s.type === type);
+  if (existing) {
+    existing.count = count;
+  } else {
+    fighter.statuses.push({ type, count: count || 0, potency: 0, timer: 0 });
+  }
+}
+
+function removeStatus(fighter, type) {
+  fighter.statuses = fighter.statuses.filter(s => s.type !== type);
+}
 
 /**
  * Calculate Valencina's basic attack damage
  * Formula: Damage = BaseDamage + (ComboDamage × ComboCount)
- * From oldclientgameplay reference.
  */
 function calculateAttackDamage(state, config) {
   const baseDamage = config.baseDamage || 21;
   const comboDamage = config.comboDamage || 3;
   const comboCount = state.combo || 0;
-  
   let damage = baseDamage + (comboDamage * comboCount);
-  
-  // Acceleration Round bonus: +30% damage when consumed
-  if (state.resources.accelerationRoundActive) {
-    damage = Math.floor(damage * (1 + (config.accelerationRounds.damageBonus || 0.3)));
-  }
-  
   return Math.max(1, Math.floor(damage));
 }
 
 /**
- * Calculate bonus damage from Acceleration Round consumption
- * Formula: (Burn Potency + Tremor Potency) / 2
- * Applied to target.
+ * Calculate bonus damage: (Burn Potency + Tremor Potency) / 2
  */
 function calculateAccelerationRoundBonusDamage(attackerState, targetState) {
   const burnPot = getStatusPotency(targetState, 'Burn');
   const tremorPot = getStatusPotency(targetState, 'Tremor');
-  const damage = Math.floor((burnPot + tremorPot) / 2);
-  return damage;
-}
-
-/**
- * Calculate Shin damage bonus
- * +3% damage for every Poise Potency, capped at +15%
- */
-function calculateShinDamageBonus(state, config) {
-  if (!state.resources.shinActive) return 0;
-  const poisePot = getStatusPotency(state, 'Poise');
-  const bonus = Math.min(poisePot * (config.shin.damagePerPoisePotency || 0.03), config.shin.maxDamageBonus || 0.15);
-  return bonus;
+  return Math.floor((burnPot + tremorPot) / 2);
 }
 
 //====================================================================
 // ON SUCCESSFUL HIT - RESTORED FROM REFERENCE
 //====================================================================
-
 /**
  * Called when Valencina successfully hits a target.
- * Effects (from oldclientgameplay reference):
- * - Inflict 2 Burn Potency, 2 Burn Count
- * - Inflict 2 Tremor Potency, 2 Tremor Count
- * - Gain 1 Accelerating Future stack
+ * - Inflict 2 Burn Potency, 2 Burn Count on target
+ * - Inflict 2 Tremor Potency, 2 Tremor Count on target
+ * - Gain 1 [Accelerating Future] per hit
  * - Track last hit opponent for Time to Hunt
  */
 function onSuccessfulHit(state, targetState, damage, config) {
-  const effects = {
-    statusesApplied: [],
-    acceleratingFutureGained: false,
-    lastHitOpponent: targetState ? targetState.id : null
-  };
+  const effects = { statusesApplied: [], acceleratingFutureGained: false };
 
   if (!targetState || targetState.isDefeated) {
     return { success: false, reason: 'No valid target' };
@@ -126,141 +92,78 @@ function onSuccessfulHit(state, targetState, damage, config) {
   // Store last hit opponent for Time to Hunt targeting
   state.lastHitOpponent = targetState.id;
 
-  // Apply 2 Burn Potency + 2 Burn Count
-  if (typeof this.applyStatus === 'function') {
-    this.applyStatus(targetState, 'Burn', 2, 2);
-    this.applyStatus(targetState, 'Tremor', 2, 2);
-  } else {
-    const b = targetState.statuses.find(s => s.type === 'Burn');
-    if (b) { b.count += 2; b.potency += 2; }
-    else targetState.statuses.push({ type: 'Burn', count: 2, potency: 2, timer: 0 });
-    
-    const t = targetState.statuses.find(s => s.type === 'Tremor');
-    if (t) { t.count += 2; t.potency += 2; }
-    else targetState.statuses.push({ type: 'Tremor', count: 2, potency: 2, timer: 0 });
-  }
+  // Apply 2 Burn + 2 Tremor to target
+  const b = getStatus(targetState, 'Burn');
+  if (b) { b.count += 2; b.potency += 2; }
+  else targetState.statuses.push({ type: 'Burn', count: 2, potency: 2, timer: 0 });
+  const t = getStatus(targetState, 'Tremor');
+  if (t) { t.count += 2; t.potency += 2; }
+  else targetState.statuses.push({ type: 'Tremor', count: 2, potency: 2, timer: 0 });
   effects.statusesApplied.push('Burn', 'Tremor');
 
-  // Gain 1 Accelerating Future per successful hit
-  state.resources.acceleratingFuture = (state.resources.acceleratingFuture || 0) + 1;
+  // Gain 1 Accelerating Future per hit (unique status)
+  const af = ensureStatus(state, 'Accelerating Future', 1, 0);
   effects.acceleratingFutureGained = true;
 
-  // Apply Accelerating Future status for client display
-  const afCount = state.resources.acceleratingFuture || 0;
-  const existingAF = state.statuses.find(s => s.type === 'Accelerating Future');
-  if (existingAF) {
-    existingAF.count = afCount;
-  } else {
-    state.statuses.push({ type: 'Accelerating Future', count: afCount, potency: 1, timer: 0 });
-  }
+  // Apply Accelerating Future effects to speed/interval
+  applyAcceleratingFutureEffects(state, config);
 
-  return {
-    success: true,
-    ...effects
-  };
+  return { success: true, ...effects };
 }
 
 //====================================================================
-// ACCELERATING FUTURE - APPLY EFFECTS
+// ACCELERATING FUTURE
 //====================================================================
-
-/**
- * Apply Accelerating Future passive effects.
- * Oldclientgameplay reference:
- * - +0.5 movement speed per stack (max +5)
- * - -2.5% attack interval per stack (max -80%)
- */
 function applyAcceleratingFutureEffects(state, config) {
-  const stacks = state.resources.acceleratingFuture || 0;
+  const afCount = getStatusCount(state, 'Accelerating Future');
   const afConfig = config.acceleratingFuture || {};
   
-  // Movement speed bonus: +0.5 per stack, max +5
-  const speedBonus = Math.min(stacks * (afConfig.speedPerStack || 0.5), afConfig.maxSpeedBonus || 5);
-  state.resources.acceleratingFutureSpeedBonus = speedBonus;
+  const speedBonus = Math.min(afCount * (afConfig.speedPerStack || 0.5), afConfig.maxSpeedBonus || 5);
+  const intervalReduction = Math.min(afCount * (afConfig.intervalReductionPerStack || 2.5), afConfig.maxIntervalReduction || 80);
   
-  // Attack interval reduction: -2.5% per stack, max -80%
-  const intervalReduction = Math.min(stacks * (afConfig.intervalReductionPerStack || 2.5), afConfig.maxIntervalReduction || 80);
+  state.resources.acceleratingFutureSpeedBonus = speedBonus;
   state.resources.acceleratingFutureIntervalReduction = intervalReduction;
+  state.resources.effectiveSpeed = (config.speed || 9) + speedBonus;
+  state.resources.effectiveAttackInterval = (config.attackInterval || 1.0) * (1 - intervalReduction / 100);
 }
 
 //====================================================================
 // ATTACK-SPECIFIC PER-ATTACK EFFECTS
 //====================================================================
-
-/**
- * Apply effects for Attack 1 (combo sequence 1):
- * - Gain 3 Poise Count
- */
 function applyAttack1Effects(state) {
-  const existing = state.statuses.find(s => s.type === 'Poise');
-  if (existing) {
-    existing.count += 3;
-  } else {
-    state.statuses.push({ type: 'Poise', count: 3, potency: 0, timer: 0 });
-  }
+  // Attack 1: Gain 3 Poise Count
+  ensureStatus(state, 'Poise', 3, 0);
 }
 
-/**
- * Apply effects for Attack 2 (combo sequence 2):
- * - Gain 1 Poise Potency
- */
 function applyAttack2Effects(state) {
-  const existing = state.statuses.find(s => s.type === 'Poise');
-  if (existing) {
-    existing.potency += 1;
-  } else {
-    state.statuses.push({ type: 'Poise', count: 0, potency: 1, timer: 0 });
-  }
+  // Attack 2: Gain 1 Poise Potency
+  ensureStatus(state, 'Poise', 0, 1);
 }
 
-/**
- * Apply effects for Attack 3 (combo sequence 3):
- * - Consume 1 Acceleration Round (if available)
- * - Trigger Tremor Burst
- * - Deal bonus damage: (Burn Potency + Tremor Potency) / 2
- * 
- * Returns effect result for damage application.
- */
 function applyAttack3Effects(state, targetState) {
-  const result = {
-    consumedAccelerationRound: false,
-    triggeredTremorBurst: false,
-    bonusDamage: 0
-  };
+  const result = { consumedAccelerationRound: false, triggeredTremorBurst: false, bonusDamage: 0 };
 
-  // Check if Acceleration Round > 0
-  const currentAR = state.resources.accelerationRounds || 0;
-  if (currentAR <= 0) {
-    return result; // No Acceleration Round, no effect
-  }
+  const currentAR = getStatusCount(state, 'Acceleration Round');
+  if (currentAR <= 0) return result;
 
-  // Spend 1 Acceleration Round
-  state.resources.accelerationRounds = Math.max(0, currentAR - 1);
+  // Consume 1 Acceleration Round
+  const arStatus = getStatus(state, 'Acceleration Round');
+  if (arStatus) arStatus.count = Math.max(0, arStatus.count - 1);
   result.consumedAccelerationRound = true;
 
-  // Trigger Tremor Burst
-  const tremorBurst = triggerTremorBurst(state, targetState);
-  if (tremorBurst) {
-    result.triggeredTremorBurst = true;
-  }
+  // Tremor Burst on target
+  const tremorBurst = triggerTremorBurst(targetState);
+  if (tremorBurst) result.triggeredTremorBurst = true;
 
-  // Deal bonus damage: (Burn Potency + Tremor Potency) / 2
+  // Bonus damage: (Burn Pot + Tremor Pot) / 2
   const bonusDamage = calculateAccelerationRoundBonusDamage(state, targetState);
   if (bonusDamage > 0 && targetState && !targetState.isDefeated) {
     targetState.hp = Math.max(0, targetState.hp - bonusDamage);
     result.bonusDamage = bonusDamage;
   }
 
-  // Gain Poise from Acceleration Round consumption
-  const poiseCountGain = 4;
-  const poisePotencyGain = 4;
-  const existingPoise = state.statuses.find(s => s.type === 'Poise');
-  if (existingPoise) {
-    existingPoise.count += poiseCountGain;
-    existingPoise.potency += poisePotencyGain;
-  } else {
-    state.statuses.push({ type: 'Poise', count: poiseCountGain, potency: poisePotencyGain, timer: 0 });
-  }
+  // Gain 4 Poise Potency and Count from AR consumption
+  ensureStatus(state, 'Poise', 4, 4);
 
   return result;
 }
@@ -268,119 +171,61 @@ function applyAttack3Effects(state, targetState) {
 //====================================================================
 // ACCELERATION ROUND CONSUMPTION
 //====================================================================
-
-/**
- * Manually consume an Acceleration Round (from evade input).
- * Oldclientgameplay reference:
- * - Range: +100%
- * - Damage: +30%
- * - Gain 4 Poise Potency, 4 Poise Count
- * - Trigger Tremor Burst
- * - Deal bonus damage: (Burn Potency + Tremor Potency) / 2
- */
 function consumeAccelerationRound(state, targetState, config) {
-  const currentAR = state.resources.accelerationRounds || 0;
-  if (currentAR <= 0) {
-    return { success: false, reason: 'No Acceleration Rounds' };
-  }
+  const currentAR = getStatusCount(state, 'Acceleration Round');
+  if (currentAR <= 0) return { success: false, reason: 'No Acceleration Rounds' };
 
-  // Spend 1 Acceleration Round
-  state.resources.accelerationRounds = Math.max(0, currentAR - 1);
-  
-  // Set active flag for damage/range bonus (lasts for next attack)
+  const arStatus = getStatus(state, 'Acceleration Round');
+  if (arStatus) arStatus.count = Math.max(0, arStatus.count - 1);
+
+  // Set active flag for next attack
   state.resources.accelerationRoundActive = true;
 
-  // Gain Poise
-  const poiseCountGain = config.accelerationRounds.poiseCountGain || 4;
-  const poisePotencyGain = config.accelerationRounds.poisePotencyGain || 4;
-  const existingPoise = state.statuses.find(s => s.type === 'Poise');
-  if (existingPoise) {
-    existingPoise.count += poiseCountGain;
-    existingPoise.potency += poisePotencyGain;
-  } else {
-    state.statuses.push({ type: 'Poise', count: poiseCountGain, potency: poisePotencyGain, timer: 0 });
-  }
+  // Gain 4 Poise
+  ensureStatus(state, 'Poise', config.accelerationRounds.poiseCountGain || 4, config.accelerationRounds.poisePotencyGain || 4);
 
-  // Trigger Tremor Burst on target
-  const burstResult = triggerTremorBurst(state, targetState);
-  
-  // Deal bonus damage: (Burn Potency + Tremor Potency) / 2
+  // Tremor Burst
+  const burstResult = triggerTremorBurst(targetState);
+
+  // Bonus damage
   let bonusDamage = 0;
   if (targetState && !targetState.isDefeated) {
     bonusDamage = calculateAccelerationRoundBonusDamage(state, targetState);
-    if (bonusDamage > 0) {
-      targetState.hp = Math.max(0, targetState.hp - bonusDamage);
-    }
+    if (bonusDamage > 0) targetState.hp = Math.max(0, targetState.hp - bonusDamage);
   }
 
-  return {
-    success: true,
-    accelerationRoundsRemaining: state.resources.accelerationRounds,
-    poiseCountGain,
-    poisePotencyGain,
-    triggeredTremorBurst: burstResult !== null,
-    bonusDamage
-  };
+  return { success: true, accelerationRoundsRemaining: getStatusCount(state, 'Acceleration Round'), poiseCountGain: 4, poisePotencyGain: 4, triggeredTremorBurst: !!burstResult, bonusDamage };
 }
 
 //====================================================================
 // TREMOR BURST
 //====================================================================
-
-/**
- * Trigger Tremor Burst on target.
- * Consumes Tremor status, adds potency to target's stagger.
- * Used by Acceleration Round consumption and Attack 3.
- */
-function triggerTremorBurst(attackerState, targetState) {
+function triggerTremorBurst(targetState) {
   if (!targetState || targetState.isDefeated) return null;
-
-  const tremor = targetState.statuses.find(s => s.type === 'Tremor');
+  const tremor = getStatus(targetState, 'Tremor');
   if (!tremor || tremor.count <= 0) return null;
 
-  // Consume Tremor count
   tremor.count -= 1;
+  const potency = tremor.potency || 0;
+  if (potency > 0) targetState.stagger = (targetState.stagger || 0) + potency;
 
-  // Add Tremor potency to target's stagger
-  const tremorPotency = tremor.potency || 0;
-  if (tremorPotency > 0) {
-    targetState.stagger = (targetState.stagger || 0) + tremorPotency;
-  }
+  if (tremor.count <= 0) removeStatus(targetState, 'Tremor');
 
-  // Remove Tremor if count reaches 0
-  if (tremor.count <= 0) {
-    targetState.statuses = targetState.statuses.filter(s => s.type !== 'Tremor');
-  }
-
-  return {
-    consumed: true,
-    staggerAdded: tremorPotency
-  };
+  return { consumed: true, staggerAdded: potency };
 }
 
 //====================================================================
 // TIME TO HUNT - ABILITY
 //====================================================================
-
-/**
- * TIME TO HUNT (Q key, 30 second cooldown)
- * Oldclientgameplay reference:
- * - Target: Last opponent successfully hit by Valencina
- * - Activation Animation: de1
- * - Game Target: Speed=1, no jump, no dash, 10 seconds
- * - No special activation conditions
- * - No precognition cost (restored from reference: reference doesn't require precognition)
- */
 function executeTimeToHunt(state, abilityConfig, targetState, config) {
   if (!targetState || targetState.isDefeated) {
     return { success: false, reason: 'No valid target' };
   }
 
-  // Apply Game Target status on target
   const gameTargetDuration = abilityConfig.gameTargetDuration || 10;
-  
-  // Apply Game Target status
-  const existingGT = targetState.statuses.find(s => s.type === 'Game Target');
+
+  // Apply [Game Target] unique status on target with remainingTime for duration tracking
+  const existingGT = getStatus(targetState, 'Game Target');
   if (existingGT) {
     existingGT.remainingTime = gameTargetDuration;
     existingGT.timer = 0;
@@ -394,38 +239,23 @@ function executeTimeToHunt(state, abilityConfig, targetState, config) {
       timer: 0
     });
   }
-  
-  // Apply server-side restrictions immediately
+
+  // Set server-side restrictions immediately
   targetState.speed = 1;
   targetState.canJump = false;
   targetState.canDash = false;
-  
-  // Apply status effects from config
+
+  // Apply status effects
   const appliedStatuses = ['Game Target'];
   if (abilityConfig.statusEffects) {
     abilityConfig.statusEffects.forEach(statusConfig => {
-      if (typeof this.applyStatus === 'function') {
-        this.applyStatus(targetState, statusConfig.type, statusConfig.count || 1, statusConfig.potency || 1);
-      } else {
-        const existing = targetState.statuses.find(s => s.type === statusConfig.type);
-        if (existing) {
-          existing.count += statusConfig.count || 1;
-          existing.potency += statusConfig.potency || 1;
-        } else {
-          targetState.statuses.push({
-            type: statusConfig.type,
-            count: statusConfig.count || 1,
-            potency: statusConfig.potency || 1,
-            timer: 0
-          });
-        }
-      }
+      ensureStatus(targetState, statusConfig.type, statusConfig.count || 1, statusConfig.potency || 1);
       appliedStatuses.push(statusConfig.type);
     });
   }
 
   // Apply knockback
-  if (abilityConfig.knockback) {
+  if (abilityConfig.knockback && targetState.velocity) {
     targetState.velocity.x = abilityConfig.knockback * (state.facing || 1);
   }
 
@@ -433,6 +263,7 @@ function executeTimeToHunt(state, abilityConfig, targetState, config) {
     success: true,
     ability: 'timeToHunt',
     hit: true,
+    activationAnimation: abilityConfig.activationAnimation || 'de1',
     cooldown: abilityConfig.cooldown || 30,
     targetId: targetState.id,
     statuses: appliedStatuses,
@@ -443,71 +274,29 @@ function executeTimeToHunt(state, abilityConfig, targetState, config) {
 //====================================================================
 // DISPOSAL - ULTIMATE
 //====================================================================
-
-/**
- * Execute Disposal ultimate effects on targets.
- * This handles the initial damage + status burst on ultimate activation.
- * Phase-by-phase execution is handled in ultimateLogic.js.
- */
 function executeDisposal(state, abilityConfig, targetStates, config) {
   const targets = Array.isArray(targetStates) ? targetStates : [targetStates];
   const results = [];
 
   targets.forEach(targetState => {
     if (!targetState || targetState.isDefeated) return;
+    let damage = Math.floor((abilityConfig.baseDamage || 1.5) * (state.baseDamage || 21));
+    if (state.resources.shinActive) damage = Math.floor(damage * (1 + 0.2));
 
-    // Calculate damage
-    let baseDamage = abilityConfig.baseDamage || 1.5;
-    let damage = Math.floor(baseDamage * (state.baseDamage || 21));
-    
-    // Shin bonus
-    if (state.resources.shinActive) {
-      damage = Math.floor(damage * (1 + 0.2));
-    }
-
-    // Apply damage
     targetState.hp = Math.max(0, targetState.hp - damage);
 
-    // Apply status effects
     const appliedStatuses = [];
     if (abilityConfig.statusEffects) {
       abilityConfig.statusEffects.forEach(statusConfig => {
-        if (typeof this.applyStatus === 'function') {
-          this.applyStatus(targetState, statusConfig.type, statusConfig.count || 1, statusConfig.potency || 1);
-        } else {
-          const existing = targetState.statuses.find(s => s.type === statusConfig.type);
-          if (existing) {
-            existing.count += statusConfig.count || 1;
-            existing.potency += statusConfig.potency || 1;
-          } else {
-            targetState.statuses.push({
-              type: statusConfig.type,
-              count: statusConfig.count || 1,
-              potency: statusConfig.potency || 1,
-              timer: 0
-            });
-          }
-        }
+        ensureStatus(targetState, statusConfig.type, statusConfig.count || 1, statusConfig.potency || 1);
         appliedStatuses.push(statusConfig.type);
       });
     }
 
-    results.push({
-      targetId: targetState.id,
-      hit: true,
-      damage,
-      targetHp: targetState.hp,
-      statuses: appliedStatuses,
-      defeated: targetState.hp <= 0
-    });
+    results.push({ targetId: targetState.id, hit: true, damage, targetHp: targetState.hp, statuses: appliedStatuses, defeated: targetState.hp <= 0 });
   });
 
-  return {
-    success: true,
-    ability: 'disposial',
-    targetsHit: results.length,
-    results
-  };
+  return { success: true, ability: 'disposial', targetsHit: results.length, results };
 }
 
 //====================================================================
@@ -515,87 +304,63 @@ function executeDisposal(state, abilityConfig, targetStates, config) {
 //====================================================================
 
 /**
- * Update Precognition system each tick.
- * Oldclientgameplay reference:
- * - Starts battle with 30 Precognition
- * - When attacked: chance to evade = 3% × Precognition (max 90%)
- * - Lose 1 on passive evade
- * - At 0: Enter Overheat
- * 
- * This is called from the main update loop. Passive evade is triggered
- * when Valencina would be hit (checked before damage application).
- */
-function updatePrecognition(state, dt, config) {
-  const events = [];
-
-  // Check if Precognition reached 0 → transition to Overheat
-  if (state.resources.precognition <= 0 && state.resources.overheat <= 0 && !state.resources.overheatActive) {
-    enterOverheat(state, config);
-    events.push({ type: 'OVERHEAT_ENTERED' });
-  }
-
-  return events;
-}
-
-/**
- * Check if Valencina's Precognition passive evades an incoming attack.
- * Called BEFORE damage is applied.
- * Chance: 3% × Precognition (max 90%)
- * Lose 1 Precognition on successful evade.
+ * Check Precognition passive evade BEFORE damage is applied.
+ * Called from the attack resolution pipeline.
+ * Chance: 3% × Precognition count (max 90%)
+ * If evade succeeds, lose 1 Precognition count.
  */
 function checkPrecognitionEvade(state) {
   if (!state || state.isDefeated) return false;
   
-  const precognition = state.resources.precognition || 0;
-  if (precognition <= 0) return false;
-  
-  // 3% × Precognition, max 90%
-  const evadeChance = Math.min(0.03 * precognition, 0.9);
-  
+  const precogStatus = getStatus(state, 'Precognition');
+  if (!precogStatus || precogStatus.count <= 0) return false;
+
+  const evadeChance = Math.min(0.03 * precogStatus.count, 0.9);
   if (Math.random() < evadeChance) {
-    // Successful evade
-    state.resources.precognition = Math.max(0, state.resources.precognition - 1);
+    precogStatus.count = Math.max(0, precogStatus.count - 1);
     state.lastEvadeTime = Date.now();
     return true;
   }
-  
   return false;
+}
+
+/**
+ * Update Precognition system each tick.
+ * At 0: Enter Overheat
+ */
+function updatePrecognition(state, config) {
+  const precogStatus = getStatus(state, 'Precognition');
+  const overheatStatus = getStatus(state, 'Overheat');
+  
+  if (precogStatus && precogStatus.count <= 0 && (!overheatStatus || overheatStatus.count <= 0)) {
+    enterOverheat(state, config);
+    return [{ type: 'OVERHEAT_ENTERED' }];
+  }
+  return [];
 }
 
 //====================================================================
 // OVERHEAT SYSTEM
 //====================================================================
-
-/**
- * Enter Overheat state.
- * Oldclientgameplay reference:
- * - Gain 30 Overheat
- * - Damage dealt: -20%
- * - Whenever hit or attacked: Lose 1 Overheat
- * - Every 5 seconds: Lose 1 Overheat
- * - At 0: Remove Overheat, restore 30 Precognition, return to Precognition
- */
 function enterOverheat(state, config) {
-  state.resources.overheatActive = true;
-  state.resources.overheat = config.overheat.startingValue || 30;
-  state.resources.precognition = 0; // All precognition consumed
-  
-  // Apply damage reduction
+  removeStatus(state, 'Precognition');
+  const oh = ensureStatus(state, 'Overheat', config.overheat.startingValue || 30, 0);
   state.resources.overheatDamageReduction = config.overheat.damageReduction || 0.2;
 }
 
-/**
- * Update Overheat system each tick.
- * - Lose 1 Overheat every 5 seconds
- * - When hit/attacked, lose 1 (handled in onReceiveHit)
- * - At 0: Exit Overheat, restore Precognition
- */
+function exitOverheat(state, config) {
+  removeStatus(state, 'Overheat');
+  state.resources.overheatDamageReduction = 0;
+  state.resources.overheatTimer = 0;
+  // Restore Precognition
+  ensureStatus(state, 'Precognition', config.precognition.startingValue || 30, 0);
+}
+
 function updateOverheat(state, dt, config) {
   const events = [];
-
-  if (!state.resources.overheatActive || state.resources.overheat <= 0) {
-    // If overheat is active but count reached 0, exit
-    if (state.resources.overheatActive && state.resources.overheat <= 0) {
+  const oh = getStatus(state, 'Overheat');
+  if (!oh || oh.count <= 0) {
+    if (oh && oh.count <= 0) {
       exitOverheat(state, config);
       events.push({ type: 'OVERHEAT_EXITED' });
     }
@@ -606,235 +371,150 @@ function updateOverheat(state, dt, config) {
   state.resources.overheatTimer = (state.resources.overheatTimer || 0) + dt;
   if (state.resources.overheatTimer >= 5.0) {
     state.resources.overheatTimer = 0;
-    state.resources.overheat = Math.max(0, state.resources.overheat - 1);
-    
-    if (state.resources.overheat <= 0) {
+    oh.count = Math.max(0, oh.count - 1);
+    if (oh.count <= 0) {
       exitOverheat(state, config);
       events.push({ type: 'OVERHEAT_EXITED' });
     }
   }
-
   return events;
 }
 
-/**
- * Exit Overheat: remove damage reduction, restore Precognition.
- */
-function exitOverheat(state, config) {
-  state.resources.overheatActive = false;
-  state.resources.overheat = 0;
-  state.resources.overheatDamageReduction = 0;
-  state.resources.overheatTimer = 0;
-  
-  // Restore 30 Precognition
-  state.resources.precognition = config.precognition.startingValue || 30;
-}
-
-/**
- * Called when Valencina takes a hit during Overheat.
- * Lose 1 Overheat.
- */
 function onReceiveHit(state, damage, attacker, config) {
   const effects = {};
 
   // Check Precognition passive evade first
   if (checkPrecognitionEvade(state)) {
-    // Evaded the hit!
     return { success: true, evaded: true, reason: 'PRECOGNITION_EVADE' };
   }
 
-  // During Overheat: lose 1 Overheat on being attacked
-  if (state.resources.overheatActive && state.resources.overheat > 0) {
-    state.resources.overheat = Math.max(0, state.resources.overheat - (config.overheat.losePerHit || 1));
+  // Lose 1 Overheat on being hit
+  const oh = getStatus(state, 'Overheat');
+  if (oh && oh.count > 0) {
+    oh.count = Math.max(0, oh.count - (config.overheat.losePerHit || 1));
     effects.overheatLoss = config.overheat.losePerHit || 1;
   }
 
   // Check Shin activation
   checkShinActivation(state, config);
 
-  return {
-    success: true,
-    ...effects
-  };
+  return { success: true, ...effects };
 }
 
 //====================================================================
 // SHIN (心) SYSTEM
 //====================================================================
-
-/**
- * Check and activate Shin (心) - Valencina.
- * Oldclientgameplay reference:
- * - Passive activates when HP below 50% OR Ultimate becomes available
- * - Gain 1 Protection (10% damage reduction)
- * - +3% damage per Poise Potency (max 15%)
- * 
- * This is checked on hit taken and on ultimate available.
- */
 function checkShinActivation(state, config) {
-  if (state.resources.shinActive) return false; // Already active
+  if (state.resources.shinActive) return false;
 
-  // Check condition: HP < 50% OR ultimate available
   const hpPercent = (state.hp || 0) / (state.maxHp || 3204);
   const ultimateAvailable = state.resources.ultimateAvailable || false;
-  
+
   if (hpPercent < (config.shin.activationThreshold || 0.5) || ultimateAvailable) {
-    // Activate Shin
     state.resources.shinActive = true;
-    
     // Gain 1 Protection status
-    const protectionCount = config.shin.protectionGain || 1;
-    const existingProtection = state.statuses.find(s => s.type === 'Protection');
-    if (existingProtection) {
-      existingProtection.count += protectionCount;
-    } else {
-      state.statuses.push({ type: 'Protection', count: protectionCount, potency: 1, timer: 0 });
-    }
-    
-    // Add Shin status for client display
-    state.statuses.push({ type: 'Shin (心) - Valencina', count: 1, potency: hpPercent < 0.5 ? 1 : 2, timer: 0 });
-    
+    ensureStatus(state, 'Protection', config.shin.protectionGain || 1, 1);
+    // Add [Shin (心) - Valencina] unique status
+    ensureStatus(state, 'Shin (心) - Valencina', 1, hpPercent < 0.5 ? 1 : 2);
     return true;
   }
-  
   return false;
 }
 
-/**
- * Check if Shin is active and calculate damage bonus.
- * Returns damage multiplier (1.0 = no bonus).
- */
 function applyShinDamageBonus(state, damage) {
   if (!state.resources.shinActive) return damage;
-  
   const poisePot = getStatusPotency(state, 'Poise');
-  const bonusPercent = Math.min(poisePot * 0.03, 0.15); // +3% per Poise Pot, max 15%
-  
-  if (bonusPercent > 0) {
-    return Math.floor(damage * (1 + bonusPercent));
-  }
-  
+  const bonusPercent = Math.min(poisePot * 0.03, 0.15);
+  if (bonusPercent > 0) return Math.floor(damage * (1 + bonusPercent));
   return damage;
-}
-
-//====================================================================
-// ON EVADE
-//====================================================================
-
-/**
- * Called when Valencina successfully evades via Precognition passive.
- * Old client gains resources on evade.
- */
-function onEvade(state, config) {
-  const effects = {};
-  
-  // Gain 1 Precognition back on evade
-  if (state.resources.precognition < (config.precognition.max || 30)) {
-    state.resources.precognition += 1;
-    effects.precognitionGain = 1;
-  }
-  
-  // Acceleration Round: gain 1 on evade
-  if (state.resources.accelerationRounds < (config.accelerationRounds.max || 10)) {
-    state.resources.accelerationRounds += 1;
-    effects.accelerationRoundsGain = 1;
-  }
-
-  return {
-    success: true,
-    ...effects
-  };
 }
 
 //====================================================================
 // PER-TICK SYSTEM UPDATES
 //====================================================================
-
-/**
- * Main per-tick update for all Valencina passive systems.
- * Called from GameplayEngine.updateValencinaSystems().
- */
 function updateSystems(state, dt, config) {
   const events = [];
 
-  // 1. Update Precognition → Overheat transition check
-  const precogEvents = updatePrecognition(state, dt, config);
-  events.push(...precogEvents);
+  // 1. Update Precognition → Overheat transition
+  events.push(...updatePrecognition(state, config));
 
   // 2. Update Overheat decay
-  const overheatEvents = updateOverheat(state, dt, config);
-  events.push(...overheatEvents);
+  events.push(...updateOverheat(state, dt, config));
 
   // 3. Apply Accelerating Future effects
   applyAcceleratingFutureEffects(state, config);
 
-  // 4. Check Shin activation (periodically)
+  // 4. Check Shin activation
   checkShinActivation(state, config);
 
-  // 5. Process Game Target status cleanup
-  processGameTargetStatus(state, config);
-
-  // 6. Clear accelerationRoundActive flag after one attack
-  // This is cleared in the attack resolution, but as a fallback:
-  if (state.resources.accelerationRoundActive) {
-    // Will be cleared by the attack system after the next attack resolves
-  }
+  // 5. Update Precognition display status count (synced from resources)
+  syncPrecognitionStatus(state, config);
 
   return events;
 }
 
 /**
- * Process Game Target status: restore speed/jump/dash when status expires.
+ * Ensure the Precognition status exists with the right count.
+ */
+function syncPrecognitionStatus(state, config) {
+  // Precognition is already managed as a status via initializeResources
+  const precog = getStatus(state, 'Precognition');
+  if (!precog) {
+    ensureStatus(state, 'Precognition', config.precognition.startingValue || 30, 0);
+  }
+}
+
+//====================================================================
+// GAME TARGET STATUS PROCESSING
+//====================================================================
+/**
+ * Process all fighters for Game Target status effects.
+ * Called from Match tick for every fighter.
+ * If a fighter has Game Target status, restrict speed/jump/dash.
  */
 function processGameTargetStatus(state, config) {
-  // Check if target has Game Target status
-  const gtStatus = state.statuses.find(s => s.type === 'Game Target');
-  
-  if (!gtStatus || gtStatus.remainingTime <= 0 || gtStatus.count <= 0) {
-    // Status expired or not present - restore normal stats
+  const gt = getStatus(state, 'Game Target');
+  if (gt && gt.count > 0 && (gt.remainingTime === undefined || gt.remainingTime > 0)) {
+    // Game Target active: restrict movement
+    state.speed = 1;
+    state.canJump = false;
+    state.canDash = false;
+    return true;
+  } else {
+    // No Game Target: restore normal stats
     state.speed = config.speed || 9;
     state.canJump = true;
     state.canDash = true;
+    return false;
   }
 }
 
 //====================================================================
 // RESOURCE INITIALIZATION
 //====================================================================
-
-/**
- * Initialize Valencina-specific resources when match starts.
- */
 function initializeResources(state, config) {
   state.resources = state.resources || {};
   
-  // Acceleration Rounds: start with 10
-  state.resources.accelerationRounds = config.accelerationRounds.startingValue || 10;
+  // All unique passives are statuses - initialize them
+  state.statuses = state.statuses || [];
+  
+  // [Precognition] - unique status, starts with 30
+  ensureStatus(state, 'Precognition', config.precognition.startingValue || 30, 0);
+  
+  // [Acceleration Round] - unique status, starts with 10
+  ensureStatus(state, 'Acceleration Round', config.accelerationRounds.startingValue || 10, 0);
+  
+  // Internal tracking
   state.resources.maxAccelerationRounds = config.accelerationRounds.max || 10;
   state.resources.accelerationRoundActive = false;
-  
-  // Precognition: start with 30
-  state.resources.precognition = config.precognition.startingValue || 30;
-  state.resources.maxPrecognition = config.precognition.max || 30;
-  
-  // Overheat: starts at 0 (inactive)
-  state.resources.overheat = 0;
-  state.resources.maxOverheat = config.overheat.max || 30;
-  state.resources.overheatActive = false;
   state.resources.overheatDamageReduction = 0;
   state.resources.overheatTimer = 0;
-  
-  // Shin: starts inactive
   state.resources.shinActive = false;
   state.resources.ultimateAvailable = false;
-  
-  // Accelerating Future: starts at 0
-  state.resources.acceleratingFuture = 0;
   state.resources.acceleratingFutureSpeedBonus = 0;
   state.resources.acceleratingFutureIntervalReduction = 0;
-  
-  // Tracking
-  state.resources.lastHitOpponent = null;
+  state.resources.effectiveSpeed = config.speed || 9;
+  state.resources.effectiveAttackInterval = config.attackInterval || 1.0;
   state.resources.lastEvadeTime = Date.now();
   
   return state.resources;
@@ -846,25 +526,17 @@ function initializeResources(state, config) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
-    // Core ability execution
     executeTimeToHunt,
     executeDisposal,
     consumeAccelerationRound,
-    
-    // Attack system integration
     calculateAttackDamage,
-    calculateShinDamageBonus,
+    calculateShinDamageBonus: applyShinDamageBonus,
     applyAttack1Effects,
     applyAttack2Effects,
     applyAttack3Effects,
     triggerTremorBurst,
-    
-    // On-hit/on-hit-taken
     onSuccessfulHit,
     onReceiveHit,
-    onEvade,
-    
-    // Passive systems
     checkPrecognitionEvade,
     updatePrecognition,
     updateOverheat,
@@ -874,15 +546,15 @@ if (typeof module !== 'undefined' && module.exports) {
     checkShinActivation,
     processGameTargetStatus,
     applyAcceleratingFutureEffects,
-    
-    // Resource initialization
     initializeResources,
+    getStatus,
+    getStatusPotency,
+    getStatusCount,
+    ensureStatus,
+    removeStatus,
     
-    // Aliases for backward compatibility
     timeToHunt: executeTimeToHunt,
     disposial: executeDisposal,
-    
-    // Shin system alias
     updateShinSystem: checkShinActivation
   };
 }

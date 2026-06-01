@@ -266,6 +266,19 @@ tick() {
                 // Handle events from GameplayEngine
                 this.handleEvents(player, events);
 
+                // Process Valencina's Game Target status on all fighters each tick
+                // This restricts speed/jump/dash for any fighter with Game Target active
+                if (player.characterKey === 'VALENCINA') {
+                    const valencinaLogic = require('./characterLogic/valencina');
+                    valencinaLogic.processGameTargetStatus(player.gameState, player.config);
+                } else {
+                    // Non-Valencina characters also need Game Target processing in case they are affected
+                    try {
+                        const valencinaLogic = require('./characterLogic/valencina');
+                        valencinaLogic.processGameTargetStatus(player.gameState, player.config);
+                    } catch(e) {}
+                }
+                
                 // Update ability animation timers
                 this.updateAbilityAnimations(player, dt);
 
@@ -390,9 +403,10 @@ tick() {
         }
         
         // MOVEMENT INPUT - RESTORED: Direct velocity setting like original game
-        // Original game used: vel.x = moveDir * speed (instant response, no acceleration)
-        // Speed is in pixels/frame; convert to pixels/second: speed * 60
-        const maxSpeed = (config.speed || 9) * 60;
+        // Use state.speed (which may be modified by Game Target status)  
+        // Fallback to config.speed if state.speed is not set
+        const moveSpeed = (state.speed !== undefined && state.speed !== null) ? state.speed : (config.speed || 9);
+        const maxSpeed = moveSpeed * 60;
         
         // Don't allow movement input during hitstun or stagger active phase
         if (state.state !== 'hit' && !(state.state === 'staggered' && state.staggerTimer > 0)) {
@@ -433,8 +447,8 @@ tick() {
         }
 
         // JUMP INPUT - edge triggered
-        // Allow jump on any input if just exited hit state
-        const canJump = state.state !== 'hit' && 
+        // Check both state conditions AND canJump flag (Game Target sets canJump=false)
+        const canJump = (state.canJump !== false) && state.state !== 'hit' && 
                        (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
         if (input.up && !prevInput.up && state.onGround && canJump && !state.isAttacking) {
             const jumpHeight = config.jumpHeight || 1200;

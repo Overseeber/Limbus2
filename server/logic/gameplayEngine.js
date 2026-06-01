@@ -536,6 +536,20 @@ class GameplayEngine {
     if (!hit.hit) { result.reason = 'Missed'; return result; }
     result.hit = true;
 
+    // VALENCINA: Check Precognition passive evade before resolving damage
+    // If defender has [Precognition] status, check for evade (3% x count, max 90%)
+    if (defender.characterKey === 'VALENCINA') {
+      try {
+        const valencinaLogic = require('./characterLogic/valencina');
+        if (valencinaLogic.checkPrecognitionEvade(defender)) {
+          // Evaded! Return with hit=true but no damage
+          result.evaded = true;
+          result.evadeReason = 'PRECOGNITION_EVADE';
+          return result;
+        }
+      } catch(e) {}
+    }
+
     let base = attackData.baseDamage || attacker.baseDamage, knock = attackData.knockback || 0;
     if (defender.isGuarding) { base *= 0.5; knock = Math.floor(knock * 0.5); result.wasGuarded = true; }
 

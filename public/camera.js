@@ -2,15 +2,18 @@ let cameraZoom = 1;
 let cameraX = 0;
 let cameraY = 0;
 
-function beginCamera() {
-  updateCamera();
+function beginCamera(overrideZoom, skipCameraUpdate = false) {
+  if (!skipCameraUpdate) {
+    updateCamera();
+  }
   const shake = typeof getScreenShakeOffset === 'function' ? getScreenShakeOffset() : { x: 0, y: 0 };
+  const zoomToApply = typeof overrideZoom === 'number' ? overrideZoom : cameraZoom;
   push();
   translate(width / 2, height / 2);
-  scale(cameraZoom);
+  scale(zoomToApply);
   translate(-cameraX + shake.x, -cameraY + shake.y);
 }
-//test
+
 function endCamera() {
   pop();
 }

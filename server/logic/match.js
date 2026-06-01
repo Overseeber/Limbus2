@@ -40,6 +40,28 @@ const SLAM_ATTACK_RADIUS = 80;
 const EVADE_DISTANCE = 230; // ~1 attack range
 const EVADE_MAX_DURATION = 1.0; // max 1 second
 
+function computeHitShakeIntensity(damage, options = {}) {
+  const normalizedDamage = Math.max(0, Math.min(damage || 0, options.isUltimate ? 80 : 45));
+  let intensity = normalizedDamage * (options.attackType === 'slam' ? 0.35 : options.attackType === 'dash' ? 0.3 : options.isUltimate ? 0.45 : 0.28);
+  if (options.defeated) {
+    intensity += options.isUltimate ? 4 : 2;
+  }
+  if (options.staggered) {
+    intensity += 2;
+  }
+  intensity = Math.max(2, intensity);
+  if (options.attackType === 'slam') {
+    intensity = Math.min(24, intensity);
+  } else if (options.attackType === 'dash') {
+    intensity = Math.min(16, intensity);
+  } else if (options.isUltimate) {
+    intensity = Math.min(30, intensity);
+  } else {
+    intensity = Math.min(14, intensity);
+  }
+  return intensity;
+}
+
 class Match {
     constructor(room, io) {
         this.room = room;
@@ -1498,6 +1520,7 @@ tick() {
                 targetId: defender.clientId,
                 damage: result.damage,
                 isCrit: result.isCrit || false,
+                attackType: attackType || null,
                 attackSequence: attacker.attackSequence,
                 hp: defender.gameState.hp,
                 knockback: result.knockback,
@@ -1505,7 +1528,13 @@ tick() {
                 staggerResult: result.staggerResult || null,
                 chargeAttack: result.chargeAttack || false,
                 defeated: result.defeated,
-                wasGuarded: result.wasGuarded || false
+                wasGuarded: result.wasGuarded || false,
+                shakeType: 'hit',
+                shakeIntensity: computeHitShakeIntensity(result.damage, {
+                    attackType: attackType,
+                    defeated: result.defeated,
+                    staggered: !!(result.staggerResult && result.staggerResult.staggered)
+                })
             });
 
             if (result.consumeEvents) {
@@ -1670,7 +1699,13 @@ tick() {
                 defenderHp: result.defenderHp,
                 hit: result.hit,
                 defeated: result.defeated,
-                knockback: result.knockback
+                knockback: result.knockback,
+                shakeType: 'dash',
+                shakeIntensity: computeHitShakeIntensity(result.damage, {
+                    attackType: 'dash',
+                    defeated: result.defeated,
+                    staggered: !!(result.staggerResult && result.staggerResult.staggered)
+                })
             });
         });
         
@@ -1742,7 +1777,7 @@ tick() {
                 );
 
                 hitAny = true;
-                if (result.hit) {
+                    if (result.hit) {
                     let slamHitstop = 0.14;
                     if (result.staggerResult && result.staggerResult.staggered) {
                         slamHitstop = Math.max(slamHitstop, 0.18);
@@ -1763,7 +1798,13 @@ tick() {
                     defenderHp: result.defenderHp,
                     hit: result.hit,
                     defeated: result.defeated,
-                    knockback: result.knockback
+                    knockback: result.knockback,
+                    shakeType: 'slam',
+                    shakeIntensity: computeHitShakeIntensity(result.damage, {
+                        attackType: 'slam',
+                        defeated: result.defeated,
+                        staggered: !!(result.staggerResult && result.staggerResult.staggered)
+                    })
                 });
             }
         });

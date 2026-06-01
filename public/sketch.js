@@ -674,7 +674,6 @@ function updateCombatZoom(dt) {
     
     // === STEP 1: Recalculate visibility limits ===
     combatZoom.maxSafeZoom = calculateMaxSafeZoom();
-    const minSafeZoom = 1.0 / combatZoom.maxSafeZoom; // Minimum zoom factor allowed
     
     // === STEP 2: Read server-authoritative state ===
     let anyAttacking = false;
@@ -723,13 +722,12 @@ function updateCombatZoom(dt) {
     // Farther camera = weaker impact zoom (zoom out already happened, don't emphasize further)
     // Closer camera = stronger impact zoom (make impact feel more dramatic)
     // Scale desired zoom toward 1.0 based on current camera distance
+    const baseCameraZoom = (typeof cameraZoom === 'number') ? cameraZoom : 1.0;
     let scaledZoom = desiredZoom;
-    if (typeof cameraZoom !== 'undefined' && cameraZoom > 1.0) {
-        // Camera is zoomed out (cameraZoom > 1.0 = farther)
-        // Reduce impact zoom strength: scale toward 1.0
-        const zoomDistance = cameraZoom;
-        const scaleFactor = 1.0 / zoomDistance; // e.g., if cameraZoom=2.0, scale by 0.5
-        scaledZoom = 1.0 - (1.0 - desiredZoom) * scaleFactor;
+    if (baseCameraZoom < 1.0) {
+        // Far camera positions should weaken impact zoom so distant targets do not feel over-emphasized.
+        const distanceFactor = constrain(baseCameraZoom, 0.55, 1.0);
+        scaledZoom = 1.0 - (1.0 - desiredZoom) * distanceFactor;
     }
     
     // === STEP 4: Hitstop state ===
@@ -771,12 +769,17 @@ function updateCombatZoom(dt) {
     }
     
     // === STEP 7: Visibility safety clamp ===
-    // Prevent zoom from exceeding the limit where fighters would go off-screen
-    // minSafeZoom = 1.0 / maxSafeZoom (e.g., if maxSafeZoom=1.5, then minSafeZoom=0.67)
-    // Clamp: ensure currentZoom never goes below minSafeZoom (never magnifies more than allowed)
-    combatZoom.currentZoom = Math.max(minSafeZoom, combatZoom.currentZoom);
-    
-    // Clamp to valid range [0.55, 1.0]
+    // Keep the final camera display scale within the safe visible range computed from fighter hitboxes.
+    // finalDisplayZoom = baseCameraZoom / combatZoom.currentZoom
+    // so require combatZoom.currentZoom >= baseCameraZoom / combatZoom.maxSafeZoom.
+    const requiredMinCombatZoom = combatZoom.maxSafeZoom > 0
+      ? baseCameraZoom / combatZoom.maxSafeZoom
+      : 1.0;
+    const minAllowedCombatZoom = Math.min(1.0, Math.max(0.55, requiredMinCombatZoom));
+
+    combatZoom.currentZoom = Math.max(minAllowedCombatZoom, combatZoom.currentZoom);
+
+    // Clamp to valid combat zoom range [0.55, 1.0]
     combatZoom.currentZoom = Math.max(0.55, Math.min(1.0, combatZoom.currentZoom));
     
     // === STEP 8: Zero camera influence when idle ===
@@ -1149,9 +1152,7 @@ function handleAbilityResult(result) {
       spawnDamageNumber(resultData.damage, target.pos.copy(), fighter.facing, false, 'normal', false, 'normal');
     }
 
-    if (typeof addScreenShake === 'function' && typeof resultData.damage === 'number') {
-      addScreenShake(resultData.damage);
-    }
+    applyNetworkScreenShake(resultData);
 
     if (resultData.statuses) {
       applyStatusObjects(target, resultData.statuses);
@@ -1242,6 +1243,24 @@ function triggerAbilityVisuals(fighter, abilityId, result) {
   }
 }
 
+function applyNetworkScreenShake(event) {
+  if (!event || typeof addScreenShake !== 'function') return;
+
+  const intensity = typeof event.shakeIntensity === 'number'
+    ? event.shakeIntensity
+    : (typeof event.damage === 'number' ? event.damage : 0);
+  if (intensity <= 0) return;
+
+  const isUltimate = !!(
+    event.isUltimate ||
+    event.shakeType === 'ultimate' ||
+    event.attackType === 'ultimate' ||
+    event.type === 'ULTIMATE_SLASH'
+  );
+
+  addScreenShake(intensity, isUltimate);
+}
+
 function handleNetworkEvent(event) {
   if (!event || !window.allFighters) return;
 
@@ -1303,6 +1322,8 @@ function handleUltimateSlashEvent(event) {
       rotation: null
     });
   }
+
+  applyNetworkScreenShake(event);
 }
 
 function handleHitNetworkEvent(event) {
@@ -1324,9 +1345,7 @@ function handleHitNetworkEvent(event) {
   if (event.damage && typeof spawnDamageNumber === 'function') {
     spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'normal');
   }
-  if (typeof addScreenShake === 'function') {
-    addScreenShake(event.damage);
-  }
+  applyNetworkScreenShake(event);
 
   if (event.statuses && Array.isArray(event.statuses) && target.addStatus) {
     event.statuses.forEach(statusType => target.addStatus(statusType, 1, 1));
@@ -1351,9 +1370,7 @@ function handleSlamHitNetworkEvent(event) {
   if (event.damage && typeof spawnDamageNumber === 'function') {
     spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'slam');
   }
-  if (typeof addScreenShake === 'function') {
-    addScreenShake(event.damage);
-  }
+  applyNetworkScreenShake(event);
 
   if (event.defeated && !target.isDefeated) {
     target.isDefeated = true;
@@ -1384,9 +1401,7 @@ function handleDashAttackNetworkEvent(event) {
       spawnDamageNumber(hit.damage, target.pos.copy(), facing, false, 'normal', false, 'normal');
     }
 
-    if (typeof addScreenShake === 'function' && typeof hit.damage === 'number') {
-      addScreenShake(hit.damage);
-    }
+    applyNetworkScreenShake(hit);
 
     if (hit.defeated && !target.isDefeated) {
       target.isDefeated = true;
@@ -1596,17 +1611,15 @@ function draw() {
       cameraY = lerp(cameraY, fighterMidpointY, 0.1); // Smooth transition
     }
     
-    // Update combat impact zoom (client-side visual, reads server-authoritative state)
+    // Recompute base camera state first, then apply impact zoom as a visual overlay.
+    updateCamera();
     updateCombatZoom(deltaTime / 1000);
-    // Apply combat zoom as a DIVISIVE factor on top of existing camera zoom.
-    // combatZoom.currentZoom is < 1.0 for "zoom in" (e.g. 0.82 = 1/0.82 = 1.22x magnification).
-    // Division converts the <1 values into >1 magnification factors.
-    // When no attack is happening, currentZoom = 1.0 and camera is unaffected.
-    if (combatZoom.active) {
-        cameraZoom = cameraZoom / combatZoom.currentZoom;
-    }
-    
-    beginCamera();
+
+    const displayCameraZoom = combatZoom.active
+      ? cameraZoom / combatZoom.currentZoom
+      : cameraZoom;
+
+    beginCamera(displayCameraZoom, true);
     drawArena();
     
     // Draw ultimate render behind characters (name, dialogue, effects)
@@ -2196,6 +2209,10 @@ function updateBattle() {
   updateDamageNumbers(dt);
   updateParticles(dt);
   updateSlamLandingOverlays(dt);
+
+  if (typeof updateScreenShake === 'function') {
+    updateScreenShake(dt);
+  }
 }
 
 function getPlayerControlledFighter() {

@@ -83,7 +83,7 @@ class Match {
         this.players = {};
         
         playerConfigs.forEach(config => {
-            const charKey = config.characterKey || 'JOHN';
+            const charKey = config.characterKey || 'VALENCINA';
             const charConfig = this.engine.getCharacterConfig(charKey);
             
             if (!charConfig) {
@@ -1503,13 +1503,16 @@ tick() {
 
             let hitstopSeconds = attackDef.hitstop || 0;
             if (!hitstopSeconds) {
-                hitstopSeconds = attackType === 'light' ? 0.04 : attackType === 'medium' ? 0.06 : 0.10;
+                hitstopSeconds = attackType === 'light' ? 0.03 : attackType === 'medium' ? 0.05 : 0.08;
             }
-            if (result.staggerResult && result.staggerResult.staggered) {
+            if (attacker.attackSequence === 3) {
                 hitstopSeconds = Math.max(hitstopSeconds, 0.14);
             }
-            if (result.defeated) {
+            if (result.staggerResult && result.staggerResult.staggered) {
                 hitstopSeconds = Math.max(hitstopSeconds, 0.18);
+            }
+            if (result.defeated) {
+                hitstopSeconds = Math.max(hitstopSeconds, 0.22);
             }
             this.startHitstop(hitstopSeconds, `attack-${attackType}`);
 
@@ -1692,6 +1695,15 @@ tick() {
                 defeated: ap.defeated,
                 knockback: attackData.knockback || 0
             };
+
+            let dashHitstop = 0.10;
+            if (defender.gameState.state === 'staggered') {
+                dashHitstop = Math.max(dashHitstop, 0.16);
+            }
+            if (result.defeated) {
+                dashHitstop = Math.max(dashHitstop, 0.18);
+            }
+            this.startHitstop(dashHitstop, 'dash');
             
             results.push({
                 targetId: defender.clientId,
@@ -1704,7 +1716,7 @@ tick() {
                 shakeIntensity: computeHitShakeIntensity(result.damage, {
                     attackType: 'dash',
                     defeated: result.defeated,
-                    staggered: !!(result.staggerResult && result.staggerResult.staggered)
+                    staggered: defender.gameState.state === 'staggered'
                 })
             });
         });
@@ -1778,12 +1790,12 @@ tick() {
 
                 hitAny = true;
                     if (result.hit) {
-                    let slamHitstop = 0.14;
+                    let slamHitstop = 0.16;
                     if (result.staggerResult && result.staggerResult.staggered) {
-                        slamHitstop = Math.max(slamHitstop, 0.18);
+                        slamHitstop = Math.max(slamHitstop, 0.20);
                     }
                     if (result.defeated) {
-                        slamHitstop = Math.max(slamHitstop, 0.22);
+                        slamHitstop = Math.max(slamHitstop, 0.24);
                     }
                     this.startHitstop(slamHitstop, 'slam');
                 }

@@ -59,11 +59,12 @@ const SNAPSHOT_INTERVAL_MS = 50; // server tick at 50ms
 // Client-side camera effects driven by server-authoritative state
 // DO NOT calculate gameplay here - only visual zoom effects
 const COMBAT_ZOOM = {
-    // Unified zoom intensities - all attacks use same slam-level intensity
-    // Magnification: target / divisor, e.g., 1.0 / 0.70 = 1.43x
-    ZOOM_IN_UNIFIED: 0.70,    // All normal attacks (light, medium, heavy, dash, slam) = 1.43x magnification
-    ZOOM_IN_COMBO3: 0.72,     // Combo finisher (sequence 3 attacks) = 1.39x magnification
-    ZOOM_IN_ULTIMATE: 0.60,   // Cinematic ultimate zoom = 1.67x magnification
+    // Zoom intensities per attack category
+    ZOOM_IN_NORMAL: 0.82,     // Normal attacks: low to medium impact zoom
+    ZOOM_IN_COMBO3: 0.72,     // Combo finishers: medium to high impact zoom
+    ZOOM_IN_SLAM: 0.70,       // Slam attacks: medium to high impact zoom
+    ZOOM_IN_DASH: 0.70,       // Dash attacks: medium to high impact zoom
+    ZOOM_IN_ULTIMATE: 0.56,   // Ultimate damage frames: strongest cinematic zoom
     
     // Timing
     WINDUP_TRACKING_SPEED: 25, // Fast tracking toward zoom target during windup (per-frame lerp factor)
@@ -131,7 +132,7 @@ let localSlotSelections = [];
 let roomCharacterSelectSlot = -1;
 let availableCharacterKeys = () => {
   const registry = (typeof CHARACTERS !== 'undefined') ? CHARACTERS : (window.CHARACTERS || {});
-  return Object.keys(registry || {});
+  return Object.keys(registry || {}).filter(key => key !== 'JOHN');
 };
 // Current previewed character for the new selection flow
 let previewCharacterKey = null;
@@ -699,19 +700,19 @@ function updateCombatZoom(dt) {
             target = isInDamagePhase ? COMBAT_ZOOM.ZOOM_IN_ULTIMATE : COMBAT_ZOOM.ZOOM_IN_UNIFIED;
             pri = 5;
         } else if (isSlam) {
-            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
+            target = COMBAT_ZOOM.ZOOM_IN_SLAM;
             pri = 4;
         } else if (isDash) {
-            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
+            target = COMBAT_ZOOM.ZOOM_IN_DASH;
             pri = 3;
         } else if (seq === 3 || fighter.chargeAttack) {
             target = COMBAT_ZOOM.ZOOM_IN_COMBO3;
             pri = 3;
         } else if (seq === 2) {
-            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
+            target = COMBAT_ZOOM.ZOOM_IN_NORMAL;
             pri = 2;
         } else if (seq === 1) {
-            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
+            target = COMBAT_ZOOM.ZOOM_IN_NORMAL;
             pri = 1;
         }
         
@@ -1024,7 +1025,7 @@ function initRoomBattle(slots) {
 
   for (let i = 0; i < activePlayers.length; i++) {
     const slot = activePlayers[i];
-    const characterKey = slot.character || 'JOHN';
+    const characterKey = slot.character || 'VALENCINA';
     const isLocalPlayer = slot.clientId === mySocketId;
     
     const fighter = new Fighter(false, `P${i + 1}`, characterKey, true);
@@ -1612,12 +1613,16 @@ function draw() {
     }
     
     // Recompute base camera state first, then apply impact zoom as a visual overlay.
-    updateCamera();
+    updateCamera(deltaTime / 1000);
     updateCombatZoom(deltaTime / 1000);
 
     const displayCameraZoom = combatZoom.active
       ? cameraZoom / combatZoom.currentZoom
       : cameraZoom;
+
+    if (typeof clampCameraToVisibility === 'function') {
+      clampCameraToVisibility(displayCameraZoom);
+    }
 
     beginCamera(displayCameraZoom, true);
     drawArena();

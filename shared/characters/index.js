@@ -23,7 +23,7 @@ const CHARACTER_CONFIGS = {
  * Get character config by ID
  */
 function getCharacterConfig(characterId) {
-  return CHARACTER_CONFIGS[characterId] || CHARACTER_CONFIGS.JOHN;
+  return CHARACTER_CONFIGS[characterId] || CHARACTER_CONFIGS.VALENCINA;
 }
 
 // Export for server

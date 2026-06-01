@@ -23,7 +23,7 @@ class Client {
     constructor(id)
     {
         this.id = id;
-        this.character = 'JOHN'; // Default character
+        this.character = 'VALENCINA'; // Default character
         this.room = null;
         this.state = 'MainMenu';
         this.ready = false;
@@ -313,7 +313,7 @@ socket.on('toggleReady', () => {
                 const c = clientList[cid];
                 return {
                     clientId: cid,
-                    characterKey: c.character || 'JOHN',
+                    characterKey: c.character || 'VALENCINA',
                     index: index
                 };
             });
@@ -357,7 +357,7 @@ socket.on('toggleReady', () => {
         const playerConfigs = [
             {
                 clientId: socket.id,
-                characterKey: (data && data.characterKey) || client.character || 'JOHN',
+                characterKey: (data && data.characterKey) || client.character || 'VALENCINA',
                 index: 0
             },
             {

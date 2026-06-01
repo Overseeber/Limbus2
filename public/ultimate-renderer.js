@@ -18,7 +18,7 @@ function applyUltimateState(fighter, state) {
   fighter.ultimateTimer = state.ultimateTimer || 0;
   fighter.ultimateAttackFrame = state.ultimateAttackFrame || 0;
   fighter.ultimateAttackTimer = state.ultimateAttackTimer || 0;
-  fighter.ultimateTotalDamage = state.ultimateTotalDamage || 0;
+  fighter.ultimateTotalDamage = Number(state.ultimateTotalDamage) || 0;
   fighter.ultimateCameraZoom = state.ultimateCameraZoom || 1;
   fighter.ultimateBackgroundDim = state.ultimateBackgroundDim || 0;
   fighter.ultimateName = state.ultimateName || '';
@@ -50,41 +50,37 @@ function drawUltimateBackgroundDim(dimAmount) {
   const cur = window.__currentUltimateDim;
   if (cur <= 0.005) return;
 
-  // Draw semi-transparent black overlay over entire screen (camera space)
-  // Use up to ~50% opacity (128/255) scaled by dim amount
+  const bgWidth = window.bgScaledWidth || ARENA_WIDTH;
+  const bgHeight = window.bgScaledHeight || ARENA_HEIGHT;
+  const bgLeft = (ARENA_WIDTH / 2) - (bgWidth / 2);
+  const bgTop = (ARENA_HEIGHT / 2) - (bgHeight / 2);
+
   push();
   noStroke();
-  fill(0, 0, 0, cur * 128);
-  rect(0, 0, windowWidth, windowHeight);
+  fill(0, 0, 0, cur * 191); // 75% max opacity
+  rect(bgLeft, bgTop, bgWidth, bgHeight);
   pop();
 }
 
 /**
- * Draw ultimate name text behind the character sprite
- * Drawn in world space so it stays behind the character
+ * Draw ultimate name text centered in the current camera viewport.
+ * Rendered before fighters so it sits behind them, but after the darkened background.
  */
 function drawUltimateName(x, y, name, phase, cameraZoom) {
-  // Only display the ultimate name during the opening pose (phase 0)
   if (!name || phase !== 0) return;
-  
+
+  const camX = typeof window.cameraX !== 'undefined' ? window.cameraX : ARENA_WIDTH / 2;
+  const camY = typeof window.cameraY !== 'undefined' ? window.cameraY : ARENA_HEIGHT / 2;
+  const size = typeof cameraZoom === 'number' ? Math.max(140, 180 / cameraZoom) : 180;
+  const strokeW = typeof cameraZoom === 'number' ? Math.max(4, 10 / cameraZoom) : 10;
+
   push();
   textAlign(CENTER, CENTER);
-  
-  // Scale text based on camera zoom
-  const baseSize = 42;
-  const textSize = baseSize / cameraZoom;
-  
-  // Shadow for readability
-  fill(0, 0, 0, 180);
-  noStroke();
-  textSize(textSize);
-  text(name, x + 3, y - 180 / cameraZoom + 3);
-  
-  // Main text
-  fill(255, 215, 0); // Gold color
-  textSize(textSize);
-  text(name, x, y - 180 / cameraZoom);
-  
+  textSize(size);
+  fill(186, 186, 186, 128);
+  stroke(0, 0, 0, 180);
+  strokeWeight(strokeW);
+  text(name.toUpperCase(), camX, camY);
   pop();
 }
 

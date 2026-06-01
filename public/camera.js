@@ -62,8 +62,9 @@ function updateCamera(dt) {
   const deltaDist = Math.hypot(deltaX, deltaY);
   const positionStrength = constrain(deltaDist / 350, 0, 1);
 
-  const positionStiffness = lerp(22, 58, positionStrength);
-  const positionDamping = lerp(1.4, 0.65, positionStrength);
+  // Softer spring and stronger damping to reduce bounce and make the camera settle faster.
+  const positionStiffness = lerp(16, 48, positionStrength);
+  const positionDamping = lerp(3.2, 1.2, positionStrength);
 
   const accelX = deltaX * positionStiffness - cameraVX * positionDamping;
   const accelY = deltaY * positionStiffness - cameraVY * positionDamping;
@@ -74,8 +75,22 @@ function updateCamera(dt) {
   cameraX += cameraVX * snapDt;
   cameraY += cameraVY * snapDt;
 
-  if (Math.abs(deltaX) < 2 && Math.abs(cameraVX) < 10) cameraVX = 0;
-  if (Math.abs(deltaY) < 2 && Math.abs(cameraVY) < 10) cameraVY = 0;
+  const newDeltaX = cameraTargetX - cameraX;
+  const newDeltaY = cameraTargetY - cameraY;
+  const overshootX = Math.sign(deltaX) !== Math.sign(newDeltaX) && Math.abs(newDeltaX) < 40;
+  const overshootY = Math.sign(deltaY) !== Math.sign(newDeltaY) && Math.abs(newDeltaY) < 40;
+
+  if (overshootX) {
+    cameraX = cameraTargetX;
+    cameraVX = 0;
+  }
+  if (overshootY) {
+    cameraY = cameraTargetY;
+    cameraVY = 0;
+  }
+
+  if (Math.abs(deltaX) < 4 && Math.abs(cameraVX) < 20) cameraVX = 0;
+  if (Math.abs(deltaY) < 4 && Math.abs(cameraVY) < 20) cameraVY = 0;
 
   // Zoom remains smooth without spring inertia.
   const zoomSpeed = 0.14;

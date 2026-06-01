@@ -2114,6 +2114,12 @@ tick() {
                             defeated: enemy.gameState.isDefeated || false,
                             isUltimate: true
                         });
+                        // Increment attacker's combo for ultimate hits (server-authoritative)
+                        try {
+                            this.engine && typeof this.engine.addCombo === 'function' && this.engine.addCombo(player.clientId);
+                        } catch (e) {
+                            console.error('Failed to add combo for ultimate hit', e);
+                        }
                         
                         if (enemy.gameState.isDefeated) {
                             this.broadcast({

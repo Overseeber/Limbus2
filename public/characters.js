@@ -702,10 +702,11 @@ const CHARACTERS = {
       fighter.vel.x = 0;
       fighter.vel.y = 0;
 
-      fighter.ultimateTotalDamage += damage;
-      fighter.ultimateDamageDealt += damage;
+      // Safely accumulate ultimate damage (coerce to numbers to avoid NaN)
+      fighter.ultimateTotalDamage = (Number(fighter.ultimateTotalDamage) || 0) + (Number(damage) || 0);
+      fighter.ultimateDamageDealt = (Number(fighter.ultimateDamageDealt) || 0) + (Number(damage) || 0);
 
-      console.log(`[BASIC ULTIMATE] Damage applied: ${damage}, total: ${fighter.ultimateTotalDamage}`);
+      console.log(`[BASIC ULTIMATE] Damage applied: ${Number(damage) || 0}, total: ${fighter.ultimateTotalDamage}`);
     }
   },
 CALLISTO: {

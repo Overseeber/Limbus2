@@ -779,12 +779,15 @@ function updateCombatZoom(dt) {
     // Keep the final camera display scale within the safe visible range computed from fighter hitboxes.
     // finalDisplayZoom = baseCameraZoom / combatZoom.currentZoom
     // so require combatZoom.currentZoom >= baseCameraZoom / combatZoom.maxSafeZoom.
-    const requiredMinCombatZoom = combatZoom.maxSafeZoom > 0
-      ? baseCameraZoom / combatZoom.maxSafeZoom
-      : 1.0;
-    const minAllowedCombatZoom = Math.min(1.0, Math.max(0.55, requiredMinCombatZoom));
+    const ultimateActive = (window.allFighters || []).some(f => f.ultimateActive);
+    if (!ultimateActive) {
+      const requiredMinCombatZoom = combatZoom.maxSafeZoom > 0
+        ? baseCameraZoom / combatZoom.maxSafeZoom
+        : 1.0;
+      const minAllowedCombatZoom = Math.min(1.0, Math.max(0.55, requiredMinCombatZoom));
 
-    combatZoom.currentZoom = Math.max(minAllowedCombatZoom, combatZoom.currentZoom);
+      combatZoom.currentZoom = Math.max(minAllowedCombatZoom, combatZoom.currentZoom);
+    }
 
     // Clamp to valid combat zoom range [0.55, 1.0]
     combatZoom.currentZoom = Math.max(0.55, Math.min(1.0, combatZoom.currentZoom));
@@ -1271,7 +1274,7 @@ function applyNetworkScreenShake(event) {
   try {
     if (isUltimate && typeof event.damage === 'number' && typeof event.knockback === 'number') {
       if (event.knockback > 0 && event.damage > 0) {
-        window.ultimateImpactZoom = (window.ultimateImpactZoom || 0) + (0.01 * event.damage);
+        window.ultimateImpactZoom = (window.ultimateImpactZoom || 0) + (0.05 * event.damage);
         // Cap impact zoom to a reasonable value
         window.ultimateImpactZoom = Math.min(window.ultimateImpactZoom, 2.5);
       }
@@ -1635,11 +1638,10 @@ function draw() {
     updateCamera(deltaTime / 1000);
     updateCombatZoom(deltaTime / 1000);
 
-    // Decay ultimate impact zoom over time (recover toward baseline)
-    const frameDt = deltaTime / 1000;
+    // Decay ultimate impact zoom per frame (recover toward baseline)
     if (typeof window.ultimateImpactZoom === 'undefined') window.ultimateImpactZoom = 0;
-    const recoveryRate = 0.5; // per second recovery back to baseline
-    window.ultimateImpactZoom = Math.max(0, window.ultimateImpactZoom - recoveryRate * frameDt);
+    const recoveryPerFrame = 0.08;
+    window.ultimateImpactZoom = Math.max(0, window.ultimateImpactZoom - recoveryPerFrame);
 
     const displayCameraZoomBase = combatZoom.active ? cameraZoom / combatZoom.currentZoom : cameraZoom;
     const displayCameraZoom = (ultimateActive ? (displayCameraZoomBase + (window.ultimateImpactZoom || 0)) : displayCameraZoomBase);
@@ -1648,15 +1650,15 @@ function draw() {
       clampCameraToVisibility(displayCameraZoom);
     }
 
+    beginCamera(displayCameraZoom, true);
+    drawArena();
+
     // Darken background when any ultimate is active (fade handled by ultimate renderer)
     if (typeof window.drawUltimateBackgroundDim === 'function') {
       const maxDim = (window.allFighters || []).reduce((m, f) => Math.max(m, f.ultimateBackgroundDim || 0), 0);
       window.drawUltimateBackgroundDim(maxDim);
     }
 
-    beginCamera(displayCameraZoom, true);
-    drawArena();
-    
     // Draw ultimate render behind characters (name, dialogue, effects)
     if (window.allFighters) {
       window.allFighters.forEach(fighter => {
@@ -1685,14 +1687,14 @@ function draw() {
     drawDamageNumbers();
     drawParticles();
     
+    // Draw overhead healthbars for non-player fighters
+    drawOverheadHealthbars();
+
     // Draw vignette effect on vertical edges
     drawVignette();
     
-    // Draw overhead healthbars for non-player fighters
-    drawOverheadHealthbars();
-    
     endCamera();
-    
+
     // Draw ultimate UI overlay (damage counter, etc.)
     if (typeof renderUltimateUI === 'function') {
       renderUltimateUI();
@@ -2151,45 +2153,47 @@ function updateClientInterpolation() {
 function drawVignette() {
   // Vignette width in pixels
   const vignetteWidth = 150;
-  const bgHeight = window.bgScaledHeight || height;
-  const bgTop = (height / 2) - (bgHeight / 2);
+  const bgWidth = window.bgScaledWidth || ARENA_WIDTH;
+  const bgHeight = window.bgScaledHeight || ARENA_HEIGHT;
+  const bgLeft = (ARENA_WIDTH / 2) - (bgWidth / 2);
+  const bgTop = (ARENA_HEIGHT / 2) - (bgHeight / 2);
+  const bgRight = bgLeft + bgWidth;
   const bgBottom = bgTop + bgHeight;
-  
-  // Draw left vignette
+
+  noStroke();
+
+  // Draw left vignette inside arena bounds
   for (let x = 0; x < vignetteWidth; x++) {
     const alpha = map(x, 0, vignetteWidth, 255, 0);
     fill(0, 0, 0, alpha);
-    noStroke();
-    rect(x, 0, 1, height);
+    rect(bgLeft + x, bgTop, 1, bgHeight);
   }
-  
-  // Draw right vignette
+
+  // Draw right vignette inside arena bounds
   for (let x = 0; x < vignetteWidth; x++) {
     const alpha = map(x, 0, vignetteWidth, 0, 255);
     fill(0, 0, 0, alpha);
-    noStroke();
-    rect(width - vignetteWidth + x, 0, 1, height);
+    rect(bgRight - vignetteWidth + x, bgTop, 1, bgHeight);
   }
 
   // Draw top vignette at the top edge of the battle background image
   for (let y = 0; y < vignetteWidth; y++) {
     const alpha = map(y, 0, vignetteWidth, 255, 0);
     fill(0, 0, 0, alpha);
-    noStroke();
-    rect(0, bgTop + y, width, 1);
+    rect(bgLeft, bgTop + y, bgWidth, 1);
   }
 
   // Draw bottom vignette at the bottom edge of the battle background image
   for (let y = 0; y < vignetteWidth; y++) {
     const alpha = map(y, 0, vignetteWidth, 0, 255);
     fill(0, 0, 0, alpha);
-    noStroke();
-    rect(0, bgBottom - vignetteWidth + y, width, 1);
+    rect(bgLeft, bgBottom - vignetteWidth + y, bgWidth, 1);
   }
 
+  // Extend black bars beyond the arena edges in world space
   fill(0);
-  rect(-500, 0, 500, height);
-  rect(width, 0, 500, height);
+  rect(bgLeft - 500, bgTop, 500, bgHeight);
+  rect(bgRight, bgTop, 500, bgHeight);
 }
 
 function updateBattle() {

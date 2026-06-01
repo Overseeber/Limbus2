@@ -137,7 +137,7 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
         // Teleport opponent to 100 pixels to the RIGHT of Callisto (matching old client)
         targetEnemies.forEach(e => {
           if (e) {
-            e.position.x = clampX(fighter.position.x + 100);
+            e.position.x = clampX(fighter.position.x + (fighter.facing * 100));
             e.position.y = fighter.position.y;
             e.velocity.x = 0;
             e.velocity.y = 0;
@@ -178,10 +178,10 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
         // Switch to cuf2 AND teleport enemy simultaneously
         ult.currentSprite = 'cuf2';
         ult.cameraZoom = 1.3;
-        // Position enemy at Callisto's position offset (x+88, y-180) — matching old client
+        // Position enemy at Callisto's position offset (facing-aware) — flip with Callisto
         targetEnemies.forEach(e => {
           if (e) {
-            e.position.x = clampX(fighter.position.x + 88);
+            e.position.x = clampX(fighter.position.x + (fighter.facing * 88));
             e.position.y = clampY(fighter.position.y - 180);
             e.velocity.x = 0;
             e.velocity.y = 0;
@@ -308,10 +308,10 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
         fighter.position.y = clampY(ARENA_HEIGHT - 100);
         fighter.velocity.x = 0;
         fighter.velocity.y = 0;
-        // Position enemy directly in front of Callisto
+        // Position enemy directly in front of Callisto (respect facing)
         targetEnemies.forEach(e => {
           if (e) {
-            e.position.x = clampX(fighter.position.x + 120);
+            e.position.x = clampX(fighter.position.x + (fighter.facing * 120));
             e.position.y = fighter.position.y;
             e.velocity.x = 0;
             e.velocity.y = 0;

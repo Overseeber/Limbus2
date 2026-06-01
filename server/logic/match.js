@@ -2164,7 +2164,7 @@ tick() {
             case 'VALENCINA':
                 player.ultimate.name = 'DISPOSAL';
                 player.ultimate.dialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all!";
-                player.ultimate.timer = 3.0; // Opening pose lasts 3 seconds (per spec)
+                player.ultimate.timer = 1.5; // Opening pose shortened to 1.5 seconds
                 break;
         }
         

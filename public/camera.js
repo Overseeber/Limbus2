@@ -122,6 +122,10 @@ function getCameraVisibilityBounds(displayZoom) {
 }
 
 function clampCameraToVisibility(displayZoom) {
+  // If any ultimate is active, don't clamp camera position - ultimate controls camera
+  const fighters = window.allFighters || [];
+  if (fighters.some(f => f.ultimateActive)) return;
+
   const bounds = getCameraVisibilityBounds(displayZoom);
   if (!bounds) return;
 
@@ -140,6 +144,8 @@ function clampCameraToVisibility(displayZoom) {
 
 function clampCameraZoomToVisibility(candidateZoom) {
   const fighters = window.allFighters || [];
+  // When an ultimate is active, don't clamp zoom - ultimate dictates zoom
+  if (fighters.some(f => f.ultimateActive)) return candidateZoom;
   if (fighters.length === 0) return candidateZoom;
 
   const HITBOX_W = 50;

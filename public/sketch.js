@@ -1266,6 +1266,19 @@ function applyNetworkScreenShake(event) {
   );
 
   addScreenShake(intensity, isUltimate);
+
+  // Ultimate impact zoom: increase additive zoom when ultimate deals damage with knockback
+  try {
+    if (isUltimate && typeof event.damage === 'number' && typeof event.knockback === 'number') {
+      if (event.knockback > 0 && event.damage > 0) {
+        window.ultimateImpactZoom = (window.ultimateImpactZoom || 0) + (0.01 * event.damage);
+        // Cap impact zoom to a reasonable value
+        window.ultimateImpactZoom = Math.min(window.ultimateImpactZoom, 2.5);
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
 }
 
 function handleNetworkEvent(event) {
@@ -1622,9 +1635,14 @@ function draw() {
     updateCamera(deltaTime / 1000);
     updateCombatZoom(deltaTime / 1000);
 
-    const displayCameraZoom = combatZoom.active
-      ? cameraZoom / combatZoom.currentZoom
-      : cameraZoom;
+    // Decay ultimate impact zoom over time (recover toward baseline)
+    const frameDt = deltaTime / 1000;
+    if (typeof window.ultimateImpactZoom === 'undefined') window.ultimateImpactZoom = 0;
+    const recoveryRate = 0.5; // per second recovery back to baseline
+    window.ultimateImpactZoom = Math.max(0, window.ultimateImpactZoom - recoveryRate * frameDt);
+
+    const displayCameraZoomBase = combatZoom.active ? cameraZoom / combatZoom.currentZoom : cameraZoom;
+    const displayCameraZoom = (ultimateActive ? (displayCameraZoomBase + (window.ultimateImpactZoom || 0)) : displayCameraZoomBase);
 
     if (typeof clampCameraToVisibility === 'function') {
       clampCameraToVisibility(displayCameraZoom);

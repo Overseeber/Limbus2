@@ -1228,7 +1228,7 @@ CALLISTO: {
             // Teleport opponent to 100 pixels to the right of Callisto
             targetEnemies.forEach(enemy => {
               if (enemy) {
-                const enemyPos = this.clampToArena(fighter.pos.x + 100, fighter.pos.y);
+                const enemyPos = this.clampToArena(fighter.pos.x + (fighter.facing * 100), fighter.pos.y);
                 enemy.pos.x = enemyPos.x;
                 enemy.pos.y = enemyPos.y;
                 enemy.vel.x = 0;
@@ -1279,7 +1279,7 @@ CALLISTO: {
             // Draw opponent at callisto's position (x+88, y-180)
             targetEnemies.forEach(enemy => {
               if (enemy) {
-                const enemyPos = this.clampToArena(fighter.pos.x + 88, fighter.pos.y - 180);
+                const enemyPos = this.clampToArena(fighter.pos.x + (fighter.facing * 88), fighter.pos.y - 180);
                 enemy.pos.x = enemyPos.x;
                 enemy.pos.y = enemyPos.y;
                 enemy.vel.x = 0;
@@ -1430,7 +1430,7 @@ CALLISTO: {
 
             targetEnemies.forEach(enemy => {
               if (enemy) {
-                const enemyFrontX = this.clampToArena(fighter.pos.x + 120, fighter.pos.y).x;
+                const enemyFrontX = this.clampToArena(fighter.pos.x + (fighter.facing * 120), fighter.pos.y).x;
                 enemy.pos.x = enemyFrontX;
                 enemy.pos.y = fighter.pos.y;
                 enemy.vel.x = 0;
@@ -1994,7 +1994,7 @@ CALLISTO: {
       
       fighter.ultimateActive = true;
       fighter.ultimatePhase = 0;
-      fighter.ultimateTimer = 3; // 3 seconds for centered pose (dist1)
+      fighter.ultimateTimer = 1.5; // 1.5 seconds for centered pose (dist1)
       fighter.ultimateTotalDamage = 0;
       fighter.ultimateDamageDealt = 0;
       fighter.ultimateCameraZoom = 2.5;

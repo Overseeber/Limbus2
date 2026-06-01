@@ -43,13 +43,18 @@ function applyUltimateState(fighter, state) {
  * Draw the ultimate background dim overlay
  */
 function drawUltimateBackgroundDim(dimAmount) {
-  if (!dimAmount || dimAmount <= 0) return;
-  
+  // Smoothly fade the background dim to the requested target dimAmount
+  if (typeof window.__currentUltimateDim === 'undefined') window.__currentUltimateDim = 0;
+  const target = dimAmount || 0;
+  window.__currentUltimateDim = lerp(window.__currentUltimateDim, target, 0.12);
+  const cur = window.__currentUltimateDim;
+  if (cur <= 0.005) return;
+
   // Draw semi-transparent black overlay over entire screen (camera space)
-  // This is drawn BEFORE the camera transform so it covers the whole screen
+  // Use up to ~50% opacity (128/255) scaled by dim amount
   push();
   noStroke();
-  fill(0, 0, 0, dimAmount * 200); // 0-200 alpha based on dim amount
+  fill(0, 0, 0, cur * 128);
   rect(0, 0, windowWidth, windowHeight);
   pop();
 }
@@ -59,7 +64,8 @@ function drawUltimateBackgroundDim(dimAmount) {
  * Drawn in world space so it stays behind the character
  */
 function drawUltimateName(x, y, name, phase, cameraZoom) {
-  if (!name || phase > 1) return; // Only show during initial pose
+  // Only display the ultimate name during the opening pose (phase 0)
+  if (!name || phase !== 0) return;
   
   push();
   textAlign(CENTER, CENTER);

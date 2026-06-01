@@ -190,6 +190,7 @@ const EVENT_TYPES = {
 };
 
 io.sockets.on('connection', (socket) => {
+    console.log('Client connected:', socket.id);
   
     const client = new Client(socket.id);
 //    const fighter = new ServerFighter({ class: 'JOHN', hp: null, maxHp: null, speed: null, jumpHeight: null, baseDamage: null, staggerThreshold: null, staggerLength: null, weapon: 'Sword', knockbackMultiplier: 1 }, socket.id, null);

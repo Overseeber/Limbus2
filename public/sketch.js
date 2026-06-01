@@ -1630,6 +1630,12 @@ function draw() {
       clampCameraToVisibility(displayCameraZoom);
     }
 
+    // Darken background when any ultimate is active (fade handled by ultimate renderer)
+    if (typeof window.drawUltimateBackgroundDim === 'function') {
+      const maxDim = (window.allFighters || []).reduce((m, f) => Math.max(m, f.ultimateBackgroundDim || 0), 0);
+      window.drawUltimateBackgroundDim(maxDim);
+    }
+
     beginCamera(displayCameraZoom, true);
     drawArena();
     

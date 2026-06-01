@@ -57,7 +57,9 @@ class GameplayEngine {
     if (characterKey === 'CALLISTO') {
       state.resources = { corpusIngredient: 0, maxCorpusIngredient: config.corpusIngredient.max, artworkTibiaStacks: 0, corpusSpentTotal: 0, slamCooldownActive: false, slamBuffActive: false };
     } else if (characterKey === 'VALENCINA') {
-      state.resources = { accelerationRounds: 0, maxAccelerationRounds: config.accelerationRounds.max, precognition: config.precognition.startingValue, maxPrecognition: config.precognition.max, overheat: 0, maxOverheat: config.overheat.max, shinActive: false };
+      const valencinaLogic = require('./characterLogic/valencina');
+      state.resources = {};
+      valencinaLogic.initializeResources(state, config);
     }
   }
 
@@ -89,7 +91,16 @@ class GameplayEngine {
   calculateDamage(base, attacker, defender) {
     let d = base * (attacker.baseDamage || 1);
     const cs = this.combatState[attacker.id] || {};
-    d += (cs.combo || 0) * COMBO_DAMAGE_PER_STACK;
+    
+    // VALENCINA: Use custom formula: Damage = BaseDamage + (ComboDamage × ComboCount)
+    if (attacker.characterKey === 'VALENCINA') {
+      const comboCount = cs.combo || 0;
+      const comboDamage = 3; // From oldclientgameplay reference
+      d = (attacker.baseDamage || 21) + (comboDamage * comboCount);
+    } else {
+      d += (cs.combo || 0) * COMBO_DAMAGE_PER_STACK;
+    }
+    
     if (cs.attackCounter === 3) d *= 2;
     if (cs.chargeAttack) d *= 1.4;
     // DOUBLE DAMAGE while staggered (authoritative server-side)
@@ -478,7 +489,11 @@ class GameplayEngine {
       const cost = config.abilities.installationArt.corpusCost;
       if (state.resources.corpusIngredient < cost) return { success: false, reason: 'Not enough Corpus', current: state.resources.corpusIngredient, required: cost };
     }
-    if (state.characterKey === 'VALENCINA' && name === 'timeToHunt' && state.resources.precognition <= 0) return { success: false, reason: 'No Precognition' };
+    if (state.characterKey === 'VALENCINA' && name === 'timeToHunt') {
+      // Time to Hunt no longer requires Precognition (restored from reference)
+      // Check cooldown only - handled by executeAbility
+      return { success: true };
+    }
     return { success: true };
   }
 
@@ -649,10 +664,15 @@ class GameplayEngine {
   }
 
   updateValencinaSystems(state, dt) {
-    const e = [];
-    if (state.resources.precognition > 0) state.resources.precognition = Math.max(0, state.resources.precognition - 2 * dt);
-    if (state.hp / state.maxHp < this.getCharacterConfig('VALENCINA').shin.activationThreshold && !state.resources.shinActive) { state.resources.shinActive = true; e.push({ type: 'SHIN_ACTIVATED' }); }
-    return e;
+    try {
+      const valencinaLogic = require('./characterLogic/valencina');
+      const config = this.getCharacterConfig('VALENCINA');
+      if (!config) return [];
+      return valencinaLogic.updateSystems(state, dt, config);
+    } catch (e) {
+      // Fallback if module not available
+      return [];
+    }
   }
 
   rollCrit(attacker) {

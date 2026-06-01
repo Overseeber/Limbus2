@@ -403,6 +403,13 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
 /**
  * VALENCINA ULTIMATE (Disposal)
  * All timing, positioning, damage server-authoritative.
+ * Fully restored with proper status application per phase:
+ *   Attack 1: 3 Burn Pot + 3 Tremor Pot
+ *   Attack 2: 3 Burn Pot + 3 Tremor Pot
+ *   Attack 3: 6 Burn Count + 6 Tremor Count
+ *   Attack 4: Trigger Tremor Burst
+ *   Attack 5: Trigger Tremor Burst x3, deal (Burn+Tre Pot)/2 bonus damage, Reload to 20
+ *   On use: Gain 3 Poise Count + 5 Poise Potency
  */
 function updateValencinaUltimate(fighter, ult, enemies, dt) {
   const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
@@ -419,6 +426,84 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
     if (Math.abs(e.velocity.x) < 50) return true;
     return false;
   };
+
+  /**
+   * Apply Valencina-specific ultimate status effects per phase.
+   */
+  function applyUltimateStatuses(enemy, phase) {
+    if (!enemy || enemy.isDefeated) return;
+    
+    // Ensure statuses array exists
+    if (!enemy.statuses) enemy.statuses = [];
+    
+    function addOrStack(type, count, potency) {
+      const existing = enemy.statuses.find(s => s.type === type);
+      if (existing) {
+        existing.count = (existing.count || 0) + count;
+        existing.potency = (existing.potency || 0) + (potency || 0);
+      } else {
+        enemy.statuses.push({ type, count, potency: potency || 0, timer: 0 });
+      }
+    }
+
+    switch (phase) {
+      case 1: // Attack 1: Inflict 3 Burn Potency, 3 Tremor Potency
+        addOrStack('Burn', 0, 3);
+        addOrStack('Tremor', 0, 3);
+        break;
+      case 2: // Attack 2: Inflict 3 Burn Potency, 3 Tremor Potency
+        addOrStack('Burn', 0, 3);
+        addOrStack('Tremor', 0, 3);
+        break;
+      case 3: // Attack 3: Inflict 6 Burn Count, 6 Tremor Count
+        addOrStack('Burn', 6, 0);
+        addOrStack('Tremor', 6, 0);
+        break;
+      case 4: // Attack 4: Trigger Tremor Burst
+        triggerTremorBurst(enemy);
+        break;
+      case 5: // Attack 5: Trigger Tremor Burst 3 times + bonus damage
+        for (let i = 0; i < 3; i++) {
+          triggerTremorBurst(enemy);
+        }
+        // Bonus damage: (Burn Potency + Tremor Potency) / 2
+        const burnPot = enemy.statuses.find(s => s.type === 'Burn')?.potency || 0;
+        const tremorPot = enemy.statuses.find(s => s.type === 'Tremor')?.potency || 0;
+        const bonusDamage = Math.floor((burnPot + tremorPot) / 2);
+        if (bonusDamage > 0) {
+          enemy.hp = Math.max(0, enemy.hp - bonusDamage);
+        }
+        break;
+    }
+  }
+
+  function triggerTremorBurst(enemy) {
+    if (!enemy || enemy.isDefeated) return;
+    const tremor = enemy.statuses.find(s => s.type === 'Tremor');
+    if (tremor && tremor.count > 0) {
+      tremor.count -= 1;
+      const pot = tremor.potency || 0;
+      enemy.stagger = (enemy.stagger || 0) + pot;
+      if (tremor.count <= 0) {
+        enemy.statuses = enemy.statuses.filter(s => s.type !== 'Tremor');
+      }
+    }
+  }
+
+  // On ultimate start (phase 0→1 transition), apply poise gain
+  if (ult.phase === 0 && ult.timer <= 0) {
+    // Gain 3 Poise Count, 5 Poise Potency (once per ultimate)
+    if (!ult.poiseApplied) {
+      const existingPoise = fighter.statuses.find(s => s.type === 'Poise');
+      if (existingPoise) {
+        existingPoise.count += 3;
+        existingPoise.potency += 5;
+      } else {
+        fighter.statuses.push({ type: 'Poise', count: 3, potency: 5, timer: 0 });
+      }
+      ult.poiseApplied = true;
+    }
+  }
 
   switch (ult.phase) {
     case 0:
@@ -450,12 +535,12 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
         switch (ult.attackFrame) {
           case 1:
             ult.currentSprite = 's1f1';
-            targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 1, true); });
+            targetEnemies.forEach(e => { if (e) { dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 1, true); applyUltimateStatuses(e, 1); } });
             ult.slashEvents.push({ type: 's1s1', frame: 1, offsetX: 0, offsetY: -10 });
             ult.attackTimer = 0.1; break;
           case 2:
             ult.currentSprite = 's1f2';
-            targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 1, true); });
+            targetEnemies.forEach(e => { if (e) { dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 1, true); applyUltimateStatuses(e, 1); } });
             ult.slashEvents.push({ type: 's1s2', frame: 2, offsetX: 15, offsetY: -5 });
             ult.attackTimer = 0.1; break;
           case 3:
@@ -485,7 +570,7 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
           case 1: ult.currentSprite = 's4f2'; ult.attackTimer = 0.1; break;
           case 2:
             ult.currentSprite = 's4f1';
-            targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 2, true); });
+            targetEnemies.forEach(e => { if (e) { dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 2, true); applyUltimateStatuses(e, 2); } });
             ult.slashEvents.push({ type: 's1s4', frame: 2, offsetX: 0, offsetY: -10 });
             ult.attackTimer = 0.1; break;
           case 3: ult.phase = 5; ult.timer = 0.05; break;
@@ -512,7 +597,7 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
           case 1: ult.currentSprite = 's3f1'; ult.attackTimer = 0.1; break;
           case 2:
             ult.currentSprite = 's3f2';
-            targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 3, true); });
+            targetEnemies.forEach(e => { if (e) { dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 3, true); applyUltimateStatuses(e, 3); } });
             ult.slashEvents.push({ type: 's1s4', frame: 2, offsetX: 0, offsetY: -10 });
             ult.attackTimer = 0.1; break;
           case 3: ult.currentSprite = 's3f3'; ult.attackTimer = 1.0; break;
@@ -562,7 +647,7 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
             ult.currentSprite = 'de1';
             ult.attackTimer = 0.1; break;
           case 3:
-            targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 4, false); });
+            targetEnemies.forEach(e => { if (e) { dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 4, false); applyUltimateStatuses(e, 4); } });
             ult.slashEvents.push({ type: 's1s3', frame: 3, offsetX: 15, offsetY: -5 });
             ult.cameraZoom = 3.5; ult.backgroundDim = 0.8;
             ult.attackTimer = 1.0;
@@ -590,7 +675,7 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
             else ult.slashEvents.push({ type: 'js1', frame: hitIndex + 1, offsetX: 0, offsetY: -10 });
             ult.attackTimer = 0.1;
           } else {
-            targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 5, false); });
+            targetEnemies.forEach(e => { if (e) { dealUltDamage(fighter, ult, e, fighter.baseDamage, false, 5, false); applyUltimateStatuses(e, 5); } });
             ult.attackTimer = 0.1;
           }
           ult.attackFrame++;
@@ -606,6 +691,12 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
               e.hitTimer = 0.5;
             }
           });
+          
+          // Reload Acceleration Round to 20
+          if (fighter.resources) {
+            fighter.resources.accelerationRounds = 20;
+          }
+          
           ult.cameraZoom = 1.0; ult.backgroundDim = 0;
           ult.phase = 11; ult.timer = 3.0;
         }

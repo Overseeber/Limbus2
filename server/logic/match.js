@@ -1428,6 +1428,43 @@ tick() {
 
             if (!result.hit) return;
 
+            // VALENCINA: Apply per-attack effects on hit
+            if (attacker.characterKey === 'VALENCINA') {
+                const valencinaLogic = require('./characterLogic/valencina');
+                
+                if (attacker.attackSequence === 1) {
+                    // Attack 1: Gain 3 Poise Count
+                    valencinaLogic.applyAttack1Effects(attacker.gameState);
+                } else if (attacker.attackSequence === 2) {
+                    // Attack 2: Gain 1 Poise Potency
+                    valencinaLogic.applyAttack2Effects(attacker.gameState);
+                } else if (attacker.attackSequence === 3) {
+                    // Attack 3: Consume 1 Acceleration Round, Trigger Tremor Burst, Bonus Damage
+                    const attack3Result = valencinaLogic.applyAttack3Effects(attacker.gameState, defender.gameState);
+                    
+                    // Broadcast extra effects
+                    if (attack3Result.consumedAccelerationRound) {
+                        this.broadcast({
+                            type: 'ACCELERATION_ROUND_CONSUMED',
+                            fighterId: attacker.clientId,
+                            remaining: attacker.gameState.resources.accelerationRounds
+                        });
+                    }
+                    if (attack3Result.bonusDamage > 0) {
+                        this.broadcast({
+                            type: 'BONUS_DAMAGE',
+                            fighterId: attacker.clientId,
+                            targetId: defender.clientId,
+                            damage: attack3Result.bonusDamage,
+                            source: 'acceleration_round_burst'
+                        });
+                    }
+                }
+                
+                // Clear accelerationRoundActive after attack resolves
+                attacker.gameState.resources.accelerationRoundActive = false;
+            }
+
             let hitstopSeconds = attackDef.hitstop || 0;
             if (!hitstopSeconds) {
                 hitstopSeconds = attackType === 'light' ? 0.04 : attackType === 'medium' ? 0.06 : 0.10;

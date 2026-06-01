@@ -4,6 +4,7 @@
  * NO gameplay logic, NO rendering code, NO p5.js dependencies.
  * 
  * Server and client both load this file to access shared character data.
+ * Fully restored from oldclientgameplay reference.
  */
 
 const VALENCINA_CONFIG = {
@@ -18,21 +19,22 @@ const VALENCINA_CONFIG = {
   speed: 9,
   attackInterval: 1.0,
   baseDamage: 21,
-  knockbackMultiplier: 1.0,
+  comboDamage: 3,          // Per-combo bonus damage (restored from reference)
+  knockbackMultiplier: 1.0, // 100% knockback
   staggerThreshold: 1300,
   staggerLength: 5,
   staggerRecoveryDelay: 2.0,    // Delay before stagger recovery begins (seconds)
   staggerRecoveryRate: 12,      // Stagger decay rate per second during recovery
   
   // MOVEMENT PHYSICS
-  friction: 0.85,         // Friction multiplier (0-1) - applied each tick
-  jumpHeight: 1200,       // Jump initial velocity (pixels/s) - OLD CLIENT: jumpStrength = -20 at 60fps
-  gravity: 2160,          // Gravity acceleration (pixels/s²) - OLD CLIENT: 0.6 pixels/frame²
-  dashSpeed: 60,          // Dash movement speed (old client per-frame units)
-  dashDuration: 0.2,      // Dash duration in seconds
-  dashCooldown: 3.0,      // Dash recharge cooldown between dash charges
-  dashCharges: 3,         // Maximum dash charges
-  airControl: 0.6,        // Air movement responsiveness (0-1)
+  friction: 0.85,
+  jumpHeight: 1200,
+  gravity: 2160,
+  dashSpeed: 60,
+  dashDuration: 0.2,
+  dashCooldown: 3.0,
+  dashCharges: 3,
+  airControl: 0.6,
   
   // VISUAL CONFIG (client-only)
   color: '#ff6b9d',
@@ -40,60 +42,72 @@ const VALENCINA_CONFIG = {
   spriteType: 'atlas',
   defaultSprite: 'idle',
   
-  // ATTACK SEQUENCES - Frame-based timing for responsive combat
-  // Ranges adjusted for server rect-based hit detection:
-  // Reference uses center-to-center distance (dist), server uses rect overlap.
-  // Rect overlap requires ~25px more range to match same center distance.
-  // Reference Valencina: light=231, heavy=294 (after character 2x bonus).
-  // Base ranges (before Valencina 2x bonus): ~115-147.
-  // Rect-adjusted: need ~206 base to match 231 center distance.
-  // Since Valencina gets 100% range bonus via charge mechanic, base ranges
-  // are doubled for Valencina. Other characters use these as-is.
+  // ATTACK SEQUENCES
   attacks: {
     light: {
-      startup: 0.08,        // Time before hitbox activates
-      active: 0.12,         // Hitbox active duration
-      recovery: 0.32,       // Recovery time after attack
-      range: 200,           // Rect-adjusted range (~231 center distance with player box)
-      damage: 1.0,          // Damage multiplier
-      knockback: 30,        // Knockback amount
-      staggerDamage: 50,    // Stagger damage
+      startup: 0.08,
+      active: 0.12,
+      recovery: 0.32,
+      range: 200,
+      damage: 1.0,
+      knockback: 30,
+      staggerDamage: 50,
       combo: 1,
       startupBackward: 110,
-      attackForward: 360
+      attackForward: 360,
+      // Per-attack effects (restored from reference)
+      onAttackEffects: {
+        poiseCountGain: 3    // Attack 1: Gain 3 Poise Count
+      }
     },
     medium: {
       startup: 0.12,
       active: 0.16,
       recovery: 0.40,
-      range: 240,           // Rect-adjusted (~269 center distance)
+      range: 240,
       damage: 1.2,
       knockback: 50,
       staggerDamage: 75,
       combo: 2,
       startupBackward: 130,
-      attackForward: 400
+      attackForward: 400,
+      onAttackEffects: {
+        poisePotencyGain: 1  // Attack 2: Gain 1 Poise Potency
+      }
     },
     heavy: {
       startup: 0.20,
       active: 0.20,
       recovery: 0.50,
-      range: 300,           // Rect-adjusted (~325 center distance)
+      range: 300,
       damage: 1.6,
       knockback: 80,
       staggerDamage: 120,
       combo: 3,
       startupBackward: 150,
-      attackForward: 460
+      attackForward: 460,
+      onAttackEffects: {
+        consumeAccelerationRound: true  // Attack 3: Spend 1 Acceleration Round
+      }
     }
+  },
+  
+  // ON HIT EFFECTS (restored from reference)
+  onHitEffects: {
+    burnPotency: 2,
+    burnCount: 2,
+    tremorPotency: 2,
+    tremorCount: 2
   },
   
   abilities: {
     timeToHunt: {
-      cooldown: 8,
+      cooldown: 30,           // 30 seconds (restored from reference)
       range: 150,
       baseDamage: 1.2,
       knockback: 100,
+      // Game Target status: speed=1, no jump, no dash, 10 seconds
+      gameTargetDuration: 10,
       statusEffects: [
         { type: 'Burn', count: 4, potency: 4 },
         { type: 'Tremor', count: 4, potency: 4 }
@@ -110,55 +124,65 @@ const VALENCINA_CONFIG = {
     }
   },
   
-  // RESOURCE SYSTEMS
+  // RESOURCE SYSTEMS (restored from reference)
   accelerationRounds: {
     max: 10,
+    startingValue: 10,       // Start battle with 10
     gainPerReload: 10,
-    consumePerAbility: 1
+    consumePerAbility: 1,    // Attack 3 consumes 1
+    // Effects when consumed
+    rangeBonus: 1.0,         // +100% range
+    damageBonus: 0.3,        // +30% damage
+    poisePotencyGain: 4,     // Gain 4 Poise Potency
+    poiseCountGain: 4,       // Gain 4 Poise Count
+    // Bonus damage formula: (Burn Potency + Tremor Potency) / 2
   },
   
   precognition: {
     max: 30,
-    startingValue: 30,
-    gainPerHit: 1,
-    gainPerEvade: 1,
-    gainPerBlock: 1,
-    consumePerAbility: 1
+    startingValue: 30,       // Start battle with 30
+    // Passive evade: 3% × Precognition (max 90%)
+    // Lose 1 on passive evade
+    // When 0: enter Overheat
   },
   
   overheat: {
     max: 30,
-    losePerHit: 1,
-    losePerBlock: 1,
-    burnDamageScaling: 0.5 // Overheat increases burn damage
+    startingValue: 30,       // Enter with 30
+    damageReduction: 0.2,    // -20% damage dealt
+    losePerHit: 1,           // Lose 1 on hit or being attacked
+    losePerSecond: 0.2,      // Lose 1 every 5 seconds
+  },
+  
+  // ACCELERATING FUTURE (restored from reference)
+  acceleratingFuture: {
+    speedPerStack: 0.5,      // +0.5 speed per stack
+    maxSpeedBonus: 5,        // Maximum +5 speed
+    intervalReductionPerStack: 2.5,  // -2.5% per stack
+    maxIntervalReduction: 80  // Maximum -80%
   },
   
   shin: {
     activationThreshold: 0.5, // Activate at <50% HP
-    damageBonus: 0.2, // +20% damage
-    speedBonus: 1.5, // 1.5x speed
-    burnBonusPotency: 2 // +2 potency per burn
+    protectionGain: 1,        // Gain 1 Protection (10% damage reduction)
+    damagePerPoisePotency: 0.03, // +3% damage per Poise Potency
+    maxDamageBonus: 0.15,     // Maximum +15%
   },
   
-  // STATUS EFFECT MODIFIERS
-  statusModifiers: {
-    Burn: {
-      potencyBonus: 1 // +1 potency per Overheat stack
-    }
-  },
-  
-  // ULTIMATE ABILITY CONFIG
+  // ULTIMATE ABILITY CONFIG (restored from reference)
   ultimate: {
     name: 'Disposal',
-    cooldown: 0, // Filled by server
+    cooldown: 0,
     range: 250,
     baseDamage: 2.0,
-    statusEffects: [
-      { type: 'Burn', count: 8, potency: 8 },
-      { type: 'Tremor', count: 8, potency: 8 },
-      { type: 'Fragile', count: 1, potency: 1 }
-    ],
-    duration: 2.5,
+    // On ultimate use: gain 3 Poise Count, 5 Poise Potency
+    poiseCountGain: 3,
+    poisePotencyGain: 5,
+    // Attack 1-2: 3 Burn/Tremor Potency each
+    // Attack 3: 6 Burn/Tremor Count  
+    // Attack 4: Trigger Tremor Burst
+    // Attack 5: Trigger Tremor Burst, deal (Burn+Tre Potency)/2 × 3, Reload to 20
+    accelerationRoundReload: 20,
     phases: 5
   }
 };

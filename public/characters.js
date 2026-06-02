@@ -177,6 +177,34 @@ const SPRITES = {
 };
 
 // ==========================
+// 🔥 STATUS EFFECT SPRITE DATABASE
+// ==========================
+const STATUS_SPRITES = {
+  Burn: { atlas:"status", x:0, y:0, w:1, h:1 },
+  Tremor: { atlas:"status", x:1, y:0, w:1, h:1 },
+  Bleed: { atlas:"status", x:2, y:0, w:1, h:1 },
+  Rupture: { atlas:"status", x:3, y:0, w:1, h:1 },
+  Sinking: { atlas:"status", x:4, y:0, w:1, h:1 },
+  Poise: { atlas:"status", x:5, y:0, w:1, h:1 },
+  Charge: { atlas:"status", x:6, y:0, w:1, h:1 },
+  Precognition: { atlas:"status", x:7, y:0, w:1, h:1 },
+  Overheat: { atlas:"status", x:8, y:0, w:1, h:1 },
+  "Accelerating Future": { atlas:"status", x:9, y:0, w:1, h:1 },
+  Shin: { atlas:"status", x:10, y:0, w:1, h:1 },
+  "Time To Hunt": { atlas:"status", x:11, y:0, w:1, h:1 },
+  Haste: { atlas:"status", x:0, y:1, w:1, h:1 },
+  Bind: { atlas:"status", x:1, y:1, w:1, h:1 },
+  Protection: { atlas:"status", x:2, y:1, w:1, h:1 },
+  Fragile: { atlas:"status", x:3, y:1, w:1, h:1 },
+  "Damage Up": { atlas:"status", x:4, y:1, w:1, h:1 },
+  "Damage Down": { atlas:"status", x:5, y:1, w:1, h:1 },
+  "Corpus Ingredient": { atlas:"status", x:7, y:1, w:1, h:1 },
+  "Artwork Tibia": { atlas:"status", x:8, y:1, w:1, h:1 },
+  "Ingredient Shredding Wound": { atlas:"status", x:9, y:1, w:1, h:1 }
+};
+const STATUS_CELL = 64;
+
+// ==========================
 // 🔥 PRE-SCALED SPRITE LOADING
 // ==========================
 function loadSpriteAtlases() {
@@ -239,9 +267,13 @@ function loadSpriteAtlases() {
   // Start pre-scaling but don't block game initialization
   preScaleAtlases();
 
+  // ===== Status Effect Atlas =====
+  atlases.status = loadImage("data/UI/status.png");
+
   // Pre-cache sprite data after atlases start loading
   setTimeout(() => {
     precacheSpriteData();
+    precacheStatusSpriteData();
   }, 100);
 }
 
@@ -251,6 +283,9 @@ function loadSpriteAtlases() {
 
 // Cache for sprite calculations
 const SPRITE_CACHE = new Map();
+
+// Cache for status sprite calculations
+const STATUS_SPRITE_CACHE = new Map();
 
 // Pre-resized sprite cache for common scales
 const RESIZED_SPRITE_CACHE = new Map();
@@ -269,6 +304,21 @@ function precacheSpriteData() {
     SPRITE_CACHE.set(name, {
       sprite, sx, sy, sw, sh, offsetX, offsetY,
       img: null // Will be set when atlases load
+    });
+  }
+}
+
+// Pre-calculate status sprite data
+function precacheStatusSpriteData() {
+  for (const [name, sprite] of Object.entries(STATUS_SPRITES)) {
+    const sx = sprite.x * STATUS_CELL;
+    const sy = sprite.y * STATUS_CELL;
+    const sw = sprite.w * STATUS_CELL;
+    const sh = sprite.h * STATUS_CELL;
+    
+    STATUS_SPRITE_CACHE.set(name, {
+      sprite, sx, sy, sw, sh,
+      img: null
     });
   }
 }
@@ -397,6 +447,99 @@ function drawSpriteScaled(name, x, y, spriteScale = 1) {
   pop();
   
   return { width: cached.sw * spriteScale, height: cached.sh * spriteScale };
+}
+
+// ==========================
+// 🖼️ STATUS ICON DRAWING
+// ==========================
+
+/**
+ * Draw a status icon from the status atlas.
+ * Status atlas uses 64x64 cells (STATUS_CELL).
+ * Icons are scaled to match the approximate visual size of the
+ * original placeholder shapes while preserving aspect ratio.
+ *
+ * @param {string} statusType - Status type name (matches STATUS_SPRITES keys)
+ * @param {number} x - Center X position to draw at
+ * @param {number} y - Center Y position to draw at
+ * @param {number} targetSize - Desired output size in pixels (default 14)
+ */
+function drawStatusIcon(statusType, x, y, targetSize = 14) {
+  const cached = STATUS_SPRITE_CACHE.get(statusType);
+  if (!cached) {
+    drawFallbackStatusIcon(statusType, x, y, targetSize);
+    return;
+  }
+  
+  let img = cached.img || atlases[cached.sprite.atlas];
+  if (!img || img.width <= 0 || img.height <= 0) {
+    drawFallbackStatusIcon(statusType, x, y, targetSize);
+    return;
+  }
+  
+  cached.img = img;
+  
+  push();
+  noStroke();
+  imageMode(CORNER);
+  image(
+    img,
+    x - targetSize / 2,
+    y - targetSize / 2,
+    targetSize, targetSize,
+    cached.sx, cached.sy,
+    cached.sw, cached.sh
+  );
+  imageMode(CENTER);
+  pop();
+}
+
+/**
+ * Fallback: draw a simple colored circle when atlas is unavailable.
+ * @param {string} statusType - Status type name for color lookup
+ * @param {number} x - Center X position
+ * @param {number} y - Center Y position
+ * @param {number} targetSize - Output size in pixels
+ */
+function drawFallbackStatusIcon(statusType, x, y, targetSize) {
+  push();
+  const color = statusColorLookup(statusType);
+  fill(color);
+  noStroke();
+  ellipse(x, y, targetSize);
+  pop();
+}
+
+/**
+ * Status color lookup for fallback rendering.
+ * @param {string} type - Status type name
+ * @returns {string} Hex color string
+ */
+function statusColorLookup(type) {
+  switch (type) {
+    case 'Burn': return '#ff8f1a';
+    case 'Bleed': return '#d94d4d';
+    case 'Tremor': return '#9f8fff';
+    case 'Rupture': return '#ff4dc3';
+    case 'Sinking': return '#4d9fff';
+    case 'Charge': return '#ffee4d';
+    case 'Poise': return '#4dff8d';
+    case 'Haste': return '#4dff8d';
+    case 'Bind': return '#8a8a8a';
+    case 'Protection': return '#4d9fff';
+    case 'Fragile': return '#ff4dc3';
+    case 'Damage Up': return '#ff8f1a';
+    case 'Damage Down': return '#8a8a8a';
+    case 'Precognition': return '#9f8fff';
+    case 'Overheat': return '#ff4d4d';
+    case 'Accelerating Future': return '#ffee4d';
+    case 'Shin': return '#ff4dc3';
+    case 'Time To Hunt': return '#ff4d4d';
+    case 'Corpus Ingredient': return '#8a8a8a';
+    case 'Artwork Tibia': return '#8a8a8a';
+    case 'Ingredient Shredding Wound': return '#d94d4d';
+    default: return '#999';
+  }
 }
 
 // Fighter management system

@@ -2737,8 +2737,8 @@ addCombo(attacker) {
         textAlign(LEFT, CENTER);
         text(status.potency, x - 20, y);
         
-        // Draw placeholder shape in the middle
-        drawStatusPlaceholder(status.type, x, y);
+        // Draw status icon from atlas (scaled to match placeholder footprint)
+        drawStatusIcon(status.type, x, y, 14);
         
         // Draw status count on right
         fill(255);
@@ -2750,73 +2750,6 @@ addCombo(attacker) {
     }
   }
 
-  /**
-   * Draws a placeholder shape for status effects
-   * @param {string} statusType - Type of status effect
-   * @param {number} x - Center X position
-   * @param {number} y - Center Y position
-   */
-  drawStatusPlaceholder(statusType, x, y) {
-    push();
-    fill(255, 255, 255, 200);
-    stroke(0, 0, 0, 150);
-    strokeWeight(1);
-    
-    const shapeSize = 8;
-    
-    switch (statusType) {
-      case 'Burn':
-        // Flame shape (triangle)
-        triangle(x, y - shapeSize/2, x - shapeSize/2, y + shapeSize/2, x + shapeSize/2, y + shapeSize/2);
-        break;
-      case 'Bleed':
-        // Droplet shape (circle)
-        ellipse(x, y, shapeSize);
-        break;
-      case 'Tremor':
-        // Star shape (diamond)
-        push();
-        translate(x, y);
-        rotate(PI / 4);
-        rect(-shapeSize/2, -shapeSize/2, shapeSize, shapeSize, 1);
-        pop();
-        break;
-      case 'Rupture':
-        // Burst shape (hexagon approximation)
-        beginShape();
-        for (let i = 0; i < 6; i++) {
-          const angle = (PI * 2 / 6) * i;
-          const px = x + cos(angle) * shapeSize/2;
-          const py = y + sin(angle) * shapeSize/2;
-          vertex(px, py);
-        }
-        endShape(CLOSE);
-        break;
-      case 'Sinking':
-        // Wave shape (arc)
-        arc(x, y, shapeSize, shapeSize, 0, PI);
-        break;
-      case 'Charge':
-        // Lightning shape (zigzag)
-        beginShape();
-        vertex(x - shapeSize/2, y);
-        vertex(x - shapeSize/4, y - shapeSize/3);
-        vertex(x, y + shapeSize/3);
-        vertex(x + shapeSize/4, y - shapeSize/3);
-        vertex(x + shapeSize/2, y);
-        endShape();
-        break;
-      case 'Poise':
-        // Shield shape (square with rounded corners)
-        rect(x - shapeSize/2, y - shapeSize/2, shapeSize, shapeSize, 2);
-        break;
-      default:
-        // Default circle
-        ellipse(x, y, shapeSize);
-    }
-    
-    pop();
-  }
 
   onGround() {
     return this.pos.y >= this.spawnY - 0.01;

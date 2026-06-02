@@ -523,8 +523,8 @@ function drawStatusRows(fighter, x, y) {
     textAlign(LEFT, CENTER);
     text(status.potency, px, py + 9);
     
-    // Draw placeholder shape in the middle
-    drawStatusPlaceholder(status.type, px + 13, py + 9);
+    // Draw status icon from atlas (scaled to match placeholder footprint)
+    drawStatusIcon(status.type, px + 13, py + 9, 14);
     
     // Draw status count on the right
     fill(255);
@@ -534,86 +534,6 @@ function drawStatusRows(fighter, x, y) {
   }
 }
 
-/**
- * Draws a placeholder shape for status effects
- * @param {string} statusType - Type of status effect
- * @param {number} x - Center X position
- * @param {number} y - Center Y position
- */
-function drawStatusPlaceholder(statusType, x, y) {
-  push();
-  fill(255, 255, 255, 200);
-  stroke(0, 0, 0, 150);
-  strokeWeight(1);
-  
-  const shapeSize = 8;
-  
-  switch (statusType) {
-    case 'Burn':
-      // Flame shape (triangle)
-      triangle(x, y - shapeSize/2, x - shapeSize/2, y + shapeSize/2, x + shapeSize/2, y + shapeSize/2);
-      break;
-    case 'Bleed':
-      // Droplet shape (circle)
-      ellipse(x, y, shapeSize);
-      break;
-    case 'Tremor':
-      // Star shape (diamond)
-      push();
-      translate(x, y);
-      rotate(PI / 4);
-      rect(-shapeSize/2, -shapeSize/2, shapeSize, shapeSize, 1);
-      pop();
-      break;
-    case 'Rupture':
-      // Burst shape (hexagon approximation)
-      beginShape();
-      for (let i = 0; i < 6; i++) {
-        const angle = (PI * 2 / 6) * i;
-        const px = x + cos(angle) * shapeSize/2;
-        const py = y + sin(angle) * shapeSize/2;
-        vertex(px, py);
-      }
-      endShape(CLOSE);
-      break;
-    case 'Sinking':
-      // Wave shape (arc)
-      arc(x, y, shapeSize, shapeSize, 0, PI);
-      break;
-    case 'Charge':
-      // Lightning shape (zigzag)
-      beginShape();
-      vertex(x - shapeSize/2, y);
-      vertex(x - shapeSize/4, y - shapeSize/3);
-      vertex(x, y + shapeSize/3);
-      vertex(x + shapeSize/4, y - shapeSize/3);
-      vertex(x + shapeSize/2, y);
-      endShape();
-      break;
-    case 'Poise':
-      // Shield shape (square with rounded corners)
-      rect(x - shapeSize/2, y - shapeSize/2, shapeSize, shapeSize, 2);
-      break;
-    default:
-      // Default circle
-      ellipse(x, y, shapeSize);
-  }
-  
-  pop();
-}
-
-function statusColor(type) {
-  switch (type) {
-    case 'Burn': return '#ff8f1a';
-    case 'Bleed': return '#d94d4d';
-    case 'Tremor': return '#9f8fff';
-    case 'Rupture': return '#ff4dc3';
-    case 'Sinking': return '#4d9fff';
-    case 'Charge': return '#ffee4d';
-    case 'Poise': return '#4dff8d';
-    default: return '#999';
-  }
-}
 
 function drawPauseMenuButton() {
   const buttonSize = 40;

@@ -2841,7 +2841,7 @@ CALLISTO: {
     }
 };
 
-let currentCharacter = 'JOHN';
+let currentCharacter = 'VALENCINA';
 
 function switchCharacter(characterKey) {
   if (CHARACTERS[characterKey]) {
@@ -2906,7 +2906,7 @@ function removeFighter(fighterId) {
 }
 
 function getAvailableFighters() {
-  return Object.keys(CHARACTERS);
+  return Object.keys(CHARACTERS).filter(key => key !== 'JOHN');
 }
 
 // Add new status effects to statusColor function

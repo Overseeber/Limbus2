@@ -725,7 +725,20 @@ function dealUltDamage(fighter, ult, enemy, damage, isFinal, phase, applyKnockba
   let knockbackAmount = 0;
   if (applyKnockback) knockbackAmount = isFinal ? 300 : 100;
 
-  const actualDamage = Math.floor(damage);
+  // Apply combo-based damage for Valencina: Damage = BaseDamage + (3 × ComboCount)
+  let actualDamage = damage;
+  if (fighter.characterKey === 'VALENCINA') {
+    const comboCount = fighter.combo || 0;
+    actualDamage = Math.floor((fighter.baseDamage || 21) + (3 * comboCount));
+  } else if (fighter.characterKey === 'CALLISTO') {
+    // Apply Artwork: Tibia bonus if active
+    const artworkBonus = fighter.resources?.artworkTibiaStacks || 0;
+    if (artworkBonus > 0) {
+      actualDamage = Math.floor(damage * (1 + 0.1 * artworkBonus));
+    }
+  }
+
+  actualDamage = Math.floor(actualDamage);
   enemy.hp = Math.max(0, enemy.hp - actualDamage);
 
   if (knockbackAmount > 0 && !isFinal) {

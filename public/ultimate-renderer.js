@@ -113,17 +113,17 @@ function drawUltimateDamageCounter(totalDamage) {
   fill(0, 0, 0, 150);
   noStroke();
   rectMode(CORNER);
-  rect(windowWidth - 200, windowHeight - 60, 190, 50, 8);
+  rect(width - 200, height - 60, 190, 50, 8);
   
   // Label
   fill(200, 200, 200);
   textSize(14);
-  text("ULTIMATE DAMAGE", windowWidth - 15, windowHeight - 40);
+  text("ULTIMATE DAMAGE", width - 15, height - 40);
   
   // Damage number
   fill(255, 215, 0);
   textSize(22);
-  text(Math.floor(totalDamage).toString(), windowWidth - 15, windowHeight - 10);
+  text(Math.floor(totalDamage).toString(), width - 15, height - 10);
   
   pop();
 }

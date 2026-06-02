@@ -131,8 +131,9 @@ let myRoomId = null;
 let localSlotSelections = [];
 let roomCharacterSelectSlot = -1;
 let availableCharacterKeys = () => {
-  const registry = (typeof CHARACTERS !== 'undefined') ? CHARACTERS : (window.CHARACTERS || {});
-  return Object.keys(registry || {});
+   const registry = (typeof CHARACTERS !== 'undefined') ? CHARACTERS : (window.CHARACTERS || {});
+   const keys = Object.keys(registry || {});
+   return keys.filter(key => key !== 'JOHN');
 };
 // Current previewed character for the new selection flow
 let previewCharacterKey = null;
@@ -1025,7 +1026,7 @@ function initRoomBattle(slots) {
 
   for (let i = 0; i < activePlayers.length; i++) {
     const slot = activePlayers[i];
-    const characterKey = slot.character || 'JOHN';
+    const characterKey = slot.character || 'VALENCINA';
     const isLocalPlayer = slot.clientId === mySocketId;
     
     const fighter = new Fighter(false, `P${i + 1}`, characterKey, true);

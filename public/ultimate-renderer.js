@@ -63,24 +63,22 @@ function drawUltimateBackgroundDim(dimAmount) {
 }
 
 /**
- * Draw ultimate name text centered in the current camera viewport.
- * Rendered before fighters so it sits behind them, but after the darkened background.
+ * Draw ultimate name text behind the character at their position.
+ * Rendered before fighters so it sits behind them, only during opening pose (Phase 0).
  */
 function drawUltimateName(x, y, name, phase, cameraZoom) {
   if (!name || phase !== 0) return;
 
-  const camX = typeof window.cameraX !== 'undefined' ? window.cameraX : ARENA_WIDTH / 2;
-  const camY = typeof window.cameraY !== 'undefined' ? window.cameraY : ARENA_HEIGHT / 2;
   const size = typeof cameraZoom === 'number' ? Math.max(140, 180 / cameraZoom) : 180;
   const strokeW = typeof cameraZoom === 'number' ? Math.max(4, 10 / cameraZoom) : 10;
 
   push();
   textAlign(CENTER, CENTER);
   textSize(size);
-  fill(186, 186, 186, 128);
-  stroke(0, 0, 0, 180);
+  fill(255, 255, 255, 220);
+  stroke(0, 0, 0, 255);
   strokeWeight(strokeW);
-  text(name.toUpperCase(), camX, camY);
+  text(name.toUpperCase(), x, y);
   pop();
 }
 

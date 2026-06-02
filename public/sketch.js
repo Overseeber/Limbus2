@@ -1249,7 +1249,7 @@ function applyNetworkScreenShake(event) {
   // Ultimate impact zoom: increase additive zoom when ultimate deals damage with knockback
   if (isUltimate && typeof event.damage === 'number' && typeof event.knockback === 'number') {
     if (event.knockback > 0 && event.damage > 0) {
-      ultimateImpactZoom = Math.min(2.5, ultimateImpactZoom + (0.05 * event.damage));
+      ultimateImpactZoom = Math.min(2.5, ultimateImpactZoom + (0.08 * event.damage));
     }
   }
 }
@@ -2725,51 +2725,6 @@ if (
       controlledFighter.requestGuard(enemy);
     }
   }
-}
-
-function drawUltimateName(fighter) {
-  if (!fighter || !fighter.ultimateName) return;
-  
-  // Only show during starting pose (Phase 0)
-  if (fighter.ultimatePhase !== 0) return;
-  
-  push();
-  resetMatrix(); // Reset camera transforms for UI
-  
-  // Set text properties for full screen display
-  textAlign(CENTER, CENTER);
-  textSize(120); // Much larger text to take up whole screen
-  fill(255, 255, 255, 220); // More opaque white
-  stroke(0, 0, 0, 255); // Solid black stroke
-  strokeWeight(8); // Thicker stroke for visibility
-  
-  // Draw ultimate name centered on screen
-  const nameX = width / 2;
-  const nameY = height / 2;
-  
-  text(fighter.ultimateName.toUpperCase(), nameX, nameY);
-  pop();
-}
-
-function drawUltimateDamageCounter(fighter) {
-  if (!fighter) return;
-  
-  push();
-  resetMatrix(); // Reset camera transforms for UI
-  
-  // Set text properties
-  textAlign(RIGHT, BOTTOM);
-  textSize(24);
-  fill(255, 255, 255, 220); // Semi-transparent white
-  stroke(0, 0, 0, 200);
-  strokeWeight(2);
-  
-  // Draw damage counter in bottom right corner
-  const counterX = width - 20;
-  const counterY = height - 20;
-  
-  text(`DAMAGE: ${Math.floor(fighter.ultimateTotalDamage)}`, counterX, counterY);
-  pop();
 }
 
 function mouseReleased() {

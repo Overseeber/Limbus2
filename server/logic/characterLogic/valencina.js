@@ -435,10 +435,10 @@ function applyShinDamageBonus(state, damage) {
 function updateSystems(state, dt, config) {
   const events = [];
 
-  // 1. Update Precognition → Overheat transition
+  // 1. Update Precognition → Overheat transition (precognition only enters overheat, never regenerates)
   events.push(...updatePrecognition(state, config));
 
-  // 2. Update Overheat decay
+  // 2. Update Overheat decay (overheat exiting restores precognition)
   events.push(...updateOverheat(state, dt, config));
 
   // 3. Apply Accelerating Future effects
@@ -447,21 +447,7 @@ function updateSystems(state, dt, config) {
   // 4. Check Shin activation
   checkShinActivation(state, config);
 
-  // 5. Update Precognition display status count (synced from resources)
-  syncPrecognitionStatus(state, config);
-
   return events;
-}
-
-/**
- * Ensure the Precognition status exists with the right count.
- */
-function syncPrecognitionStatus(state, config) {
-  // Precognition is already managed as a status via initializeResources
-  const precog = getStatus(state, 'Precognition');
-  if (!precog) {
-    ensureStatus(state, 'Precognition', config.precognition.startingValue || 30, 0);
-  }
 }
 
 //====================================================================

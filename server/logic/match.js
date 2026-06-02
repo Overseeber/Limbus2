@@ -492,8 +492,9 @@ tick() {
         }
 
         // DASH INPUT - edge triggered
+        // Check both state conditions AND canDash flag (Game Target sets canDash=false)
         const dashEdge = input.dash && !prevInput.dash;
-        const canDash = state.state !== 'hit' && state.state !== 'slam' &&
+        const canDash = (state.canDash !== false) && state.state !== 'hit' && state.state !== 'slam' &&
                        (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
         if (dashEdge && state.dashCharges > 0 && !state.isAttacking && state.onGround && canDash) {
             const dashDir = input.right ? 1 : (input.left ? -1 : state.facing);
@@ -1463,6 +1464,33 @@ tick() {
             );
 
             if (!result.hit) return;
+
+            // VALENCINA: Precognition evade - triggers full evade like pressing E key
+            if (result.evaded) {
+                // Perform the evade action on the defender (same as startEvade)
+                // Auto-faces toward closest enemy, backsteps, sets evade state
+                this.faceClosestEnemy(defender);
+                const evadeDir = -defender.gameState.facing;
+                defender.gameState.position.x += evadeDir * EVADE_DISTANCE * 0.66;
+                defender.gameState.position.y += EVADE_DISTANCE * 0.2 * 0.3;
+                defender.gameState.position.x = Math.max(60, Math.min(1340, defender.gameState.position.x));
+                defender.gameState.position.y = Math.max(100, Math.min(600, defender.gameState.position.y));
+                const remainingDistance = EVADE_DISTANCE * 0.34;
+                const evadeVelocity = remainingDistance / 0.15;
+                defender.gameState.velocity.x = evadeDir * evadeVelocity;
+                defender.gameState.isEvading = true;
+                defender.gameState.evadeTimer = EVADE_MAX_DURATION;
+                defender.gameState.state = 'evade';
+                
+                this.broadcast({
+                    type: 'EVADE',
+                    fighterId: defender.clientId,
+                    evadeType: 'precognition',
+                    position: defender.gameState.position,
+                    velocity: defender.gameState.velocity
+                });
+                return;
+            }
 
             // VALENCINA: Apply per-attack effects on hit
             if (attacker.characterKey === 'VALENCINA') {

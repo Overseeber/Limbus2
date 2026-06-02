@@ -87,31 +87,40 @@ const ValencinaRenderer = {
    * - Accelerating Future stacks
    * - Shin (心) activation
    */
+  /**
+   * Helper: find a status in the fighter's statuses array by type
+   */
+  _getStatus: function(fighter, type) {
+    if (!fighter || !fighter.statuses) return null;
+    return fighter.statuses.find(s => s.type === type);
+  },
+
   drawStatusIndicators: function(fighter) {
     if (!fighter) return;
     
     const res = fighter.resources || {};
     
     // Acceleration Rounds indicator (yellow circles)
-    if (res.accelerationRounds !== undefined) {
-      const ar = res.accelerationRounds || 0;
-      if (ar > 0) {
-        push();
-        for (let i = 0; i < Math.min(ar, 10); i++) {
-          const x = fighter.pos.x - 25 + i * 6;
-          const y = fighter.pos.y + 65;
-          fill(255, 220, 100, 200);
-          noStroke();
-          ellipse(x, y, 5, 5);
-        }
-        pop();
+    // Read from statuses array (the authoritative source)
+    const arStatus = this._getStatus(fighter, 'Acceleration Round');
+    const ar = arStatus ? arStatus.count : 0;
+    if (ar > 0) {
+      push();
+      for (let i = 0; i < Math.min(ar, 10); i++) {
+        const x = fighter.pos.x - 25 + i * 6;
+        const y = fighter.pos.y + 65;
+        fill(255, 220, 100, 200);
+        noStroke();
+        ellipse(x, y, 5, 5);
       }
+      pop();
     }
     
-    // Precognition indicator (blue bar)
-    const precog = res.precognition;
-    const maxPrecog = res.maxPrecognition || 30;
-    if (precog !== undefined && maxPrecog > 0) {
+    // Precognition indicator (blue bar) - read from statuses[]
+    const precogStatus = this._getStatus(fighter, 'Precognition');
+    const precog = precogStatus ? precogStatus.count : 0;
+    const maxPrecog = 30;
+    if (precog > 0) {
       push();
       const barWidth = 50;
       const barHeight = 4;
@@ -128,14 +137,16 @@ const ValencinaRenderer = {
       pop();
     }
     
-    // Overheat indicator (red overlay when active)
-    if (res.overheatActive && res.overheat > 0) {
+    // Overheat indicator (red/orange bar) - read from statuses[]
+    const overheatStatus = this._getStatus(fighter, 'Overheat');
+    const overheatCount = overheatStatus ? overheatStatus.count : 0;
+    if (overheatCount > 0) {
       push();
       const barWidth = 50;
       const barHeight = 4;
       const x = fighter.pos.x - barWidth / 2;
       const y = fighter.pos.y + 75;
-      const fillPercent = Math.max(0, Math.min(1, res.overheat / (res.maxOverheat || 30)));
+      const fillPercent = Math.max(0, Math.min(1, overheatCount / 30));
       
       fill(255, 0, 0, 100);
       rect(x, y, barWidth, barHeight, 2);
@@ -144,8 +155,9 @@ const ValencinaRenderer = {
       pop();
     }
     
-    // Shin active indicator (pink glow)
-    if (res.shinActive) {
+    // Shin active indicator (pink glow) - read from statuses[]
+    const shinStatus = this._getStatus(fighter, 'Shin (心) - Valencina');
+    if (shinStatus) {
       push();
       noFill();
       stroke(233, 30, 99, 100 + sin(millis() * 0.005) * 50);

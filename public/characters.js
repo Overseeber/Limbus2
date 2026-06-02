@@ -187,6 +187,7 @@ const STATUS_SPRITES = {
   Sinking: { atlas:"status", x:4, y:0, w:1, h:1 },
   Poise: { atlas:"status", x:5, y:0, w:1, h:1 },
   Charge: { atlas:"status", x:6, y:0, w:1, h:1 },
+  Weapon: { atlas:"status", x:1, y:2, w:1, h:1 },
   Precognition: { atlas:"status", x:7, y:0, w:1, h:1 },
   Overheat: { atlas:"status", x:8, y:0, w:1, h:1 },
   "Accelerating Future": { atlas:"status", x:9, y:0, w:1, h:1 },
@@ -227,6 +228,8 @@ function loadSpriteAtlases() {
   atlases.cslash1 = loadImage("data/callisto/Cslash1.png");
   atlases.cslash2 = loadImage("data/callisto/Cslash2.png");
   atlases.cslash3 = loadImage("data/callisto/Cslash3.png");
+
+  
 
   // Pre-scale all atlas images to common sizes asynchronously
   const preScaleAtlases = async () => {
@@ -1867,13 +1870,6 @@ CALLISTO: {
     },
     
     onUpdate: function(dt, opponent, fighter) {
-      // In server-authoritative multiplayer and CPU-server modes, Valencina state is driven by the server.
-      if ((typeof gameMode !== 'undefined' && gameMode === 'multiplayer') ||
-          (typeof cpuUsesServer !== 'undefined' && cpuUsesServer) ||
-          (typeof Network !== 'undefined' && Network.isConnected)) {
-        return;
-      }
-
       // 🔄 Update Valencina's unique systems
       this.updatePrecognition(fighter, dt);
       this.updateOverheat(fighter, dt);
@@ -2841,7 +2837,7 @@ CALLISTO: {
     }
 };
 
-let currentCharacter = 'VALENCINA';
+let currentCharacter = 'JOHN';
 
 function switchCharacter(characterKey) {
   if (CHARACTERS[characterKey]) {
@@ -2906,7 +2902,7 @@ function removeFighter(fighterId) {
 }
 
 function getAvailableFighters() {
-  return Object.keys(CHARACTERS).filter(key => key !== 'JOHN');
+  return Object.keys(CHARACTERS);
 }
 
 // Add new status effects to statusColor function

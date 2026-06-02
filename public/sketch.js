@@ -1151,7 +1151,15 @@ function handleAbilityResult(result) {
     }
 
     if (typeof resultData.damage === 'number' && typeof spawnDamageNumber === 'function') {
-      spawnDamageNumber(resultData.damage, target.pos.copy(), fighter.facing, false, 'normal', false, 'normal');
+      spawnDamageNumber(
+        resultData.damage,
+        target.pos.copy(),
+        fighter.facing,
+        !!resultData.isBlocked,
+        resultData.damageType || 'normal',
+        !!resultData.isCritical,
+        resultData.attackType || 'normal'
+      );
     }
 
     applyNetworkScreenShake(resultData);
@@ -1352,7 +1360,15 @@ function handleHitNetworkEvent(event) {
 
   const facing = attacker ? attacker.facing : 1;
   if (event.damage && typeof spawnDamageNumber === 'function') {
-    spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'normal');
+    spawnDamageNumber(
+      event.damage,
+      target.pos.copy(),
+      facing,
+      !!event.isBlocked,
+      event.damageType || 'normal',
+      !!event.isCritical,
+      event.attackType || 'normal'
+    );
   }
   applyNetworkScreenShake(event);
 
@@ -1377,7 +1393,15 @@ function handleSlamHitNetworkEvent(event) {
 
   const facing = attacker ? attacker.facing : 1;
   if (event.damage && typeof spawnDamageNumber === 'function') {
-    spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'slam');
+    spawnDamageNumber(
+      event.damage,
+      target.pos.copy(),
+      facing,
+      !!event.isBlocked,
+      event.damageType || 'normal',
+      !!event.isCritical,
+      event.attackType || 'slam'
+    );
   }
   applyNetworkScreenShake(event);
 
@@ -1407,7 +1431,15 @@ function handleDashAttackNetworkEvent(event) {
 
     const facing = attacker ? attacker.facing : 1;
     if (typeof hit.damage === 'number' && typeof spawnDamageNumber === 'function') {
-      spawnDamageNumber(hit.damage, target.pos.copy(), facing, false, 'normal', false, 'normal');
+      spawnDamageNumber(
+        hit.damage,
+        target.pos.copy(),
+        facing,
+        !!hit.isBlocked,
+        hit.damageType || 'normal',
+        !!hit.isCritical,
+        hit.attackType || 'normal'
+      );
     }
 
     if (typeof addScreenShake === 'function' && typeof hit.damage === 'number') {
@@ -1435,7 +1467,15 @@ function handleStatusDamageNetworkEvent(event) {
   else if (event.eventType === 'RUPTURE_DAMAGE') damageType = 'rupture';
 
   if (event.damage && typeof spawnDamageNumber === 'function') {
-    spawnDamageNumber(event.damage, target.pos.copy(), target.facing || 1, false, damageType, false, 'normal');
+    spawnDamageNumber(
+      event.damage,
+      target.pos.copy(),
+      target.facing || 1,
+      !!event.isBlocked,
+      event.damageType || damageType,
+      !!event.isCritical,
+      event.attackType || 'normal'
+    );
   }
 }
 

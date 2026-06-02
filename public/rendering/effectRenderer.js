@@ -178,9 +178,9 @@ class DamageNumber extends FloatingIndicator {
     const textW = textWidth(damageText);
 
     // Draw source icon to the LEFT of the damage number text
-    const sourceIconSize = 14;
+    const sourceIconSize = constrain(this.size * 0.55, 12, 18);
     const sourceIconX = this.pos.x - (textW / 2) - sourceIconSize - 6;
-    const sourceIconY = this.pos.y + 1;
+    const sourceIconY = this.pos.y + max(1, this.size * 0.05);
 
     this.drawSourceIcon(sourceIconX, sourceIconY, sourceIconSize, colors);
 
@@ -218,6 +218,19 @@ class DamageNumber extends FloatingIndicator {
   }
 
   drawSourceIcon(x, y, iconSize, colors) {
+    if (typeof drawStatusIcon === 'function') {
+      // Use actual sprite icons when available
+      const statusType = this.isBlocked ? 'Weapon' : (this.damageType === 'burn' ? 'Burn' :
+                          this.damageType === 'bleed' ? 'Bleed' :
+                          this.damageType === 'tremor' ? 'Tremor' :
+                          this.damageType === 'rupture' ? 'Rupture' :
+                          this.damageType === 'sinking' ? 'Sinking' :
+                          'Weapon');
+
+      drawStatusIcon(statusType, x + iconSize / 2, y + iconSize / 2, iconSize);
+      return;
+    }
+
     push();
     // Enable stroke for icon outlines
     strokeWeight(1.5);
@@ -274,7 +287,6 @@ class DamageNumber extends FloatingIndicator {
       // Physical attack: weapon shape based on attack type
       switch (this.attackType) {
         case 'slam':
-          // Downward triangle
           triangle(
             x + iconSize / 2, y + 2,
             x + 2, y + iconSize - 2,
@@ -282,16 +294,13 @@ class DamageNumber extends FloatingIndicator {
           );
           break;
         case 'dash':
-          // Speed circle with arrow
           ellipse(x + iconSize / 2, y + iconSize / 2, iconSize * 0.8);
-          // Small arrow inside
           stroke(r, g, b, this.alpha);
           line(x + 3, y + iconSize / 2, x + iconSize - 3, y + iconSize / 2);
           line(x + iconSize - 6, y + iconSize / 2 - 3, x + iconSize - 3, y + iconSize / 2);
           line(x + iconSize - 6, y + iconSize / 2 + 3, x + iconSize - 3, y + iconSize / 2);
           break;
         case 'ultimate':
-          // Diamond star
           push();
           translate(x + iconSize / 2, y + iconSize / 2);
           rotate(PI / 4);
@@ -299,7 +308,6 @@ class DamageNumber extends FloatingIndicator {
           pop();
           break;
         default:
-          // Normal weapon: square
           rect(x + 1, y + 1, iconSize - 2, iconSize - 2, 2);
       }
     }
@@ -336,7 +344,7 @@ class StaggerDamageNumber extends FloatingIndicator {
     const colors = DAMAGE_CONSTANTS.COLOR.STAGGER_DAMAGE;
 
     // Source icon to the left
-    const iconSize = 10;
+    const iconSize = 12;
     const iconX = this.pos.x - 20 - iconSize;
     const iconY = this.pos.y + 2;
 
@@ -349,24 +357,36 @@ class StaggerDamageNumber extends FloatingIndicator {
     strokeWeight(1);
     text(`${floor(this.value)}`, this.pos.x, this.pos.y);
 
+    if (this.sourceType === 'tremor') {
+      textSize(DAMAGE_CONSTANTS.TREMOR_TEXT_SIZE);
+      fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
+      stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
+      strokeWeight(1);
+      text('TREMOR BURST', this.pos.x, this.pos.y + this.size * 0.8);
+    }
+
     pop();
   }
 
   drawSourceIcon(x, y, iconSize, colors) {
+    if (typeof drawStatusIcon === 'function') {
+      const statusType = this.sourceType === 'tremor' ? 'Tremor' : 'Weapon';
+      drawStatusIcon(statusType, x + iconSize / 2, y + iconSize / 2, iconSize);
+      return;
+    }
+
     push();
     fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
     stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
     strokeWeight(1);
 
     if (this.sourceType === 'tremor') {
-      // Diamond for tremor stagger
       push();
       translate(x + iconSize / 2, y + iconSize / 2);
       rotate(PI / 4);
       rect(-iconSize / 2, -iconSize / 2, iconSize, iconSize, 1);
       pop();
     } else {
-      // Default stagger: small shield
       rect(x, y, iconSize, iconSize, 2);
     }
 

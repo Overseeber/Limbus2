@@ -16,12 +16,12 @@ const DAMAGE_CONSTANTS = {
   ICON_SIZE: 16,
   COLOR: {
     NORMAL_DAMAGE: { fill: [255, 255, 255], stroke: [0, 0, 0] },
-    BLOCKED_DAMAGE: { fill: [100, 200, 255], stroke: [70, 150, 220] },
+    BLOCKED_DAMAGE: { fill: [56, 213, 245], stroke: [40, 180, 220] },
     EVADE: { fill: [150, 255, 150], stroke: [100, 200, 100] },
-    CRITICAL_DAMAGE: { fill: [255, 255, 0], stroke: [200, 200, 0] },
+    CRITICAL_DAMAGE: { fill: [246, 255, 0], stroke: [200, 220, 0] },
     BURN_DAMAGE: { fill: [255, 140, 0], stroke: [200, 100, 0] },
     BLEED_DAMAGE: { fill: [255, 50, 50], stroke: [200, 0, 0] },
-    TREMOR_DAMAGE: { fill: [255, 255, 0], stroke: [200, 200, 0] },
+    TREMOR_DAMAGE: { fill: [231, 255, 143], stroke: [180, 210, 100] },
     RUPTURE_DAMAGE: { fill: [50, 255, 50], stroke: [0, 200, 0] }
   }
 };
@@ -205,33 +205,42 @@ class DamageNumber extends FloatingIndicator {
       }
     }
     
-    // Draw attack type icon to the right of damage number
-    this.drawAttackIcon(colors);
+    // Draw the source icon to the left of the damage number
+    const damageTextX = this.pos.x + (DAMAGE_CONSTANTS.ICON_SIZE / 2) + 6;
+    const damageTextY = this.pos.y;
+    const iconX = this.pos.x - (this.size / 2) - (DAMAGE_CONSTANTS.ICON_SIZE / 2) - 6;
+    const iconY = this.pos.y + this.size * 0.1;
+    this.drawAttackIcon(iconX, iconY, colors);
     
     // Draw damage number
     textSize(this.size);
     fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
     stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
     strokeWeight(DAMAGE_CONSTANTS.STROKE_WEIGHT);
+    text(`${floor(this.value)}`, damageTextX, damageTextY);
     
-    const damageTextX = this.pos.x - (DAMAGE_CONSTANTS.ICON_SIZE / 2);
-    text(`${floor(this.value)}`, damageTextX, this.pos.y);
-    
-    // Draw critical text below damage
+    // Determine subtext for critical, depowered, or tremor burst
+    let subText = null;
+    let subTextColor = colors;
+    let subTextSize = DAMAGE_CONSTANTS.DEPOWERED_TEXT_SIZE;
     if (this.isCritical) {
-      fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
-      textSize(DAMAGE_CONSTANTS.CRITICAL_TEXT_SIZE);
-      text('CRITICAL!', damageTextX, this.pos.y + this.size * 0.8);
+      subText = 'CRITICAL!';
+      subTextSize = DAMAGE_CONSTANTS.CRITICAL_TEXT_SIZE;
+      subTextColor = DAMAGE_CONSTANTS.COLOR.CRITICAL_DAMAGE;
+    } else if (this.isBlocked) {
+      subText = 'DEPOWERED';
+      subTextColor = DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE;
+    } else if (this.damageType === 'tremor') {
+      subText = 'TREMOR BURST';
+      subTextColor = DAMAGE_CONSTANTS.COLOR.TREMOR_DAMAGE;
+      subTextSize = DAMAGE_CONSTANTS.CRITICAL_TEXT_SIZE;
     }
     
-    // Draw blocked text if applicable
-    if (this.isBlocked) {
-      fill(DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE.fill[0], 
-           DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE.fill[1], 
-           DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE.fill[2], 
-           this.alpha);
-      textSize(DAMAGE_CONSTANTS.DEPOWERED_TEXT_SIZE);
-      text('depowered', damageTextX, this.pos.y + this.size * 0.8);
+    if (subText) {
+      fill(subTextColor.fill[0], subTextColor.fill[1], subTextColor.fill[2], this.alpha);
+      stroke(subTextColor.stroke[0], subTextColor.stroke[1], subTextColor.stroke[2], this.alpha);
+      textSize(subTextSize);
+      text(subText, damageTextX, damageTextY + this.size * 0.8);
     }
     
     pop();
@@ -241,46 +250,24 @@ class DamageNumber extends FloatingIndicator {
    * Draws a placeholder icon for the attack type
    * @param {Object} colors - Color object for the icon
    */
-  drawAttackIcon(colors) {
+  drawAttackIcon(iconX, iconY, colors) {
     push();
-    const iconX = this.pos.x + (this.size / 2) + 5;
-    const iconY = this.pos.y + (this.size / 2) - (DAMAGE_CONSTANTS.ICON_SIZE / 2);
-    
-    fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
-    stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
-    strokeWeight(1);
-    
-    // Draw different placeholder shapes based on attack type
-    switch (this.attackType) {
-      case 'normal':
-        // Square for normal attacks
-        rect(iconX, iconY, DAMAGE_CONSTANTS.ICON_SIZE, DAMAGE_CONSTANTS.ICON_SIZE, 2);
-        break;
-      case 'slam':
-        // Triangle for slam attacks
-        triangle(
-          iconX + DAMAGE_CONSTANTS.ICON_SIZE / 2, iconY,
-          iconX, iconY + DAMAGE_CONSTANTS.ICON_SIZE,
-          iconX + DAMAGE_CONSTANTS.ICON_SIZE, iconY + DAMAGE_CONSTANTS.ICON_SIZE
-        );
-        break;
-      case 'dash':
-        // Circle for dash attacks
-        ellipse(iconX + DAMAGE_CONSTANTS.ICON_SIZE / 2, iconY + DAMAGE_CONSTANTS.ICON_SIZE / 2, DAMAGE_CONSTANTS.ICON_SIZE);
-        break;
-      case 'ultimate':
-        // Diamond for ultimate attacks
-        push();
-        translate(iconX + DAMAGE_CONSTANTS.ICON_SIZE / 2, iconY + DAMAGE_CONSTANTS.ICON_SIZE / 2);
-        rotate(PI / 4);
-        rect(-DAMAGE_CONSTANTS.ICON_SIZE / 2, -DAMAGE_CONSTANTS.ICON_SIZE / 2, DAMAGE_CONSTANTS.ICON_SIZE, DAMAGE_CONSTANTS.ICON_SIZE, 2);
-        pop();
-        break;
-      default:
-        // Default square
-        rect(iconX, iconY, DAMAGE_CONSTANTS.ICON_SIZE, DAMAGE_CONSTANTS.ICON_SIZE, 2);
+    imageMode(CENTER);
+    noStroke();
+
+    const iconSize = DAMAGE_CONSTANTS.ICON_SIZE;
+    if (this.damageType === 'burn') {
+      drawStatusIcon('Burn', iconX, iconY, iconSize);
+    } else if (this.damageType === 'bleed') {
+      drawStatusIcon('Bleed', iconX, iconY, iconSize);
+    } else if (this.damageType === 'rupture') {
+      drawStatusIcon('Rupture', iconX, iconY, iconSize);
+    } else if (this.damageType === 'tremor') {
+      drawStatusIcon('Tremor', iconX, iconY, iconSize);
+    } else {
+      drawStatusIcon('Weapon', iconX, iconY, iconSize);
     }
-    
+
     pop();
   }
 }

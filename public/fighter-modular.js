@@ -1390,7 +1390,7 @@ class Fighter {
     
     // 7. Character-specific onUpdate
     const character = CHARACTERS[this.characterKey];
-    if (character && character.onUpdate) {
+    if (character && character.onUpdate && this.shouldRunLocalCharacterUpdate()) {
       character.onUpdate(dt, opponent, this);
     }
     
@@ -1418,9 +1418,17 @@ class Fighter {
     if (this.isAI) {
       this.updateAIControls(opponent);
     }
-    
+
     // 14. Process actions
     this.processActions(opponent, dt);
+  }
+
+  shouldRunLocalCharacterUpdate() {
+    return !(
+      (typeof gameMode !== 'undefined' && gameMode === 'multiplayer') ||
+      (typeof cpuUsesServer !== 'undefined' && cpuUsesServer) ||
+      (typeof Network !== 'undefined' && Network.isConnected)
+    );
   }
 
   /**

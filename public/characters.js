@@ -1867,6 +1867,13 @@ CALLISTO: {
     },
     
     onUpdate: function(dt, opponent, fighter) {
+      // In server-authoritative multiplayer and CPU-server modes, Valencina state is driven by the server.
+      if ((typeof gameMode !== 'undefined' && gameMode === 'multiplayer') ||
+          (typeof cpuUsesServer !== 'undefined' && cpuUsesServer) ||
+          (typeof Network !== 'undefined' && Network.isConnected)) {
+        return;
+      }
+
       // 🔄 Update Valencina's unique systems
       this.updatePrecognition(fighter, dt);
       this.updateOverheat(fighter, dt);

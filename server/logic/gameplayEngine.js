@@ -338,13 +338,25 @@ class GameplayEngine {
           if (typeof s.duration === 'number' && s.timer >= s.duration) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
           if (s.count <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
           return true;
+        case 'Precognition':
+        case 'Overheat':
+        case 'Acceleration Round':
+        case 'Shin (心) - Valencina':
+          // Unique passive statuses should only expire by explicit count depletion,
+          // not by generic duration/timer decay.
+          return s.count > 0;
         default:
           s.timer += dt;
           if (typeof s.remainingTime === 'number') {
             s.remainingTime -= dt;
             if (s.remainingTime <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
           }
-          const maxDuration = typeof s.duration === 'number' ? s.duration : 30;
+          if (typeof s.duration !== 'number') {
+            // Preserve non-time-based statuses indefinitely unless their count drops to zero.
+            if (s.count <= 0) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
+            return true;
+          }
+          const maxDuration = s.duration;
           if (s.count <= 0 || s.timer >= maxDuration) { events.push({ type: 'STATUS_EXPIRED', statusType: s.type }); return false; }
           return true;
       }

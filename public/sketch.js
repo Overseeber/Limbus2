@@ -93,6 +93,7 @@ let combatZoom = {
     lastHitTime: 0,            // Timestamp of last hit for cooldown
     maxSafeZoom: 1.0,          // Clamped zoom to maintain fighter visibility
 };
+let ultimateImpactZoom = 0;
 
 
 // Character intro animation sequences
@@ -578,7 +579,7 @@ function processSnapshot(snapshot) {
         }
 
         // Apply character-specific resources from server snapshot
-        // These drive resource-dependent mechanics (Corpus for Callisto, Precognition for Valencina)
+        // These drive resource-dependent mechanics (Corpus for Callisto, Precognition/Overheat for Valencina)
         if (state.resources) {
             if (fighter.characterKey === 'CALLISTO') {
                 fighter.corpusIngredient = state.resources.corpusIngredient || 0;
@@ -586,6 +587,8 @@ function processSnapshot(snapshot) {
             } else if (fighter.characterKey === 'VALENCINA') {
                 fighter.precognition = state.resources.precognition || 0;
                 fighter.maxPrecognition = state.resources.maxPrecognition || 100;
+                fighter.overheat = state.resources.overheat || 0;
+                fighter.maxOverheat = state.resources.maxOverheat || 30;
                 fighter.shinActive = state.resources.shinActive || false;
             }
         }
@@ -688,7 +691,8 @@ function updateCombatZoom(dt) {
         const isDash = fighter.dashAttackActive || false;
         const isSlam = fighter.isSlamAttacking || false;
         const isUlt = fighter.ultimateActive || false;
-        const hasValid = (seq > 0 || isDash || isSlam || isUlt) && isAttacking;
+        const hasAttackState = (seq > 0 || isDash || isSlam) && isAttacking;
+        const hasValid = isUlt || hasAttackState;
         if (!hasValid) return;
         
         let target = 1.0, pri = 0;
@@ -1149,9 +1153,7 @@ function handleAbilityResult(result) {
       spawnDamageNumber(resultData.damage, target.pos.copy(), fighter.facing, false, 'normal', false, 'normal');
     }
 
-    if (typeof addScreenShake === 'function' && typeof resultData.damage === 'number') {
-      addScreenShake(resultData.damage);
-    }
+    applyNetworkScreenShake(resultData);
 
     if (resultData.statuses) {
       applyStatusObjects(target, resultData.statuses);
@@ -1204,6 +1206,33 @@ function handleAbilityResult(result) {
       fighter.currentSprite = 'idle';
       fighter.setState('idle');
     }
+  }
+    }
+
+function applyNetworkScreenShake(event) {
+  if (!event || typeof addScreenShake !== 'function') return;
+
+  const intensity = typeof event.shakeIntensity === 'number'
+    ? event.shakeIntensity
+    : (typeof event.damage === 'number' ? event.damage : 0);
+  const isUltimate = !!(
+    event.isUltimate ||
+    event.shakeType === 'ultimate' ||
+    event.attackType === 'ultimate' ||
+    event.type === 'ULTIMATE_SLASH'
+  );
+
+  if (intensity > 0) {
+    addScreenShake(intensity, isUltimate);
+  }
+
+  // Ultimate impact zoom: increase additive zoom when ultimate deals damage with knockback
+  if (isUltimate && typeof event.damage === 'number' && typeof event.knockback === 'number') {
+    if (event.knockback > 0 && event.damage > 0) {
+      ultimateImpactZoom = Math.min(2.5, ultimateImpactZoom + (0.05 * event.damage));
+    }
+  }
+}
 
     if (result.abilityId === 'installationArt') {
       fighter.installationArtPredictive = false;
@@ -1303,6 +1332,8 @@ function handleUltimateSlashEvent(event) {
       rotation: null
     });
   }
+
+  applyNetworkScreenShake(event);
 }
 
 function handleHitNetworkEvent(event) {
@@ -1324,9 +1355,7 @@ function handleHitNetworkEvent(event) {
   if (event.damage && typeof spawnDamageNumber === 'function') {
     spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'normal');
   }
-  if (typeof addScreenShake === 'function') {
-    addScreenShake(event.damage);
-  }
+  applyNetworkScreenShake(event);
 
   if (event.statuses && Array.isArray(event.statuses) && target.addStatus) {
     event.statuses.forEach(statusType => target.addStatus(statusType, 1, 1));
@@ -1351,9 +1380,7 @@ function handleSlamHitNetworkEvent(event) {
   if (event.damage && typeof spawnDamageNumber === 'function') {
     spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'slam');
   }
-  if (typeof addScreenShake === 'function') {
-    addScreenShake(event.damage);
-  }
+  applyNetworkScreenShake(event);
 
   if (event.defeated && !target.isDefeated) {
     target.isDefeated = true;
@@ -1596,19 +1623,35 @@ function draw() {
       cameraY = lerp(cameraY, fighterMidpointY, 0.1); // Smooth transition
     }
     
-    // Update combat impact zoom (client-side visual, reads server-authoritative state)
+    // Recompute base camera state first, then apply impact zoom as a visual overlay.
+    updateCamera(deltaTime / 1000);
     updateCombatZoom(deltaTime / 1000);
-    // Apply combat zoom as a DIVISIVE factor on top of existing camera zoom.
-    // combatZoom.currentZoom is < 1.0 for "zoom in" (e.g. 0.82 = 1/0.82 = 1.22x magnification).
-    // Division converts the <1 values into >1 magnification factors.
-    // When no attack is happening, currentZoom = 1.0 and camera is unaffected.
-    if (combatZoom.active) {
-        cameraZoom = cameraZoom / combatZoom.currentZoom;
+
+    // Update screen shake state before camera transform
+    if (typeof updateScreenShake === 'function') {
+      updateScreenShake(deltaTime / 1000);
     }
-    
-    beginCamera();
+
+    ultimateImpactZoom = Math.max(0, ultimateImpactZoom - 0.08);
+
+    const displayCameraZoomBase = combatZoom.active ? cameraZoom / combatZoom.currentZoom : cameraZoom;
+    const displayCameraZoom = ultimateActive ? (displayCameraZoomBase + ultimateImpactZoom) : displayCameraZoomBase;
+
+    if (typeof clampCameraToVisibility === 'function') {
+      clampCameraToVisibility(displayCameraZoom);
+    }
+
+    beginCamera(displayCameraZoom, true);
     drawArena();
-    
+
+    // Darken the battle background during ultimate sequences.
+    if (typeof drawUltimateBackgroundDim === 'function') {
+      const targetDim = ultimateActive
+        ? Math.max(0, ...ultimateFighters.map(f => f.ultimateBackgroundDim || 0))
+        : 0;
+      drawUltimateBackgroundDim(targetDim);
+    }
+
     // Draw ultimate render behind characters (name, dialogue, effects)
     if (window.allFighters) {
       window.allFighters.forEach(fighter => {
@@ -1678,7 +1721,7 @@ function draw() {
     drawCombatOver();
   }
 
-  if (battleState !== BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.OPENING && battleState !== BATTLE_STATES.COMBAT_OVER) {
+  if (battleState !== BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.OPENING && battleState !== BATTLE_STATES.COMBAT_OVER && (typeof shouldHideGameplayUI !== 'function' || !shouldHideGameplayUI())) {
     drawHud();
   }
 }

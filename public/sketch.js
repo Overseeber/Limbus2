@@ -1206,8 +1206,28 @@ function handleAbilityResult(result) {
       fighter.currentSprite = 'idle';
       fighter.setState('idle');
     }
-  }
+
+    if (result.abilityId === 'installationArt') {
+      fighter.installationArtPredictive = false;
+      if (result.success) {
+        fighter.installationArtCooldown = result.cooldown || 10;
+      } else {
+        fighter.installationArtActive = false;
+        fighter.installationArtExecuted = false;
+        fighter.installationArtTimer = 0;
+      }
+      // Reset sprite back to idle state after ability resolution
+      fighter.currentSprite = 'cidle';
+      fighter.setState('idle');
     }
+
+    if (result.abilityId) {
+      triggerAbilityVisuals(fighter, result.abilityId, result);
+    }
+  } else {
+    console.log('[Ability Failed]', result.reason);
+  }
+}
 
 function applyNetworkScreenShake(event) {
   if (!event || typeof addScreenShake !== 'function') return;
@@ -1231,28 +1251,6 @@ function applyNetworkScreenShake(event) {
     if (event.knockback > 0 && event.damage > 0) {
       ultimateImpactZoom = Math.min(2.5, ultimateImpactZoom + (0.05 * event.damage));
     }
-  }
-}
-
-    if (result.abilityId === 'installationArt') {
-      fighter.installationArtPredictive = false;
-      if (result.success) {
-        fighter.installationArtCooldown = result.cooldown || 10;
-      } else {
-        fighter.installationArtActive = false;
-        fighter.installationArtExecuted = false;
-        fighter.installationArtTimer = 0;
-      }
-      // Reset sprite back to idle state after ability resolution
-      fighter.currentSprite = 'cidle';
-      fighter.setState('idle');
-    }
-
-    if (result.abilityId) {
-      triggerAbilityVisuals(fighter, result.abilityId, result);
-    }
-  } else {
-    console.log('[Ability Failed]', result.reason);
   }
 }
 

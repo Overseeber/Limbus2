@@ -710,6 +710,229 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
   }
 }
 
+/**
+ * DIHUI STAR ULTIMATE (Uttermost Rend Space - String Severance)
+ * Server-authoritative cinematic sequence.
+ *
+ * Phase 0: du1 opening pose — 3s (zoom in)
+ * Phase 1: du1 hold — 2s (teleport target center, Dihui right edge)
+ * Phase 2: du2 — 1s, teleport to opposite edge, zoom out
+ * Phase 3: djoust1→djoust2→djoust3→djoust4 — 0.2s each
+ * Phase 4: dhalt1→dhalt2 — hold 3s (camera centers on Dihui, zoom in)
+ * Phase 5: du3→du4→du5→du6→du7 — hold 2s
+ * Phase 6: du8 — spawn dline instances, deal damage
+ * Phase 7: Hold 3s, return to combat
+ */
+function updateDihuiUltimate(fighter, ult, enemies, dt) {
+  const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+
+  targetEnemies.forEach(e => { if (e) clampToArena(e); });
+  clampToArena(fighter);
+
+  // Timer decrement (non-attack phases only)
+  if (ult.phase === 0 || ult.phase === 1 || ult.phase === 2 || ult.phase === 3 || ult.phase === 4 || ult.phase === 5 || ult.phase === 6 || ult.phase === 7)
+    ult.timer -= dt;
+
+  ult.prevPhase = ult.phase;
+
+  switch (ult.phase) {
+    // ============ PHASE 0: OPENING POSE - "du1" for 3 seconds ============
+    case 0:
+      ult.currentSprite = 'du1';
+      ult.cameraZoom = 2.5;
+      ult.backgroundDim = 0.7;
+      if (ult.timer <= 0) {
+        // Teleport target to center, Dihui to right edge
+        const centerX = clampX(ARENA_WIDTH / 2);
+        targetEnemies.forEach(e => {
+          if (e) {
+            e.position.x = centerX;
+            e.position.y = clampY(ARENA_HEIGHT - 100);
+            e.velocity.x = 0;
+            e.velocity.y = 0;
+          }
+        });
+        fighter.position.x = clampX(ARENA_WIDTH - 150);
+        fighter.position.y = clampY(ARENA_HEIGHT - 100);
+        fighter.velocity.x = 0;
+        fighter.velocity.y = 0;
+        ult.phase = 1;
+        ult.timer = 2.0; // Hold du1 for 2 more seconds
+      }
+      break;
+
+    // ============ PHASE 1: du1 hold ============
+    case 1:
+      ult.currentSprite = 'du1';
+      if (ult.timer <= 0) {
+        ult.currentSprite = 'du2';
+        ult.phase = 2;
+        ult.timer = 1.0; // Hold du2 for 1 second
+      }
+      break;
+
+    // ============ PHASE 2: du2 hold, teleport to opposite edge ============
+    case 2:
+      ult.currentSprite = 'du2';
+      if (ult.timer <= 0) {
+        // Teleport to opposite edge
+        fighter.position.x = clampX(100);
+        fighter.position.y = clampY(ARENA_HEIGHT - 100);
+        fighter.velocity.x = 0;
+        fighter.velocity.y = 0;
+        ult.cameraZoom = 1.0; // Zoom out to show entire arena
+        ult.phase = 3;
+        ult.timer = 0.2;
+        ult.attackFrame = 0;
+      }
+      break;
+
+    // ============ PHASE 3: Joust sequence ============
+    case 3:
+      ult.timer -= dt;
+      if (ult.timer <= 0) {
+        ult.attackFrame++;
+        switch (ult.attackFrame) {
+          case 1:
+            ult.currentSprite = 'djoust1';
+            ult.timer = 0.2;
+            break;
+          case 2:
+            ult.currentSprite = 'djoust2';
+            ult.timer = 0.2;
+            break;
+          case 3:
+            ult.currentSprite = 'djoust3';
+            ult.timer = 0.2;
+            break;
+          case 4:
+            ult.currentSprite = 'djoust4';
+            ult.timer = 1.0;
+            break;
+          default:
+            ult.phase = 4;
+            ult.timer = 1.0;
+            ult.currentSprite = 'dhalt1';
+            break;
+        }
+      }
+      break;
+
+    // ============ PHASE 4: dhalt1→dhalt2 ============
+    case 4:
+      if (ult.timer <= 0) {
+        if (ult.currentSprite === 'dhalt1') {
+          ult.currentSprite = 'dhalt2';
+          ult.timer = 3.0; // Hold for 3 seconds
+          ult.cameraZoom = 2.5; // Zoom in on Dihui
+        } else {
+          ult.cameraZoom = 1.5;
+          ult.phase = 5;
+          ult.timer = 0.3;
+          ult.attackFrame = 0;
+        }
+      }
+      break;
+
+    // ============ PHASE 5: du3→du4→du5→du6→du7 ============
+    case 5:
+      ult.timer -= dt;
+      if (ult.timer <= 0) {
+        ult.attackFrame++;
+        switch (ult.attackFrame) {
+          case 1:
+            ult.currentSprite = 'du3';
+            ult.timer = 0.3;
+            break;
+          case 2:
+            ult.currentSprite = 'du4';
+            ult.timer = 0.3;
+            break;
+          case 3:
+            ult.currentSprite = 'du5';
+            ult.timer = 0.3;
+            break;
+          case 4:
+            ult.currentSprite = 'du6';
+            ult.timer = 0.3;
+            break;
+          case 5:
+            ult.currentSprite = 'du7';
+            ult.timer = 2.0; // Hold 2 seconds
+            break;
+          default:
+            ult.phase = 6;
+            ult.timer = 0.5;
+            ult.currentSprite = 'du8';
+            ult.cameraZoom = 1.0; // Zoom out
+            break;
+        }
+      }
+      break;
+
+    // ============ PHASE 6: du8 + dline spawn + damage ============
+    case 6:
+      ult.currentSprite = 'du8';
+      ult.timer -= dt;
+      
+      // On first entry, spawn dline instances and deal damage
+      if (!ult.dlineSpawned) {
+        // Sum all bladetrail afterimages from all enemies
+        let totalAfterimage = 0;
+        targetEnemies.forEach(e => {
+          if (e && e.statuses) {
+            const ba = e.statuses.find(s => s.type === 'Bladetrail Afterimage');
+            if (ba) totalAfterimage += ba.count;
+          }
+        });
+        ult.dlineCount = Math.min(Math.floor(totalAfterimage / 3), 33);
+        ult.dlineSpawned = true;
+        
+        // Deal damage: +24 Base Damage, + Target Max HP × Bladetrail Afterimage %
+        targetEnemies.forEach(e => {
+          if (e && !e.isDefeated) {
+            const ba = e.statuses.find(s => s.type === 'Bladetrail Afterimage');
+            const baCount = ba ? ba.count : 0;
+            const hpPercentDamage = Math.floor(e.maxHp * baCount * 0.01);
+            
+            // Combo-based damage: BaseDamage + (5 × ComboCount)
+            const comboCount = fighter.combo || 0;
+            const baseDmg = 24; // +24 Base Damage from ultimate
+            const comboDamage = 5;
+            const attackDamage = Math.floor(baseDmg + (comboDamage * comboCount) + hpPercentDamage);
+            
+            dealUltDamage(fighter, ult, e, attackDamage, true, 6, true);
+            
+            // Consume ALL Bladetrail Afterimage at ultimate end
+            if (ba) {
+              ba.count = 0;
+              e.statuses = e.statuses.filter(s => s.type !== 'Bladetrail Afterimage');
+            }
+          }
+        });
+        
+        ult.timer = 3.0; // Hold for 3 seconds
+      }
+      
+      if (ult.timer <= 0) {
+        ult.phase = 7;
+        ult.timer = 0.5;
+      }
+      break;
+
+    // ============ PHASE 7: Return to combat ============
+    case 7:
+      if (ult.timer <= 0) {
+        ult.phase = 8;
+        ult.timer = 0.1;
+      }
+      break;
+
+    case 8:
+      break;
+  }
+}
+
 function clampToArena(fighter) {
   fighter.position.x = clampX(fighter.position.x);
   fighter.position.y = clampY(fighter.position.y);
@@ -767,4 +990,4 @@ function dealUltDamage(fighter, ult, enemy, damage, isFinal, phase, applyKnockba
 
 function random(min, max) { return min + Math.random() * (max - min); }
 
-module.exports = { initUltimate, updateJohnUltimate, updateCallistoUltimate, updateValencinaUltimate, dealUltDamage, clampToArena, clampX, clampY };
+module.exports = { initUltimate, updateJohnUltimate, updateCallistoUltimate, updateValencinaUltimate, updateDihuiUltimate, dealUltDamage, clampToArena, clampX, clampY };

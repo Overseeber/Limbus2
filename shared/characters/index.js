@@ -10,13 +10,15 @@ if (typeof require !== 'undefined') {
   var CALLISTO_CONFIG = require('./callisto.js');
   var VALENCINA_CONFIG = require('./valencina.js');
   var JOHN_CONFIG = require('./john.js');
+  var DIHUI_CONFIG = require('./dihui.js');
 }
 // Client-side (p5.js) - configs loaded via <script> tags in HTML
 
 const CHARACTER_CONFIGS = {
   CALLISTO: CALLISTO_CONFIG || {},
   VALENCINA: VALENCINA_CONFIG || {},
-  JOHN: JOHN_CONFIG || {}
+  JOHN: JOHN_CONFIG || {},
+  DIHUI: DIHUI_CONFIG || {}
 };
 
 /**
@@ -33,6 +35,7 @@ if (typeof module !== 'undefined' && module.exports) {
     getCharacterConfig,
     CALLISTO_CONFIG,
     VALENCINA_CONFIG,
-    JOHN_CONFIG
+    JOHN_CONFIG,
+    DIHUI_CONFIG
   };
 }

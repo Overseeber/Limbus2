@@ -76,6 +76,7 @@ const ULTIMATE_DAMAGE_PHASES = {
     JOHN: [2, 3],                          // John: phases 2 and 3
     CALLISTO: [2, 4, 6, 8, 10],           // Callisto: phases 2, 4, 6, 8, 10
     VALENCINA: [3, 5, 7, 9],              // Valencina: phases 3, 5, 7, 9
+    DIHUI: [6],                            // Dihui Star: phase 6
 };
 
 // Combat zoom state
@@ -105,6 +106,10 @@ const INTRO_ANIMATIONS = {
   CALLISTO: {
     sprites: ['cidle', 'chalt', 'cuf2', 'cuf1'],
     duration: 0.3 // seconds per sprite
+  },
+  DIHUI: {
+    sprites: ['didle', 'draw1', 'draw2', 'draw3', 'draw4', 'draw5', 'draw6'],
+    duration: 0.1 // seconds per sprite
   }
 };
 

@@ -5,10 +5,12 @@
 
 const callisto = require('./callisto.js');
 const valencina = require('./valencina.js');
+const dihui = require('./dihui.js');
 
 module.exports = {
   callisto: callisto,
   valencina: valencina,
+  dihui: dihui,
   // Character lookup helper
   getCharacterLogic: function(characterKey) {
     const key = characterKey.toLowerCase();

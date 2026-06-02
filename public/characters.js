@@ -173,7 +173,60 @@ const SPRITES = {
     atlas:"cslash3",
     x:0, y:3, w:8, h:4,
     offsetX:-256
-  }
+  },
+
+  // =====================================================
+  // 🟡 DIHUI STAR
+  // =====================================================
+
+  // ===== Star1 =====
+  didle:   { atlas:"star1", x:0, y:0, w:3, h:2 },
+  dhurt:   { atlas:"star1", x:3, y:0, w:3, h:2 },
+  dguard:  { atlas:"star1", x:0, y:2, w:3, h:3, offsetY:+256 },
+  devade:  { atlas:"star1", x:3, y:2, w:3, h:2 },
+  dmove:   { atlas:"star1", x:3, y:4, w:3, h:2 },
+  ds2f1:   { atlas:"star1", x:0, y:5, w:3, h:3, offsetY:+256 },
+  ds2f2:   { atlas:"star1", x:3, y:6, w:3, h:2 },
+
+  // ===== Star2 =====
+  draw1: { atlas:"star2", x:0, y:0, w:3, h:3 },
+  draw2: { atlas:"star2", x:0, y:3, w:3, h:3 },
+  draw3: { atlas:"star2", x:3, y:1, w:3, h:3 },
+  draw4: { atlas:"star2", x:3, y:3, w:3, h:4 },
+
+  // ===== Star3 =====
+  draw5: { atlas:"star3", x:4, y:0, w:4, h:3 },
+  draw6: { atlas:"star3", x:4, y:3, w:4, h:3 },
+  ds3f1: { atlas:"star3", x:0, y:0, w:4, h:3 },
+  ds3f2: { atlas:"star3", x:0, y:3, w:4, h:3 },
+  ds1f1: { atlas:"star3", x:0, y:6, w:3, h:2 },
+
+  // ===== Star4 =====
+  du1:    { atlas:"star4", x:0, y:0, w:3, h:2 },
+  du2:    { atlas:"star4", x:0, y:3, w:3, h:2 },
+  djoust1:{ atlas:"star4", x:0, y:2, w:3, h:2 },
+  djoust2:{ atlas:"star4", x:2, y:3, w:5, h:2 },
+  djoust3:{ atlas:"star4", x:0, y:4, w:5, h:2 },
+  djoust4:{ atlas:"star4", x:0, y:6, w:5, h:2 },
+  dhalt1: { atlas:"star4", x:5, y:4, w:3, h:2 },
+  dhalt2: { atlas:"star4", x:5, y:6, w:3, h:2 },
+
+  // ===== Star5 =====
+  du3: { atlas:"star5", x:0, y:0, w:3, h:3 },
+  du4: { atlas:"star5", x:3, y:0, w:3, h:3 },
+  du5: { atlas:"star5", x:0, y:3, w:3, h:3 },
+  du6: { atlas:"star5", x:3, y:3, w:3, h:3 },
+
+  // ===== Star6 =====
+  du7: { atlas:"star6", x:0, y:0, w:4, h:3 },
+  du8: { atlas:"star6", x:0, y:3, w:4, h:3 },
+
+  // ===== Dslash =====
+  ds3s1: { atlas:"dslash", x:0, y:0, w:6, h:3, offsetX:+256 },
+  ds1s1: { atlas:"dslash", x:0, y:4, w:4, h:4, offsetX:+128, offsetY:+256 },
+  ds2s1: { atlas:"dslash", x:4, y:4, w:4, h:3, offsetX:-128 },
+  dline: { atlas:"dslash", x:0, y:3, w:8, h:1, offsetX:-384 },
+  dba:   { atlas:"dslash", x:6, y:1, w:1, h:1 }
 };
 
 // ==========================
@@ -228,6 +281,16 @@ function loadSpriteAtlases() {
   atlases.cslash1 = loadImage("data/callisto/Cslash1.png");
   atlases.cslash2 = loadImage("data/callisto/Cslash2.png");
   atlases.cslash3 = loadImage("data/callisto/Cslash3.png");
+
+  // ===== Dihui Star =====
+  atlases.star1 = loadImage("data/dihui/Star1.png");
+  atlases.star2 = loadImage("data/dihui/Star2.png");
+  atlases.star3 = loadImage("data/dihui/Star3.png");
+  atlases.star4 = loadImage("data/dihui/Star4.png");
+  atlases.star5 = loadImage("data/dihui/Star5.png");
+  atlases.star6 = loadImage("data/dihui/Star6.png");
+
+  atlases.dslash = loadImage("data/dihui/Dslash.png");
 
   
 
@@ -2800,8 +2863,7 @@ CALLISTO: {
       fighter.ultimateTotalDamage += damage;
       fighter.ultimateDamageDealt += damage;
       console.log('[ULTIMATE DEBUG] Damage applied - total:', fighter.ultimateTotalDamage);
-    }
-  },
+    },
     
     // Initialize character
     initializeCharacter: function(fighter) {
@@ -2835,6 +2897,161 @@ CALLISTO: {
 
       console.log('[DEBUG] Valencina initialized - timeToHuntCooldown:', fighter.timeToHuntCooldown);
     }
+  },
+  DIHUI: {
+    name: 'Dihui Star',
+    title: 'Ten Feet of Blue',
+    hp: 1918,
+    speed: 9,
+    attackInterval: 1.0,
+    baseDamage: 5,
+    comboDamage: 5,
+    staggerThreshold: 959,
+    staggerLength: 4,
+    color: '#2e74ff',
+    weapon: "Dihui Star's Blade",
+    spriteType: 'atlas',
+    defaultSprite: 'didle',
+
+    // Character-specific methods
+    onSuccessfulHit: function(damage, opponent, fighter) {
+      if (!opponent) return;
+      fighter.lastHitOpponent = opponent;
+      // Server handles status applications
+    },
+
+    onReceiveHit: function(amount, attacker, fighter) {
+      // Server handles shield and status
+    },
+
+    onUpdate: function(dt, opponent, fighter) {
+      // Update systems handled by server
+    },
+
+    processKeyPressed: function(key, fighter) {
+      if (key.toLowerCase() === 'q') {
+        if (typeof Network !== 'undefined' && Network.requestAbility) {
+          Network.requestAbility('deathedge', fighter.lastHitOpponent ? fighter.lastHitOpponent.id : null);
+        }
+      }
+    },
+
+    initializeCharacter: function(fighter) {
+      fighter.weapon = this.weapon;
+      fighter.shieldHp = 400;
+      fighter.maxShieldHp = 400;
+      fighter.bladeStacks = 0;
+    },
+
+    // Ultimate methods
+    activateUltimate: function(fighter, enemies) {
+      const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+      fighter.ultimateActive = true;
+      fighter.ultimatePhase = 0;
+      fighter.ultimateTimer = 3.0;
+      fighter.ultimateTotalDamage = 0;
+      fighter.ultimateDamageDealt = 0;
+      fighter.ultimateCameraZoom = 2.5;
+      fighter.ultimateBackgroundDim = 0.7;
+      fighter.ultimateName = "UTTERMOST REND SPACE - STRING SEVERANCE";
+      fighter.ultimateDialogue = '空間斬 - 絕緣';
+      fighter.currentSprite = 'du1';
+
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.ultimateProtected = true;
+          enemy.setState('idle');
+          enemy.ultimateStaggerLocked = true;
+          enemy.originalStaggerDecay = enemy.staggerDecayRate || 1;
+          enemy.staggerDecayRate = 0;
+        }
+      });
+
+      fighter.originalCollisionEnabled = fighter.collisionEnabled !== false;
+      fighter.collisionEnabled = false;
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.originalCollisionEnabled = enemy.collisionEnabled !== false;
+          enemy.collisionEnabled = false;
+        }
+      });
+
+      const centerPos = this.clampToArena(width / 2, height - 100);
+      fighter.pos.x = centerPos.x;
+      fighter.pos.y = centerPos.y;
+      fighter.vel.x = 0;
+      fighter.vel.y = 0;
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          enemy.vel.x = 0;
+          enemy.vel.y = 0;
+        }
+      });
+    },
+
+    endUltimate: function(fighter) {
+      fighter.currentSprite = 'didle';
+      fighter.ultimateCameraZoom = 1;
+      fighter.ultimateBackgroundDim = 0;
+
+      if (fighter.allEnemies && Array.isArray(fighter.allEnemies)) {
+        fighter.allEnemies.forEach(enemy => {
+          if (enemy) {
+            enemy.ultimateProtected = false;
+            enemy.setState('idle');
+            if (enemy.ultimateStaggerLocked) {
+              enemy.ultimateStaggerLocked = false;
+              enemy.staggerDecayRate = enemy.originalStaggerDecay || 1;
+            }
+          }
+        });
+      }
+
+      if (fighter.originalCollisionEnabled !== undefined) {
+        fighter.collisionEnabled = fighter.originalCollisionEnabled;
+      }
+    },
+
+    // Helper methods
+    clampToArena: function(x, y) {
+      const margin = 100;
+      return {
+        x: constrain(x, margin, width - margin),
+        y: constrain(y, margin, height - margin)
+      };
+    },
+
+    enforceBoundaries: function(fighter) {
+      const clamped = this.clampToArena(fighter.pos.x, fighter.pos.y);
+      fighter.pos.x = clamped.x;
+      fighter.pos.y = clamped.y;
+      if (fighter.pos.x <= 100 || fighter.pos.x >= width - 100) {
+        fighter.vel.x = 0;
+      }
+    },
+
+    dealUltimateDamage: function(fighter, enemy, damage, isFinalAttack, attackPhase) {
+      const previousProtected = enemy.ultimateProtected;
+      const previousCooldown = enemy.hitCooldown;
+      const knockbackAmount = isFinalAttack ? 150 : 100;
+      enemy.ultimateProtected = false;
+      fighter.requestDamageTo(enemy, damage, knockbackAmount, { ultimate: true, phase: attackPhase });
+      enemy.ultimateProtected = previousProtected;
+      enemy.hitCooldown = previousCooldown;
+      if (typeof addScreenShake === 'function') {
+        addScreenShake(damage, true);
+      }
+      this.enforceBoundaries(enemy);
+      this.enforceBoundaries(fighter);
+      if (!isFinalAttack && enemy.vel.x !== 0) {
+        enemy.vel.x *= 0.8;
+      }
+      fighter.vel.x = 0;
+      fighter.vel.y = 0;
+      fighter.ultimateTotalDamage += damage;
+      fighter.ultimateDamageDealt += damage;
+    }
+  }
 };
 
 let currentCharacter = 'JOHN';

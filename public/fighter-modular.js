@@ -651,6 +651,53 @@ class Fighter {
       }
     }
     
+    // State to sprite mapping for Dihui Star
+    if (this.characterKey === 'DIHUI') {
+      const dihuiStateMap = {
+        idle: 'didle',
+        run: 'dmove',
+        jump: 'ds1f1',
+        attack: 'ds2f1',
+        slam: 'ds3f1',
+        guard: 'dguard',
+        dash: 'dmove',
+        evade: 'devade',
+        hit: 'dhurt',
+        staggered: 'dhurt',
+        duck: 'didle',
+        ultimate: 'du1'
+      };
+
+      // Handle special states for Dihui
+      if (this.state === 'hit' || this.state === 'hurt') {
+        this.currentSprite = 'dhurt';
+      } else if (this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition) {
+        this.currentSprite = 'ds3f1';
+        if (slamJustActivated) {
+          this.spawnSlashEffect('ds3s1', { x: 0, y: -10 });
+        }
+      } else if (this.dashAttackActive) {
+        this.currentSprite = 'djoust2';
+        if (dashAttackJustActivated) {
+          this.spawnSlashEffect('ds1s1', { x: 0, y: -10 });
+        }
+      } else if (this.isDashing) {
+        if (this.usePostDashSprite) {
+          this.currentSprite = 'dhalt1';
+        } else {
+          this.currentSprite = 'dmove';
+        }
+      } else if (this.haltSequence) {
+        this.updateHaltSequence();
+      } else if (this.state === 'attack' || this.state === 'attacking') {
+        const frameDt = dt !== undefined ? dt : (typeof deltaTime !== 'undefined' ? deltaTime / 1000 : 1 / 60);
+        this.updateAttackSprite(frameDt);
+      } else {
+        this.currentSprite = dihuiStateMap[this.state] || 'didle';
+      }
+      return;
+    }
+    
     // State to sprite mapping for Callisto
     if (this.characterKey === 'CALLISTO') {
       const callistoStateMap = {

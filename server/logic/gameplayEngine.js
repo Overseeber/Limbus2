@@ -60,6 +60,10 @@ class GameplayEngine {
       const valencinaLogic = require('./characterLogic/valencina');
       state.resources = {};
       valencinaLogic.initializeResources(state, config);
+    } else if (characterKey === 'DIHUI') {
+      const dihuiLogic = require('./characterLogic/dihui');
+      state.resources = {};
+      dihuiLogic.initializeResources(state, config);
     }
   }
 
@@ -679,6 +683,7 @@ class GameplayEngine {
   updateCharacterSystems(state, dt) {
     if (state.characterKey === 'CALLISTO') return this.updateCallistoSystems(state, dt);
     if (state.characterKey === 'VALENCINA') return this.updateValencinaSystems(state, dt);
+    if (state.characterKey === 'DIHUI') return this.updateDihuiSystems(state, dt);
     return [];
   }
 
@@ -697,6 +702,17 @@ class GameplayEngine {
       return valencinaLogic.updateSystems(state, dt, config);
     } catch (e) {
       // Fallback if module not available
+      return [];
+    }
+  }
+
+  updateDihuiSystems(state, dt) {
+    try {
+      const dihuiLogic = require('./characterLogic/dihui');
+      const config = this.getCharacterConfig('DIHUI');
+      if (!config) return [];
+      return dihuiLogic.updateSystems(state, dt, config);
+    } catch (e) {
       return [];
     }
   }

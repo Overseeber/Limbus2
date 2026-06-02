@@ -29,6 +29,7 @@ const {
   updateJohnUltimate, 
   updateCallistoUltimate, 
   updateValencinaUltimate,
+  updateDihuiUltimate,
   dealUltDamage,
   clampToArena,
   clampX,
@@ -2102,6 +2103,9 @@ tick() {
                 case 'VALENCINA':
                     updateValencinaUltimate(player.gameState, player.ultimate, enemies, dt);
                     break;
+                case 'DIHUI':
+                    updateDihuiUltimate(player.gameState, player.ultimate, enemies, dt);
+                    break;
             }
             
             // Broadcast slash events for this tick
@@ -2195,11 +2199,16 @@ tick() {
                 player.ultimate.dialogue = "Installation Art no. 1: Your Flesh and Bones as the Gallery's Seats";
                 player.ultimate.timer = 1.5;
                 break;
-            case 'VALENCINA':
-                player.ultimate.name = 'DISPOSAL';
-                player.ultimate.dialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all!";
-                player.ultimate.timer = 1.5; // Opening pose shortened to 1.5 seconds
-                break;
+        case 'VALENCINA':
+          player.ultimate.name = 'DISPOSAL';
+          player.ultimate.dialogue = "I'm sick and tired of Ticket and her meddling fools—to hell with you all!";
+          player.ultimate.timer = 1.5; // Opening pose shortened to 1.5 seconds
+          break;
+        case 'DIHUI':
+          player.ultimate.name = 'UTTERMOST REND SPACE - STRING SEVERANCE';
+          player.ultimate.dialogue = '空間斬 - 絕緣';
+          player.ultimate.timer = 3.0; // 3 second opening pose
+          break;
         }
         
         // Protect enemies - they can't act during ultimate

@@ -59,12 +59,11 @@ const SNAPSHOT_INTERVAL_MS = 50; // server tick at 50ms
 // Client-side camera effects driven by server-authoritative state
 // DO NOT calculate gameplay here - only visual zoom effects
 const COMBAT_ZOOM = {
-    // Zoom intensities per attack category
-    ZOOM_IN_NORMAL: 0.82,     // Normal attacks: low to medium impact zoom
-    ZOOM_IN_COMBO3: 0.72,     // Combo finishers: medium to high impact zoom
-    ZOOM_IN_SLAM: 0.70,       // Slam attacks: medium to high impact zoom
-    ZOOM_IN_DASH: 0.70,       // Dash attacks: medium to high impact zoom
-    ZOOM_IN_ULTIMATE: 0.56,   // Ultimate damage frames: strongest cinematic zoom
+    // Unified zoom intensities - all attacks use same slam-level intensity
+    // Magnification: target / divisor, e.g., 1.0 / 0.70 = 1.43x
+    ZOOM_IN_UNIFIED: 0.70,    // All normal attacks (light, medium, heavy, dash, slam) = 1.43x magnification
+    ZOOM_IN_COMBO3: 0.72,     // Combo finisher (sequence 3 attacks) = 1.39x magnification
+    ZOOM_IN_ULTIMATE: 0.60,   // Cinematic ultimate zoom = 1.67x magnification
     
     // Timing
     WINDUP_TRACKING_SPEED: 25, // Fast tracking toward zoom target during windup (per-frame lerp factor)
@@ -132,13 +131,7 @@ let localSlotSelections = [];
 let roomCharacterSelectSlot = -1;
 let availableCharacterKeys = () => {
   const registry = (typeof CHARACTERS !== 'undefined') ? CHARACTERS : (window.CHARACTERS || {});
-  return Object.keys(registry || {}).filter(key => {
-    if (key === 'JOHN') return false;
-    if (/initialize/i.test(key)) return false;
-    const data = registry[key];
-    if (data && data.name && /initialize/i.test(data.name)) return false;
-    return true;
-  });
+  return Object.keys(registry || {});
 };
 // Current previewed character for the new selection flow
 let previewCharacterKey = null;
@@ -382,8 +375,8 @@ function processSnapshot(snapshot) {
         // Apply movement states without overriding the onGround() method
         fighter.isOnGround = typeof state.onGround !== 'undefined' ? state.onGround : fighter.onGround();
 
-        // Apply statuses
-        fighter.statuses = state.statuses || [];
+        // Apply statuses (clone so client-side state stays isolated)
+        fighter.statuses = (state.statuses || []).map(s => ({ ...s }));
 
         // Apply defeat state
         fighter.isDefeated = state.isDefeated || false;
@@ -681,6 +674,7 @@ function updateCombatZoom(dt) {
     
     // === STEP 1: Recalculate visibility limits ===
     combatZoom.maxSafeZoom = calculateMaxSafeZoom();
+    const minSafeZoom = 1.0 / combatZoom.maxSafeZoom; // Minimum zoom factor allowed
     
     // === STEP 2: Read server-authoritative state ===
     let anyAttacking = false;
@@ -706,19 +700,19 @@ function updateCombatZoom(dt) {
             target = isInDamagePhase ? COMBAT_ZOOM.ZOOM_IN_ULTIMATE : COMBAT_ZOOM.ZOOM_IN_UNIFIED;
             pri = 5;
         } else if (isSlam) {
-            target = COMBAT_ZOOM.ZOOM_IN_SLAM;
+            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
             pri = 4;
         } else if (isDash) {
-            target = COMBAT_ZOOM.ZOOM_IN_DASH;
+            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
             pri = 3;
         } else if (seq === 3 || fighter.chargeAttack) {
             target = COMBAT_ZOOM.ZOOM_IN_COMBO3;
             pri = 3;
         } else if (seq === 2) {
-            target = COMBAT_ZOOM.ZOOM_IN_NORMAL;
+            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
             pri = 2;
         } else if (seq === 1) {
-            target = COMBAT_ZOOM.ZOOM_IN_NORMAL;
+            target = COMBAT_ZOOM.ZOOM_IN_UNIFIED;
             pri = 1;
         }
         
@@ -729,12 +723,13 @@ function updateCombatZoom(dt) {
     // Farther camera = weaker impact zoom (zoom out already happened, don't emphasize further)
     // Closer camera = stronger impact zoom (make impact feel more dramatic)
     // Scale desired zoom toward 1.0 based on current camera distance
-    const baseCameraZoom = (typeof cameraZoom === 'number') ? cameraZoom : 1.0;
     let scaledZoom = desiredZoom;
-    if (baseCameraZoom < 1.0) {
-        // Far camera positions should weaken impact zoom so distant targets do not feel over-emphasized.
-        const distanceFactor = constrain(baseCameraZoom, 0.55, 1.0);
-        scaledZoom = 1.0 - (1.0 - desiredZoom) * distanceFactor;
+    if (typeof cameraZoom !== 'undefined' && cameraZoom > 1.0) {
+        // Camera is zoomed out (cameraZoom > 1.0 = farther)
+        // Reduce impact zoom strength: scale toward 1.0
+        const zoomDistance = cameraZoom;
+        const scaleFactor = 1.0 / zoomDistance; // e.g., if cameraZoom=2.0, scale by 0.5
+        scaledZoom = 1.0 - (1.0 - desiredZoom) * scaleFactor;
     }
     
     // === STEP 4: Hitstop state ===
@@ -776,20 +771,12 @@ function updateCombatZoom(dt) {
     }
     
     // === STEP 7: Visibility safety clamp ===
-    // Keep the final camera display scale within the safe visible range computed from fighter hitboxes.
-    // finalDisplayZoom = baseCameraZoom / combatZoom.currentZoom
-    // so require combatZoom.currentZoom >= baseCameraZoom / combatZoom.maxSafeZoom.
-    const ultimateActive = (window.allFighters || []).some(f => f.ultimateActive);
-    if (!ultimateActive) {
-      const requiredMinCombatZoom = combatZoom.maxSafeZoom > 0
-        ? baseCameraZoom / combatZoom.maxSafeZoom
-        : 1.0;
-      const minAllowedCombatZoom = Math.min(1.0, Math.max(0.55, requiredMinCombatZoom));
-
-      combatZoom.currentZoom = Math.max(minAllowedCombatZoom, combatZoom.currentZoom);
-    }
-
-    // Clamp to valid combat zoom range [0.55, 1.0]
+    // Prevent zoom from exceeding the limit where fighters would go off-screen
+    // minSafeZoom = 1.0 / maxSafeZoom (e.g., if maxSafeZoom=1.5, then minSafeZoom=0.67)
+    // Clamp: ensure currentZoom never goes below minSafeZoom (never magnifies more than allowed)
+    combatZoom.currentZoom = Math.max(minSafeZoom, combatZoom.currentZoom);
+    
+    // Clamp to valid range [0.55, 1.0]
     combatZoom.currentZoom = Math.max(0.55, Math.min(1.0, combatZoom.currentZoom));
     
     // === STEP 8: Zero camera influence when idle ===
@@ -1034,7 +1021,7 @@ function initRoomBattle(slots) {
 
   for (let i = 0; i < activePlayers.length; i++) {
     const slot = activePlayers[i];
-    const characterKey = slot.character || 'VALENCINA';
+    const characterKey = slot.character || 'JOHN';
     const isLocalPlayer = slot.clientId === mySocketId;
     
     const fighter = new Fighter(false, `P${i + 1}`, characterKey, true);
@@ -1162,7 +1149,9 @@ function handleAbilityResult(result) {
       spawnDamageNumber(resultData.damage, target.pos.copy(), fighter.facing, false, 'normal', false, 'normal');
     }
 
-    applyNetworkScreenShake(resultData);
+    if (typeof addScreenShake === 'function' && typeof resultData.damage === 'number') {
+      addScreenShake(resultData.damage);
+    }
 
     if (resultData.statuses) {
       applyStatusObjects(target, resultData.statuses);
@@ -1253,37 +1242,6 @@ function triggerAbilityVisuals(fighter, abilityId, result) {
   }
 }
 
-function applyNetworkScreenShake(event) {
-  if (!event || typeof addScreenShake !== 'function') return;
-
-  const intensity = typeof event.shakeIntensity === 'number'
-    ? event.shakeIntensity
-    : (typeof event.damage === 'number' ? event.damage : 0);
-  if (intensity <= 0) return;
-
-  const isUltimate = !!(
-    event.isUltimate ||
-    event.shakeType === 'ultimate' ||
-    event.attackType === 'ultimate' ||
-    event.type === 'ULTIMATE_SLASH'
-  );
-
-  addScreenShake(intensity, isUltimate);
-
-  // Ultimate impact zoom: increase additive zoom when ultimate deals damage with knockback
-  try {
-    if (isUltimate && typeof event.damage === 'number' && typeof event.knockback === 'number') {
-      if (event.knockback > 0 && event.damage > 0) {
-        window.ultimateImpactZoom = (window.ultimateImpactZoom || 0) + (0.05 * event.damage);
-        // Cap impact zoom to a reasonable value
-        window.ultimateImpactZoom = Math.min(window.ultimateImpactZoom, 2.5);
-      }
-    }
-  } catch (e) {
-    // ignore
-  }
-}
-
 function handleNetworkEvent(event) {
   if (!event || !window.allFighters) return;
 
@@ -1345,8 +1303,6 @@ function handleUltimateSlashEvent(event) {
       rotation: null
     });
   }
-
-  applyNetworkScreenShake(event);
 }
 
 function handleHitNetworkEvent(event) {
@@ -1368,7 +1324,9 @@ function handleHitNetworkEvent(event) {
   if (event.damage && typeof spawnDamageNumber === 'function') {
     spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'normal');
   }
-  applyNetworkScreenShake(event);
+  if (typeof addScreenShake === 'function') {
+    addScreenShake(event.damage);
+  }
 
   if (event.statuses && Array.isArray(event.statuses) && target.addStatus) {
     event.statuses.forEach(statusType => target.addStatus(statusType, 1, 1));
@@ -1393,7 +1351,9 @@ function handleSlamHitNetworkEvent(event) {
   if (event.damage && typeof spawnDamageNumber === 'function') {
     spawnDamageNumber(event.damage, target.pos.copy(), facing, false, 'normal', false, 'slam');
   }
-  applyNetworkScreenShake(event);
+  if (typeof addScreenShake === 'function') {
+    addScreenShake(event.damage);
+  }
 
   if (event.defeated && !target.isDefeated) {
     target.isDefeated = true;
@@ -1424,7 +1384,9 @@ function handleDashAttackNetworkEvent(event) {
       spawnDamageNumber(hit.damage, target.pos.copy(), facing, false, 'normal', false, 'normal');
     }
 
-    applyNetworkScreenShake(hit);
+    if (typeof addScreenShake === 'function' && typeof hit.damage === 'number') {
+      addScreenShake(hit.damage);
+    }
 
     if (hit.defeated && !target.isDefeated) {
       target.isDefeated = true;
@@ -1634,31 +1596,19 @@ function draw() {
       cameraY = lerp(cameraY, fighterMidpointY, 0.1); // Smooth transition
     }
     
-    // Recompute base camera state first, then apply impact zoom as a visual overlay.
-    updateCamera(deltaTime / 1000);
+    // Update combat impact zoom (client-side visual, reads server-authoritative state)
     updateCombatZoom(deltaTime / 1000);
-
-    // Decay ultimate impact zoom per frame (recover toward baseline)
-    if (typeof window.ultimateImpactZoom === 'undefined') window.ultimateImpactZoom = 0;
-    const recoveryPerFrame = 0.08;
-    window.ultimateImpactZoom = Math.max(0, window.ultimateImpactZoom - recoveryPerFrame);
-
-    const displayCameraZoomBase = combatZoom.active ? cameraZoom / combatZoom.currentZoom : cameraZoom;
-    const displayCameraZoom = (ultimateActive ? (displayCameraZoomBase + (window.ultimateImpactZoom || 0)) : displayCameraZoomBase);
-
-    if (typeof clampCameraToVisibility === 'function') {
-      clampCameraToVisibility(displayCameraZoom);
+    // Apply combat zoom as a DIVISIVE factor on top of existing camera zoom.
+    // combatZoom.currentZoom is < 1.0 for "zoom in" (e.g. 0.82 = 1/0.82 = 1.22x magnification).
+    // Division converts the <1 values into >1 magnification factors.
+    // When no attack is happening, currentZoom = 1.0 and camera is unaffected.
+    if (combatZoom.active) {
+        cameraZoom = cameraZoom / combatZoom.currentZoom;
     }
-
-    beginCamera(displayCameraZoom, true);
+    
+    beginCamera();
     drawArena();
-
-    // Darken background when any ultimate is active (fade handled by ultimate renderer)
-    if (typeof window.drawUltimateBackgroundDim === 'function') {
-      const maxDim = (window.allFighters || []).reduce((m, f) => Math.max(m, f.ultimateBackgroundDim || 0), 0);
-      window.drawUltimateBackgroundDim(maxDim);
-    }
-
+    
     // Draw ultimate render behind characters (name, dialogue, effects)
     if (window.allFighters) {
       window.allFighters.forEach(fighter => {
@@ -1687,14 +1637,14 @@ function draw() {
     drawDamageNumbers();
     drawParticles();
     
-    // Draw overhead healthbars for non-player fighters
-    drawOverheadHealthbars();
-
     // Draw vignette effect on vertical edges
     drawVignette();
     
+    // Draw overhead healthbars for non-player fighters
+    drawOverheadHealthbars();
+    
     endCamera();
-
+    
     // Draw ultimate UI overlay (damage counter, etc.)
     if (typeof renderUltimateUI === 'function') {
       renderUltimateUI();
@@ -2153,47 +2103,45 @@ function updateClientInterpolation() {
 function drawVignette() {
   // Vignette width in pixels
   const vignetteWidth = 150;
-  const bgWidth = window.bgScaledWidth || ARENA_WIDTH;
-  const bgHeight = window.bgScaledHeight || ARENA_HEIGHT;
-  const bgLeft = (ARENA_WIDTH / 2) - (bgWidth / 2);
-  const bgTop = (ARENA_HEIGHT / 2) - (bgHeight / 2);
-  const bgRight = bgLeft + bgWidth;
+  const bgHeight = window.bgScaledHeight || height;
+  const bgTop = (height / 2) - (bgHeight / 2);
   const bgBottom = bgTop + bgHeight;
-
-  noStroke();
-
-  // Draw left vignette inside arena bounds
+  
+  // Draw left vignette
   for (let x = 0; x < vignetteWidth; x++) {
     const alpha = map(x, 0, vignetteWidth, 255, 0);
     fill(0, 0, 0, alpha);
-    rect(bgLeft + x, bgTop, 1, bgHeight);
+    noStroke();
+    rect(x, 0, 1, height);
   }
-
-  // Draw right vignette inside arena bounds
+  
+  // Draw right vignette
   for (let x = 0; x < vignetteWidth; x++) {
     const alpha = map(x, 0, vignetteWidth, 0, 255);
     fill(0, 0, 0, alpha);
-    rect(bgRight - vignetteWidth + x, bgTop, 1, bgHeight);
+    noStroke();
+    rect(width - vignetteWidth + x, 0, 1, height);
   }
 
   // Draw top vignette at the top edge of the battle background image
   for (let y = 0; y < vignetteWidth; y++) {
     const alpha = map(y, 0, vignetteWidth, 255, 0);
     fill(0, 0, 0, alpha);
-    rect(bgLeft, bgTop + y, bgWidth, 1);
+    noStroke();
+    rect(0, bgTop + y, width, 1);
   }
 
   // Draw bottom vignette at the bottom edge of the battle background image
   for (let y = 0; y < vignetteWidth; y++) {
     const alpha = map(y, 0, vignetteWidth, 0, 255);
     fill(0, 0, 0, alpha);
-    rect(bgLeft, bgBottom - vignetteWidth + y, bgWidth, 1);
+    noStroke();
+    rect(0, bgBottom - vignetteWidth + y, width, 1);
   }
 
-  // Extend black bars beyond the arena edges in world space
   fill(0);
-  rect(bgLeft - 500, bgTop, 500, bgHeight);
-  rect(bgRight, bgTop, 500, bgHeight);
+  rect(-500, 0, 500, height);
+  rect(width, 0, 500, height);
 }
 
 function updateBattle() {
@@ -2248,10 +2196,6 @@ function updateBattle() {
   updateDamageNumbers(dt);
   updateParticles(dt);
   updateSlamLandingOverlays(dt);
-
-  if (typeof updateScreenShake === 'function') {
-    updateScreenShake(dt);
-  }
 }
 
 function getPlayerControlledFighter() {

@@ -121,6 +121,7 @@ function applyAcceleratingFutureEffects(state, config) {
   const speedBonus = Math.min(afCount * (afConfig.speedPerStack || 0.5), afConfig.maxSpeedBonus || 5);
   const intervalReduction = Math.min(afCount * (afConfig.intervalReductionPerStack || 2.5), afConfig.maxIntervalReduction || 80);
   
+  state.resources.acceleratingFuture = afCount;
   state.resources.acceleratingFutureSpeedBonus = speedBonus;
   state.resources.acceleratingFutureIntervalReduction = intervalReduction;
   state.resources.effectiveSpeed = (config.speed || 9) + speedBonus;
@@ -332,6 +333,8 @@ function updatePrecognition(state, config) {
   const precogStatus = getStatus(state, 'Precognition');
   const overheatStatus = getStatus(state, 'Overheat');
   
+  state.resources.precognition = precogStatus ? precogStatus.count : 0;
+
   if (precogStatus && precogStatus.count <= 0 && (!overheatStatus || overheatStatus.count <= 0)) {
     enterOverheat(state, config);
     return [{ type: 'OVERHEAT_ENTERED' }];
@@ -344,14 +347,24 @@ function updatePrecognition(state, config) {
 //====================================================================
 function enterOverheat(state, config) {
   removeStatus(state, 'Precognition');
-  const oh = ensureStatus(state, 'Overheat', config.overheat.startingValue || 30, 0);
+  const startingValue = config.overheat.startingValue || 30;
+  const oh = getStatus(state, 'Overheat');
+  if (oh) {
+    oh.count = startingValue;
+    oh.potency = 0;
+    oh.timer = 0;
+  } else {
+    ensureStatus(state, 'Overheat', startingValue, 0);
+  }
   state.resources.overheatDamageReduction = config.overheat.damageReduction || 0.2;
+  state.resources.overheat = startingValue;
 }
 
 function exitOverheat(state, config) {
   removeStatus(state, 'Overheat');
   state.resources.overheatDamageReduction = 0;
   state.resources.overheatTimer = 0;
+  state.resources.overheat = 0;
   // Restore Precognition
   ensureStatus(state, 'Precognition', config.precognition.startingValue || 30, 0);
 }
@@ -364,14 +377,18 @@ function updateOverheat(state, dt, config) {
       exitOverheat(state, config);
       events.push({ type: 'OVERHEAT_EXITED' });
     }
+    state.resources.overheat = 0;
     return events;
   }
+
+  state.resources.overheat = oh.count;
 
   // Every 5 seconds: lose 1 Overheat
   state.resources.overheatTimer = (state.resources.overheatTimer || 0) + dt;
   if (state.resources.overheatTimer >= 5.0) {
     state.resources.overheatTimer = 0;
     oh.count = Math.max(0, oh.count - 1);
+    state.resources.overheat = oh.count;
     if (oh.count <= 0) {
       exitOverheat(state, config);
       events.push({ type: 'OVERHEAT_EXITED' });

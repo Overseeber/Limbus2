@@ -1973,7 +1973,7 @@ tick() {
                 maxHp: player.gameState.maxHp,
                 state: player.gameState.state,
                 facing: player.gameState.facing,
-                statuses: player.gameState.statuses,
+                statuses: (player.gameState.statuses || []).map(s => ({ ...s })),
                 isDefeated: player.gameState.isDefeated,
                 isAttacking: player.gameState.isAttacking || false,
                 isGuarding: player.gameState.isGuarding || false,

@@ -167,14 +167,16 @@ const ValencinaRenderer = {
     }
     
     // Accelerating Future stacks text
-    if (res.acceleratingFuture && res.acceleratingFuture > 0) {
+    const afStatus = this._getStatus(fighter, 'Accelerating Future');
+    const afCount = afStatus ? afStatus.count : (res.acceleratingFuture || 0);
+    if (afCount > 0) {
       push();
       textAlign(CENTER, CENTER);
       textSize(10);
       fill(76, 175, 80, 200);
       stroke(0);
       strokeWeight(1);
-      text('AF x' + res.acceleratingFuture, fighter.pos.x, fighter.pos.y + 85);
+      text('AF x' + afCount, fighter.pos.x, fighter.pos.y + 85);
       pop();
     }
     

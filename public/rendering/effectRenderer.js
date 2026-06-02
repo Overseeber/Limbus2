@@ -19,16 +19,19 @@ const DAMAGE_CONSTANTS = {
   DEPOWERED_TEXT_SIZE: 10,
   EVADE_SIZE: 20,
   CRITICAL_TEXT_SIZE: 12,
+  STAGGER_TEXT_SIZE: 10,
+  TREMOR_TEXT_SIZE: 10,
   ICON_SIZE: 16,
   COLOR: {
     NORMAL_DAMAGE: { fill: [255, 255, 255], stroke: [0, 0, 0] },
-    BLOCKED_DAMAGE: { fill: [100, 200, 255], stroke: [70, 150, 220] },
-    EVADE: { fill: [150, 255, 150], stroke: [100, 200, 100] },
-    CRITICAL_DAMAGE: { fill: [255, 255, 0], stroke: [200, 200, 0] },
+    BLOCKED_DAMAGE: { fill: [56, 213, 245], stroke: [40, 170, 200] },
+    CRITICAL_DAMAGE: { fill: [246, 255, 0], stroke: [200, 220, 0] },
     BURN_DAMAGE: { fill: [255, 140, 0], stroke: [200, 100, 0] },
     BLEED_DAMAGE: { fill: [255, 50, 50], stroke: [200, 0, 0] },
     TREMOR_DAMAGE: { fill: [255, 255, 0], stroke: [200, 200, 0] },
-    RUPTURE_DAMAGE: { fill: [50, 255, 50], stroke: [0, 200, 0] }
+    RUPTURE_DAMAGE: { fill: [50, 255, 50], stroke: [0, 200, 0] },
+    STAGGER_DAMAGE: { fill: [231, 255, 143], stroke: [180, 210, 100] },
+    SINKING_DAMAGE: { fill: [77, 159, 255], stroke: [40, 100, 200] }
   }
 };
 
@@ -47,6 +50,20 @@ function spawnDamageNumber(amount, position, facing = 1, isBlocked = false, dama
     isCritical,
     attackType,
     textOverride
+  ));
+}
+
+function spawnStaggerDamage(amount, position, facing = 1, sourceType = 'normal') {
+  if (damageNumbers.length >= MAX_DAMAGE_NUMBERS) {
+    damageNumbers.shift();
+  }
+
+  damageNumbers.push(new StaggerDamageNumber(
+    amount,
+    position.x,
+    position.y + DAMAGE_CONSTANTS.BASE_Y_OFFSET - 30,
+    facing,
+    sourceType
   ));
 }
 
@@ -126,7 +143,7 @@ class DamageNumber extends FloatingIndicator {
   draw() {
     push();
     textAlign(CENTER, TOP);
-
+    
     let colors;
     if (this.isCritical) {
       colors = DAMAGE_CONSTANTS.COLOR.CRITICAL_DAMAGE;
@@ -146,86 +163,211 @@ class DamageNumber extends FloatingIndicator {
         case 'rupture':
           colors = DAMAGE_CONSTANTS.COLOR.RUPTURE_DAMAGE;
           break;
+        case 'sinking':
+          colors = DAMAGE_CONSTANTS.COLOR.SINKING_DAMAGE;
+          break;
         default:
           colors = DAMAGE_CONSTANTS.COLOR.NORMAL_DAMAGE;
       }
     }
 
-    this.drawAttackIcon(colors);
-
+    // Set text size first before measuring
     textSize(this.size);
+
+    const damageText = this.textOverride || `${floor(this.value)}`;
+    const textW = textWidth(damageText);
+
+    // Draw source icon to the LEFT of the damage number text
+    const sourceIconSize = 14;
+    const sourceIconX = this.pos.x - (textW / 2) - sourceIconSize - 6;
+    const sourceIconY = this.pos.y + 1;
+
+    this.drawSourceIcon(sourceIconX, sourceIconY, sourceIconSize, colors);
+
+    // Draw the damage number text
     fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
     stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
     strokeWeight(DAMAGE_CONSTANTS.STROKE_WEIGHT);
 
-    const damageTextX = this.pos.x - (DAMAGE_CONSTANTS.ICON_SIZE / 2);
-    text(`${floor(this.value)}`, damageTextX, this.pos.y);
+    text(damageText, this.pos.x, this.pos.y);
+
+    // Draw subtext for critical, depowered, tremor burst
+    let subText = null;
+    let subColor = null;
 
     if (this.isCritical) {
-      fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
-      textSize(DAMAGE_CONSTANTS.CRITICAL_TEXT_SIZE);
-      text('CRITICAL!', damageTextX, this.pos.y + this.size * 0.8);
+      subText = 'CRITICAL!';
+      subColor = DAMAGE_CONSTANTS.COLOR.CRITICAL_DAMAGE;
+    } else if (this.isBlocked) {
+      subText = 'DEPOWERED';
+      subColor = DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE;
+    } else if (this.damageType === 'tremor') {
+      subText = 'TREMOR BURST';
+      subColor = DAMAGE_CONSTANTS.COLOR.TREMOR_DAMAGE;
     }
 
-    if (this.isBlocked) {
-      fill(
-        DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE.fill[0],
-        DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE.fill[1],
-        DAMAGE_CONSTANTS.COLOR.BLOCKED_DAMAGE.fill[2],
-        this.alpha
-      );
+    if (subText) {
+      const sColor = subColor || colors;
+      fill(sColor.fill[0], sColor.fill[1], sColor.fill[2], this.alpha);
+      stroke(sColor.stroke[0], sColor.stroke[1], sColor.stroke[2], this.alpha);
       textSize(DAMAGE_CONSTANTS.DEPOWERED_TEXT_SIZE);
-      text('depowered', damageTextX, this.pos.y + this.size * 0.8);
+      text(subText, this.pos.x, this.pos.y + this.size * 0.8);
     }
 
     pop();
   }
 
-  drawAttackIcon(colors) {
+  drawSourceIcon(x, y, iconSize, colors) {
     push();
-    const iconX = this.pos.x + (this.size / 2) + 5;
-    const iconY = this.pos.y + (this.size / 2) - (DAMAGE_CONSTANTS.ICON_SIZE / 2);
+    // Enable stroke for icon outlines
+    strokeWeight(1.5);
+    const r = colors.fill[0];
+    const g = colors.fill[1];
+    const b = colors.fill[2];
+    fill(r, g, b, this.alpha);
+    stroke(r * 0.7, g * 0.7, b * 0.7, this.alpha);
 
+    // Determine which icon shape to draw based on damage source
+    if (this.isBlocked) {
+      // Blocked/depowered: shield shape
+      rectMode(CENTER);
+      rect(x + iconSize / 2, y + iconSize / 2, iconSize * 0.8, iconSize * 0.9, 3);
+      // Small cross on shield
+      stroke(r, g, b, this.alpha);
+      line(x + iconSize / 2 - 3, y + iconSize / 2, x + iconSize / 2 + 3, y + iconSize / 2);
+      line(x + iconSize / 2, y + iconSize / 2 - 3, x + iconSize / 2, y + iconSize / 2 + 3);
+      rectMode(CORNER);
+    } else if (this.damageType === 'burn') {
+      // Burn: flame triangle
+      triangle(
+        x + iconSize / 2, y + 2,
+        x + 2, y + iconSize - 2,
+        x + iconSize - 2, y + iconSize - 2
+      );
+    } else if (this.damageType === 'bleed') {
+      // Bleed: droplet circle
+      ellipse(x + iconSize / 2, y + iconSize / 2, iconSize * 0.8);
+    } else if (this.damageType === 'tremor') {
+      // Tremor: diamond
+      push();
+      translate(x + iconSize / 2, y + iconSize / 2);
+      rotate(PI / 4);
+      rect(-iconSize / 3, -iconSize / 3, iconSize * 0.66, iconSize * 0.66, 1);
+      pop();
+    } else if (this.damageType === 'rupture') {
+      // Rupture: hexagon burst
+      beginShape();
+      for (let i = 0; i < 6; i++) {
+        const angle = (PI / 3) * i - PI / 6;
+        const px = x + iconSize / 2 + cos(angle) * iconSize * 0.45;
+        const py = y + iconSize / 2 + sin(angle) * iconSize * 0.45;
+        vertex(px, py);
+      }
+      endShape(CLOSE);
+    } else if (this.damageType === 'sinking') {
+      // Sinking: wave arc
+      noFill();
+      stroke(r, g, b, this.alpha);
+      strokeWeight(2);
+      arc(x + iconSize / 2, y + iconSize / 2 + 2, iconSize * 0.8, iconSize * 0.5, PI, TWO_PI);
+    } else {
+      // Physical attack: weapon shape based on attack type
+      switch (this.attackType) {
+        case 'slam':
+          // Downward triangle
+          triangle(
+            x + iconSize / 2, y + 2,
+            x + 2, y + iconSize - 2,
+            x + iconSize - 2, y + iconSize - 2
+          );
+          break;
+        case 'dash':
+          // Speed circle with arrow
+          ellipse(x + iconSize / 2, y + iconSize / 2, iconSize * 0.8);
+          // Small arrow inside
+          stroke(r, g, b, this.alpha);
+          line(x + 3, y + iconSize / 2, x + iconSize - 3, y + iconSize / 2);
+          line(x + iconSize - 6, y + iconSize / 2 - 3, x + iconSize - 3, y + iconSize / 2);
+          line(x + iconSize - 6, y + iconSize / 2 + 3, x + iconSize - 3, y + iconSize / 2);
+          break;
+        case 'ultimate':
+          // Diamond star
+          push();
+          translate(x + iconSize / 2, y + iconSize / 2);
+          rotate(PI / 4);
+          rect(-iconSize / 2.5, -iconSize / 2.5, iconSize * 0.8, iconSize * 0.8, 2);
+          pop();
+          break;
+        default:
+          // Normal weapon: square
+          rect(x + 1, y + 1, iconSize - 2, iconSize - 2, 2);
+      }
+    }
+
+    pop();
+  }
+}
+
+/**
+ * StaggerDamageNumber - Displays stagger damage as a separate floating number
+ * in light yellow with source indicator on the left.
+ */
+class StaggerDamageNumber extends FloatingIndicator {
+  constructor(value, x, y, facing, sourceType = 'normal') {
+    super(x, y);
+    this.value = value;
+    this.sourceType = sourceType;
+    this.vel = createVector(
+      facing * 1.2 + random(-0.4, 0.4),
+      random(-2.0, -1.0)
+    );
+    this.size = 12;
+  }
+
+  update(dt) {
+    super.update(dt);
+    this.vel.y -= DAMAGE_CONSTANTS.GRAVITY * 0.7;
+  }
+
+  draw() {
+    push();
+    textAlign(CENTER, TOP);
+
+    const colors = DAMAGE_CONSTANTS.COLOR.STAGGER_DAMAGE;
+
+    // Source icon to the left
+    const iconSize = 10;
+    const iconX = this.pos.x - 20 - iconSize;
+    const iconY = this.pos.y + 2;
+
+    this.drawSourceIcon(iconX, iconY, iconSize, colors);
+
+    // Stagger number
+    textSize(this.size);
+    fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
+    stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
+    strokeWeight(1);
+    text(`${floor(this.value)}`, this.pos.x, this.pos.y);
+
+    pop();
+  }
+
+  drawSourceIcon(x, y, iconSize, colors) {
+    push();
     fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
     stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
     strokeWeight(1);
 
-    switch (this.attackType) {
-      case 'normal':
-        rect(iconX, iconY, DAMAGE_CONSTANTS.ICON_SIZE, DAMAGE_CONSTANTS.ICON_SIZE, 2);
-        break;
-      case 'slam':
-        triangle(
-          iconX + DAMAGE_CONSTANTS.ICON_SIZE / 2, iconY,
-          iconX, iconY + DAMAGE_CONSTANTS.ICON_SIZE,
-          iconX + DAMAGE_CONSTANTS.ICON_SIZE, iconY + DAMAGE_CONSTANTS.ICON_SIZE
-        );
-        break;
-      case 'dash':
-        ellipse(
-          iconX + DAMAGE_CONSTANTS.ICON_SIZE / 2,
-          iconY + DAMAGE_CONSTANTS.ICON_SIZE / 2,
-          DAMAGE_CONSTANTS.ICON_SIZE
-        );
-        break;
-      case 'ultimate':
-        push();
-        translate(
-          iconX + DAMAGE_CONSTANTS.ICON_SIZE / 2,
-          iconY + DAMAGE_CONSTANTS.ICON_SIZE / 2
-        );
-        rotate(PI / 4);
-        rect(
-          -DAMAGE_CONSTANTS.ICON_SIZE / 2,
-          -DAMAGE_CONSTANTS.ICON_SIZE / 2,
-          DAMAGE_CONSTANTS.ICON_SIZE,
-          DAMAGE_CONSTANTS.ICON_SIZE,
-          2
-        );
-        pop();
-        break;
-      default:
-        rect(iconX, iconY, DAMAGE_CONSTANTS.ICON_SIZE, DAMAGE_CONSTANTS.ICON_SIZE, 2);
+    if (this.sourceType === 'tremor') {
+      // Diamond for tremor stagger
+      push();
+      translate(x + iconSize / 2, y + iconSize / 2);
+      rotate(PI / 4);
+      rect(-iconSize / 2, -iconSize / 2, iconSize, iconSize, 1);
+      pop();
+    } else {
+      // Default stagger: small shield
+      rect(x, y, iconSize, iconSize, 2);
     }
 
     pop();
@@ -402,12 +544,50 @@ function spawnBurnParticle(x, y) {
     x: x,
     y: y,
     vx: random(-30, 30),
-    vy: random(-80, -40),
-    life: random(0.5, 1.0),
-    maxLife: random(0.5, 1.0),
+    vy: random(-60, -20),
+    life: random(0.3, 0.6),
+    maxLife: random(0.3, 0.6),
     size: random(2, 5),
     type: 'burn'
   });
+}
+
+function spawnBleedParticle(x, y) {
+  if (particles.length >= MAX_PARTICLES) {
+    particles.shift();
+  }
+  particles.push({
+    x: x + random(-10, 10),
+    y: y,
+    vx: random(-20, 20),
+    vy: random(-40, -10),
+    life: random(0.4, 0.8),
+    maxLife: random(0.4, 0.8),
+    size: random(2, 6),
+    type: 'bleed'
+  });
+}
+
+function spawnStatusParticles(statusType, x, y, count = 5) {
+  const particleType = statusType === 'Burn' ? 'burn' :
+                       statusType === 'Bleed' ? 'bleed' :
+                       statusType === 'Sinking' ? 'sinking' : 'default';
+  
+  for (let i = 0; i < count; i++) {
+    if (particles.length >= MAX_PARTICLES) {
+      particles.shift();
+    }
+    particles.push({
+      x: x + random(-15, 15),
+      y: y + random(-15, 15),
+      vx: random(-40, 40),
+      vy: random(-50, -10),
+      life: random(0.3, 0.7),
+      maxLife: random(0.3, 0.7),
+      size: random(2, 5),
+      type: particleType
+    });
+  }
 }
 
 function updateParticles(dt) {
@@ -418,80 +598,52 @@ function updateParticles(dt) {
       particles.splice(i, 1);
       continue;
     }
-    
     p.x += p.vx * dt;
     p.y += p.vy * dt;
-    
-    if (p.type === 'debris') {
-      p.vy += 500 * dt; // Gravity
-    }
+    p.vy += 200 * dt;
+    p.alpha = p.life / p.maxLife;
   }
 }
 
 function drawParticles() {
-  for (let i = particles.length - 1; i >= 0; i--) {
+  for (let i = 0, len = particles.length; i < len; i++) {
     const p = particles[i];
-    const alpha = map(p.life, 0, p.maxLife, 0, 255);
-    
+    const alpha = p.alpha * 255;
+
     push();
     noStroke();
-    
+
     switch (p.type) {
       case 'debris':
-        fill(150, 100, 50, alpha);
+        fill(120, 100, 80, alpha);
         rect(p.x, p.y, p.size, p.size);
         break;
       case 'spark':
         fill(255, 255, 200, alpha);
         ellipse(p.x, p.y, p.size);
         break;
-      case 'evade':
-        fill(150, 150, 255, alpha * 0.3);
-        ellipse(p.x, p.y, p.size);
-        break;
-      case 'tremor':
-        fill(150, 100, 255, alpha);
-        ellipse(p.x, p.y, p.size);
-        break;
       case 'burn':
-        fill(255, 150, 50, alpha);
+        fill(255, 140 + random(-20, 20), 0, alpha);
         ellipse(p.x, p.y, p.size);
         break;
+      case 'bleed':
+        fill(200 + random(-20, 20), 20, 20, alpha);
+        ellipse(p.x, p.y, p.size);
+        break;
+      case 'sinking':
+        fill(50, 150, 255, alpha);
+        rect(p.x, p.y, p.size, p.size);
+        break;
+      default:
+        fill(255, alpha);
+        ellipse(p.x, p.y, p.size);
     }
-    
+
     pop();
   }
 }
 
-// ==========================
-// STATUS VISUALS
-// ==========================
-const STATUS_ICONS = {
-  Burn: '🔥',
-  Bleed: '💧',
-  Tremor: '🌀',
-  Rupture: '💥',
-  Sinking: '⬇',
-  Charge: '⚡',
-  Poise: '🛡',
-  Haste: '⏩',
-  Bind: '⛓',
-  Fragile: '💔',
-  Protection: '🛡',
-  Precognition: '👁',
-  Overheat: '🌡',
-  Stagger: '💫'
-};
-
-function getStatusIcon(type) {
-  return STATUS_ICONS[type] || '❓';
-}
-
-// Cleanup function to reset all visual arrays
-function resetVisualEffects() {
+function clearEffects() {
   damageNumbers = [];
   particles = [];
-  screenShakeIntensity = 0;
-  screenShakeX = 0;
-  screenShakeY = 0;
 }

@@ -656,7 +656,7 @@ class Fighter {
       const dihuiStateMap = {
         idle: 'didle',
         run: 'dmove',
-        jump: 'ds1f1',
+        jump: 'dmove',
         attack: 'ds2f1',
         slam: 'ds3f1',
         guard: 'dguard',
@@ -688,7 +688,7 @@ class Fighter {
           this.currentSprite = 'dmove';
         }
       } else if (this.haltSequence) {
-        this.updateHaltSequence();
+        this.updateDihuiHaltSequence();
       } else if (this.state === 'attack' || this.state === 'attacking') {
         const frameDt = dt !== undefined ? dt : (typeof deltaTime !== 'undefined' ? deltaTime / 1000 : 1 / 60);
         this.updateAttackSprite(frameDt);
@@ -840,6 +840,12 @@ class Fighter {
       return;
     }
 
+    // Dihui Star uses its own attack sequence mapping
+    if (this.characterKey === 'DIHUI') {
+      this.updateDihuiAttackSequence();
+      return;
+    }
+
     this.updateAttackSequence();
   }
 
@@ -915,6 +921,15 @@ class Fighter {
     this.lastAttackPhase = this.attackPhase;
   }
 
+  updateDihuiHaltSequence() {
+    // Halt sequence: dhalt1 > dhalt2 > didle
+    const sequence = ['dhalt1', 'dhalt2', 'didle'];
+    
+    if (this.haltFrame < sequence.length) {
+      this.currentSprite = sequence[this.haltFrame];
+    }
+  }
+
   updateHaltSequence() {
     // Halt sequence: halt1 > halt2 > idle
     const sequence = ['halt1', 'halt2', 'idle'];
@@ -922,6 +937,61 @@ class Fighter {
     if (this.haltFrame < sequence.length) {
       this.currentSprite = sequence[this.haltFrame];
     }
+  }
+
+  updateDihuiAttackSequence() {
+    if (this.attackSequence <= 0) return;
+
+    const attackPhase = this.attackPhase || 'startup';
+    const attackKey = this.attackSequence === 1 ? 'light' : this.attackSequence === 2 ? 'medium' : 'heavy';
+    const attackDef = CHARACTERS[this.characterKey] && CHARACTERS[this.characterKey].attacks ? CHARACTERS[this.characterKey].attacks[attackKey] : null;
+
+    // Detect phase transition for slash spawning
+    const phaseTransitioned = this.lastAttackPhase !== attackPhase && attackPhase !== 'none';
+
+    if (this.attackSequence === 1) {
+      // Attack 1: draw1 (windup) > ds1f1 with ds1s1 (hit)
+      if (attackPhase === 'startup') {
+        this.currentSprite = 'draw1';
+      } else if (attackPhase === 'active') {
+        this.currentSprite = 'ds1f1';
+        // Spawn ds1s1 slash when entering active phase
+        if (phaseTransitioned) {
+          this.spawnSlashEffect('ds1s1', { x: 0, y: -10 });
+        }
+      } else if (attackPhase === 'recovery' || attackPhase === 'comboHold') {
+        this.currentSprite = 'ds1f1';
+      }
+    } else if (this.attackSequence === 2) {
+      // Attack 2: ds1f1 (windup) > ds2f1 with ds2s1 (hit) > ds2f2
+      if (attackPhase === 'startup') {
+        this.currentSprite = 'ds1f1';
+      } else if (attackPhase === 'active') {
+        this.currentSprite = 'ds2f1';
+        // Spawn ds2s1 slash when entering active phase
+        if (phaseTransitioned) {
+          this.spawnSlashEffect('ds2s1', { x: 0, y: -10 });
+        }
+      } else if (attackPhase === 'recovery' || attackPhase === 'comboHold') {
+        this.currentSprite = 'ds2f2';
+      }
+    } else if (this.attackSequence === 3) {
+      // Attack 3: ds2f2 > ds3f1 with ds3s1 (hit) > ds3f2
+      if (attackPhase === 'startup') {
+        this.currentSprite = 'ds2f2';
+      } else if (attackPhase === 'active') {
+        this.currentSprite = 'ds3f1';
+        // Spawn ds3s1 slash when entering active phase
+        if (phaseTransitioned) {
+          this.spawnSlashEffect('ds3s1', { x: 0, y: -10 });
+        }
+      } else if (attackPhase === 'recovery' || attackPhase === 'comboHold') {
+        this.currentSprite = 'ds3f2';
+      }
+    }
+
+    // Track attack phase for next frame's transition detection
+    this.lastAttackPhase = attackPhase;
   }
 
   updateCallistoAttackSequence() {
@@ -2868,8 +2938,12 @@ addCombo(attacker) {
     if (this.spriteType === 'atlas' && this.currentSprite) {
       push();
 
-      // Flip atlas sprites based on facing
-      scale(this.facing === 1 ? -1 : 1, 1);
+      // Flip atlas sprites based on facing, but force left facing during ultimate if flag is set
+      if (this.ultimateForceLeftFacing) {
+        scale(-1, 1); // Always face left during ultimate
+      } else {
+        scale(this.facing === 1 ? -1 : 1, 1);
+      }
 
       // Debug missing sprite
       const spriteInfo = SPRITES?.[this.currentSprite];

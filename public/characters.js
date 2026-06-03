@@ -203,9 +203,9 @@ const SPRITES = {
 
   // ===== Star4 =====
   du1:    { atlas:"star4", x:0, y:0, w:3, h:2 },
-  du2:    { atlas:"star4", x:0, y:3, w:3, h:2 },
+  du2:    { atlas:"star4", x:3, y:0, w:3, h:2 },
   djoust1:{ atlas:"star4", x:0, y:2, w:3, h:2 },
-  djoust2:{ atlas:"star4", x:2, y:3, w:5, h:2 },
+  djoust2:{ atlas:"star4", x:3, y:2, w:5, h:2 },
   djoust3:{ atlas:"star4", x:0, y:4, w:5, h:2 },
   djoust4:{ atlas:"star4", x:0, y:6, w:5, h:2 },
   dhalt1: { atlas:"star4", x:5, y:4, w:3, h:2 },
@@ -224,7 +224,7 @@ const SPRITES = {
   // ===== Dslash =====
   ds3s1: { atlas:"dslash", x:0, y:0, w:6, h:3, offsetX:+256 },
   ds1s1: { atlas:"dslash", x:0, y:4, w:4, h:4, offsetX:+128, offsetY:+256 },
-  ds2s1: { atlas:"dslash", x:4, y:4, w:4, h:3, offsetX:-128 },
+  ds2s1: { atlas:"dslash", x:4, y:4, w:4, h:3, offsetX:-128, offsetY:-256 },
   dline: { atlas:"dslash", x:0, y:3, w:8, h:1, offsetX:-384 },
   dba:   { atlas:"dslash", x:6, y:1, w:1, h:1 }
 };
@@ -2902,16 +2902,92 @@ CALLISTO: {
     name: 'Dihui Star',
     title: 'Ten Feet of Blue',
     hp: 1918,
+    maxHp: 1918,
     speed: 9,
     attackInterval: 1.0,
     baseDamage: 5,
     comboDamage: 5,
+    knockbackMultiplier: 0.0,
     staggerThreshold: 959,
     staggerLength: 4,
+    staggerRecoveryDelay: 2.0,
+    staggerRecoveryRate: 12,
     color: '#2e74ff',
     weapon: "Dihui Star's Blade",
     spriteType: 'atlas',
     defaultSprite: 'didle',
+
+    // State-based sprite mappings
+    sprites: {
+      idle: 'didle',
+      hurt: 'dhurt',
+      move: 'dmove',
+      jump: 'dmove',
+      guard: 'dguard',
+      evade: 'devade',
+      halt: ['dhalt1', 'dhalt2'],
+      joust: ['djoust2', 'djoust3', 'djoust4']
+    },
+
+    // Attack definitions with animation sequences
+    attacks: {
+      light: {
+        startup: 0.08,
+        active: 0.12,
+        recovery: 0.32,
+        range: 200,
+        damage: 1.0,
+        knockback: 30,
+        staggerDamage: 50,
+        combo: 1,
+        startupBackward: 110,
+        attackForward: 360,
+        onAttackEffects: { poiseCountGain: 3 },
+        animation: {
+          windup: 'draw1',
+          hit: ['ds1f1', 'ds1s1']
+        }
+      },
+      medium: {
+        startup: 0.12,
+        active: 0.16,
+        recovery: 0.40,
+        range: 240,
+        damage: 1.2,
+        knockback: 50,
+        staggerDamage: 75,
+        combo: 2,
+        startupBackward: 130,
+        attackForward: 400,
+        onAttackEffects: { poiseCountGain: 3 },
+        animation: {
+          windup: 'ds1f1',
+          hit: ['ds2f1', 'ds2s1'],
+          recovery: 'ds2f2'
+        }
+      },
+      heavy: {
+        startup: 0.20,
+        active: 0.20,
+        recovery: 0.50,
+        range: 300,
+        damage: 1.6,
+        knockback: 80,
+        staggerDamage: 120,
+        combo: 3,
+        startupBackward: 150,
+        attackForward: 460,
+        onAttackEffects: { inflictBladetrailAfterimage: true, critBonusDamage: 0.3 },
+        animation: {
+          windup: 'ds2f2',
+          hit: ['ds3f1', 'ds3s1'],
+          recovery: 'ds3f2'
+        }
+      }
+    },
+
+    // On hit effects
+    onHitEffects: { bladetrailAfterimagePotency: 1, poiseCountGain: 1 },
 
     // Character-specific methods
     onSuccessfulHit: function(damage, opponent, fighter) {
@@ -2948,14 +3024,15 @@ CALLISTO: {
       const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
       fighter.ultimateActive = true;
       fighter.ultimatePhase = 0;
-      fighter.ultimateTimer = 3.0;
+      fighter.ultimateTimer = 1.0;
       fighter.ultimateTotalDamage = 0;
       fighter.ultimateDamageDealt = 0;
-      fighter.ultimateCameraZoom = 2.5;
+      fighter.ultimateCameraZoom = 1.0;
       fighter.ultimateBackgroundDim = 0.7;
       fighter.ultimateName = "UTTERMOST REND SPACE - STRING SEVERANCE";
       fighter.ultimateDialogue = '空間斬 - 絕緣';
       fighter.currentSprite = 'du1';
+      fighter.ultimateForceLeftFacing = true; // Force sprites to face left during ultimate
 
       targetEnemies.forEach(enemy => {
         if (enemy) {
@@ -2976,6 +3053,7 @@ CALLISTO: {
         }
       });
 
+      // Position fighter at center initially
       const centerPos = this.clampToArena(width / 2, height - 100);
       fighter.pos.x = centerPos.x;
       fighter.pos.y = centerPos.y;
@@ -2989,10 +3067,146 @@ CALLISTO: {
       });
     },
 
+    updateUltimate: function(fighter, enemies, dt) {
+      const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+
+      // Enforce boundaries
+      this.enforceBoundaries(fighter);
+      targetEnemies.forEach(enemy => {
+        if (enemy) {
+          this.enforceBoundaries(enemy);
+        }
+      });
+
+      // Only decrement timer in specific phases
+      if (fighter.ultimatePhase === 0 || fighter.ultimatePhase === 2 || 
+          fighter.ultimatePhase === 4 || fighter.ultimatePhase === 6 ||
+          fighter.ultimatePhase === 9) {
+        fighter.ultimateTimer -= dt;
+      }
+
+      switch (fighter.ultimatePhase) {
+        case 0: // du1 - initial pose (1 second)
+          if (fighter.ultimateTimer <= 0) {
+            fighter.ultimatePhase = 1;
+            fighter.ultimateTimer = 0.5;
+            fighter.currentSprite = 'du2';
+          }
+          break;
+
+        case 1: // du2 - teleport to right edge
+          if (fighter.ultimateTimer <= 0) {
+            // Teleport to right edge of arena
+            const rightEdge = this.clampToArena(width - 150, height - 100);
+            fighter.pos.x = rightEdge.x;
+            fighter.pos.y = rightEdge.y;
+            fighter.vel.x = 0;
+            fighter.vel.y = 0;
+
+            // Position enemy at center
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                const centerPos = this.clampToArena(width / 2, height - 100);
+                enemy.pos.x = centerPos.x;
+                enemy.pos.y = centerPos.y;
+                enemy.vel.x = 0;
+                enemy.vel.y = 0;
+              }
+            });
+
+            // Zoom out to show 100% of arena, centered on arena
+            fighter.ultimateCameraZoom = 1.0;
+            fighter.ultimateCameraCenterOnArena = true;
+            fighter.ultimatePhase = 2;
+            fighter.ultimateTimer = 0.5;
+          }
+          break;
+
+        case 2: // Transition to du3, zoom in
+          if (fighter.ultimateTimer <= 0) {
+            fighter.currentSprite = 'du3';
+            fighter.ultimateCameraZoom = 2.0; // Zoom in
+            fighter.ultimateCameraCenterOnArena = false;
+            fighter.ultimatePhase = 3;
+            fighter.ultimateTimer = 0.3;
+          }
+          break;
+
+        case 3: // du3 - attack setup
+          if (fighter.ultimateTimer <= 0) {
+            fighter.currentSprite = 'du4';
+            fighter.ultimatePhase = 4;
+            fighter.ultimateTimer = 0.2;
+          }
+          break;
+
+        case 4: // du4 - attack 1
+          if (fighter.ultimateTimer <= 0) {
+            // Deal damage
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                this.dealUltimateDamage(fighter, enemy, fighter.baseDamage * 2, false, 1);
+              }
+            });
+            fighter.spawnSlashEffect('ds3s1', { x: 0, y: -10 });
+            fighter.currentSprite = 'du5';
+            fighter.ultimatePhase = 5;
+            fighter.ultimateTimer = 0.2;
+          }
+          break;
+
+        case 5: // du5 - attack 2
+          if (fighter.ultimateTimer <= 0) {
+            // Deal damage
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                this.dealUltimateDamage(fighter, enemy, fighter.baseDamage * 2, false, 2);
+              }
+            });
+            fighter.spawnSlashEffect('ds3s1', { x: 0, y: -10 });
+            fighter.currentSprite = 'du6';
+            fighter.ultimatePhase = 6;
+            fighter.ultimateTimer = 0.2;
+          }
+          break;
+
+        case 6: // du6 - attack 3
+          if (fighter.ultimateTimer <= 0) {
+            // Deal damage
+            targetEnemies.forEach(enemy => {
+              if (enemy) {
+                this.dealUltimateDamage(fighter, enemy, fighter.baseDamage * 3, true, 3);
+              }
+            });
+            fighter.spawnSlashEffect('ds3s1', { x: 0, y: -10 });
+            fighter.currentSprite = 'du7';
+            fighter.ultimatePhase = 7;
+            fighter.ultimateTimer = 0.3;
+          }
+          break;
+
+        case 7: // du7 - transition to final
+          if (fighter.ultimateTimer <= 0) {
+            fighter.currentSprite = 'du8';
+            fighter.ultimateCameraZoom = 1.0; // Zoom to x1, centered on arena
+            fighter.ultimateCameraCenterOnArena = true;
+            fighter.ultimatePhase = 9;
+            fighter.ultimateTimer = 2.0; // Hold for 2 seconds then end
+          }
+          break;
+
+        case 9: // du8 - final pose, let automatic system handle ending
+          // Timer decrements automatically, system will end when timer reaches 0
+          break;
+      }
+    },
+
     endUltimate: function(fighter) {
       fighter.currentSprite = 'didle';
       fighter.ultimateCameraZoom = 1;
       fighter.ultimateBackgroundDim = 0;
+      fighter.ultimateForceLeftFacing = false;
+      fighter.ultimateCameraCenterOnArena = false;
 
       if (fighter.allEnemies && Array.isArray(fighter.allEnemies)) {
         fighter.allEnemies.forEach(enemy => {

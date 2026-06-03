@@ -36,8 +36,14 @@ function updateCamera(dt) {
   const ultimateFighter = fighters.find(f => f.ultimateActive);
   if (ultimateFighter) {
     cameraTargetZoom = ultimateFighter.ultimateCameraZoom || 2.5;
-    cameraTargetX = ultimateFighter.pos.x;
-    cameraTargetY = ultimateFighter.pos.y;
+    if (ultimateFighter.ultimateCameraCenterOnArena) {
+      // Center on arena instead of fighter
+      cameraTargetX = width / 2;
+      cameraTargetY = height - 100;
+    } else {
+      cameraTargetX = ultimateFighter.pos.x;
+      cameraTargetY = ultimateFighter.pos.y;
+    }
   } else {
     const positions = fighters.map(f => f.pos).filter(p => p && typeof p.x === 'number' && typeof p.y === 'number');
     if (positions.length === 0) return;

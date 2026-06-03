@@ -19,7 +19,7 @@ const DIHUI_CONFIG = {
   attackInterval: 1.0,
   baseDamage: 5,
   comboDamage: 5,           // Per-combo bonus damage: Damage = BaseDamage + (ComboDamage × ComboCount)
-  knockbackMultiplier: 1.0, // 100% knockback
+  knockbackMultiplier: 0.0, // 0% knockback
   staggerThreshold: 959,
   staggerLength: 4,
   staggerRecoveryDelay: 2.0,
@@ -41,25 +41,51 @@ const DIHUI_CONFIG = {
   spriteType: 'atlas',
   defaultSprite: 'didle',
   
+  // STATE-BASED SPRITE MAPPINGS
+  sprites: {
+    idle: 'didle',
+    hurt: 'dhurt',
+    move: 'dmove',
+    jump: 'dmove',
+    guard: 'dguard',
+    evade: 'devade',
+    halt: ['dhalt1', 'dhalt2'],
+    joust: ['djoust2', 'djoust3', 'djoust4']
+  },
+  
   // ATTACK SEQUENCES
   attacks: {
     light: {
       startup: 0.08, active: 0.12, recovery: 0.32,
       range: 200, damage: 1.0, knockback: 30, staggerDamage: 50, combo: 1,
       startupBackward: 110, attackForward: 360,
-      onAttackEffects: { poiseCountGain: 3 }
+      onAttackEffects: { poiseCountGain: 3 },
+      animation: {
+        windup: 'draw1',
+        hit: ['ds1f1', 'ds1s1']
+      }
     },
     medium: {
       startup: 0.12, active: 0.16, recovery: 0.40,
       range: 240, damage: 1.2, knockback: 50, staggerDamage: 75, combo: 2,
       startupBackward: 130, attackForward: 400,
-      onAttackEffects: { poiseCountGain: 3 }
+      onAttackEffects: { poiseCountGain: 3 },
+      animation: {
+        windup: 'ds1f1',
+        hit: ['ds2f1', 'ds2s1'],
+        recovery: 'ds2f2'
+      }
     },
     heavy: {
       startup: 0.20, active: 0.20, recovery: 0.50,
       range: 300, damage: 1.6, knockback: 80, staggerDamage: 120, combo: 3,
       startupBackward: 150, attackForward: 460,
-      onAttackEffects: { inflictBladetrailAfterimage: true, critBonusDamage: 0.3 }
+      onAttackEffects: { inflictBladetrailAfterimage: true, critBonusDamage: 0.3 },
+      animation: {
+        windup: 'ds2f2',
+        hit: ['ds3f1', 'ds3s1'],
+        recovery: 'ds3f2'
+      }
     }
   },
   

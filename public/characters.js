@@ -1287,6 +1287,7 @@ CALLISTO: {
         fighter.requestApplyStatus(target, { type: 'Stagger', potency: finalDamage * 5, duration: 1 });
         
         // Spawn cbsk1 slash effect exactly at the target's ground location (one per enemy)
+        const groundY = (typeof target.spawnY === 'number') ? target.spawnY + 74 : ((typeof target.pos.y === 'number') ? target.pos.y + 144 : null);
         const effect = {
           type: 'cbsk1',
           pos: { x: target.pos.x, y: (target.spawnY || target.pos.y || (height - 100)) },
@@ -1294,7 +1295,8 @@ CALLISTO: {
           timer: 2.0, // Short-lived ground slash
           targetOffset: { x: 0, y: 0 },
           owner: fighter,
-          rotation: 0
+          rotation: 0,
+          groundY: groundY
         };
         
         // Add to caster's slash effects (not target's) so all effects get drawn

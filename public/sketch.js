@@ -606,6 +606,9 @@ function processSnapshot(snapshot) {
         fighter.installationArtActive = !!state.installationArtActive;
         // Authoritative timer from server snapshot
         fighter.installationArtTimer = state.installationArtTimer || 0;
+        // Authoritative phase flags from server snapshot
+        fighter.installationArtWindupPhase = !!state.installationArtWindupPhase;
+        fighter.installationArtExecutePhase = !!state.installationArtExecutePhase;
         // Capture server total timer on activation so client can compute phase thresholds
         if (state.installationArtActive) {
           if (!fighter.installationArtTotal || state.installationArtTimer > fighter.installationArtTotal) {
@@ -1297,6 +1300,12 @@ function triggerAbilityVisuals(fighter, abilityId, result) {
   // Trigger character-specific visual effects
   const characterKey = fighter.characterKey;
   
+  if (abilityId === 'installationArt') {
+    // Installation Art visuals are driven by the execute-phase server event
+    // to ensure the attack occurs only when the cevade sprite is shown.
+    return;
+  }
+
   if (characterKey === 'VALENCINA') {
     if (typeof ValencinaRenderer !== 'undefined') {
       ValencinaRenderer.spawnSlashEffect(fighter, abilityId);
@@ -1336,6 +1345,9 @@ function handleNetworkEvent(event) {
     case 'ULTIMATE_SLASH':
       handleUltimateSlashEvent(event);
       break;
+    case 'INSTALLATION_ART_CBSK':
+      handleInstallationArtCbskEvent(event);
+      break;
     case 'MATCH_END':
       // Server signaled match end — start ending sequence
       startEndingSequence(event.winnerId, event.winnerCharacter, {
@@ -1371,6 +1383,25 @@ function handleUltimateSlashEvent(event) {
   }
 
   applyNetworkScreenShake(event);
+}
+
+function handleInstallationArtCbskEvent(event) {
+  if (!event || !window.allFighters) return;
+
+  const attacker = window.allFighters.find(f => f.clientId === event.fighterId);
+  const target = window.allFighters.find(f => f.clientId === event.targetId);
+  const source = attacker || target || window.allFighters[0];
+  if (!source || typeof source.spawnSlashEffect !== 'function') return;
+
+  const worldX = (typeof event.enemyX === 'number') ? event.enemyX : (target ? target.pos.x : source.pos.x);
+  const worldY = (typeof event.enemyY === 'number') ? event.enemyY : (target ? target.pos.y : source.pos.y);
+  const groundY = worldY + 144;
+
+  source.spawnSlashEffect(event.cbskType || 'cbsk1', {
+    worldPos: { x: worldX, y: worldY },
+    groundY,
+    rotation: random(-PI/4, PI/4)
+  });
 }
 
 function handleHitNetworkEvent(event) {

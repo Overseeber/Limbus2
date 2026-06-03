@@ -56,7 +56,8 @@ const CallistoRenderer = {
     if (result && Array.isArray(result.results) && result.results.length > 0) {
       result.results.forEach(r => {
         const wp = r.worldPos || (r.pos ? r.pos : null);
-        const groundY = r.groundY || (wp && wp.y) || fighter.spawnY || null;
+        const baseY = (wp && typeof wp.y === 'number') ? wp.y : (typeof r.groundY === 'number' ? r.groundY : fighter.spawnY);
+        const groundY = baseY !== null ? baseY + 144 : null;
         if (wp && typeof wp.x === 'number') {
           fighter.spawnSlashEffect('cbsk1', {
             worldPos: { x: wp.x, y: wp.y },

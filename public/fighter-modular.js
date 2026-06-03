@@ -715,10 +715,17 @@ class Fighter {
         ultimate: 'cuend'
       };
 
-      // Installation Art ability animation - respect timer: windup uses cguard, execute uses cevade
+      // Installation Art ability animation - respect server phase timing
       if (this.installationArtActive) {
-        if (typeof this.installationArtTimer === 'number') {
-          if (this.installationArtTimer > 0.5) {
+        if (this.installationArtExecutePhase) {
+          this.currentSprite = 'cevade';
+        } else if (this.installationArtWindupPhase) {
+          this.currentSprite = 'cguard';
+        } else if (typeof this.installationArtTimer === 'number') {
+          const total = typeof this.installationArtTotal === 'number' ? this.installationArtTotal : 1.3;
+          const windup = typeof this.installationArtWindup === 'number' ? this.installationArtWindup : 0.5;
+          const windupEnd = total - windup;
+          if (this.installationArtTimer > windupEnd) {
             this.currentSprite = 'cguard';
           } else if (this.installationArtTimer > 0) {
             this.currentSprite = 'cevade';

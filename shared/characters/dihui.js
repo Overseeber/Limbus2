@@ -94,15 +94,23 @@ const DIHUI_CONFIG = {
   
   abilities: {
     deathedge: {
-      cooldown: 30,
-      range: 300,
-      baseDamage: 2.0,
+      name: 'Deathedge [絶命]',
+      cooldown: 14,
+      range: 999, // Range calculated dynamically from cast to teleport position
+      baseDamage: 2.0, // +100% damage (base is 1.0, so 2.0 = +100%)
       knockback: 100,
-      statusEffects: [
-        { type: 'Bladetrail Afterimage', count: 0, potency: 0 }
-      ],
-      bladeRequired: 50,
-      damagePerAfterimage: 0.02  // +2% per Bladetrail Afterimage on target
+      damagePerAfterimage: 0.02, // +2% per Bladetrail Afterimage on target
+      target: 'furthest', // Target furthest enemy
+      windupFrames: ['draw1', 'draw2', 'draw3', 'draw4', 'draw5', 'draw6'],
+      windupHoldDuration: 1.0, // Hold for 1 second after draw6
+      windupFinalSprite: 'ds1f1',
+      postTeleportFrames: ['djoust3', 'djoust4', 'ds2f2'],
+      postTeleportHoldDuration: 1.0, // Hold for 1 second after ds2f2
+      attackFrames: ['dhalt1', 'dhalt2'],
+      attackHoldDuration: 1.0, // Hold for 1 second after dhalt2
+      dlinePerTenAfterimages: 1, // Spawn 1 dline per 10 bladetrail afterimages (rounded down) +1
+      teleportBehind: true, // Teleport behind enemy
+      teleportFrontIfAtEdge: true // If enemy has back to edge, teleport in front instead
     }
   },
   

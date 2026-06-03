@@ -147,6 +147,11 @@ function drawPlayerHud() {
     drawTimeToHuntUI(controlledFighter, panelX + panelWidth + 8, panelY + panelHeight - 48);
   }
   
+  // Draw Deathedge ability icon and cooldown for Dihui
+  if (controlledFighter.characterKey === 'DIHUI') {
+    drawDeathedgeUI(controlledFighter, panelX + panelWidth + 8, panelY + panelHeight - 48);
+  }
+  
   pop();
 }
 
@@ -227,7 +232,7 @@ function drawTimeToHuntUI(fighter, x, y) {
   noStroke();
   textAlign(CENTER, CENTER);
   textSize(20);
-  text('⚡', x + iconSize/2, y + iconSize/2);
+  text('⏱', x + iconSize/2, y + iconSize/2);
   
   // Draw cooldown overlay
   if (cooldown > 0) {
@@ -246,6 +251,58 @@ function drawTimeToHuntUI(fighter, x, y) {
   // Draw activation indicator
   if (isActive) {
     stroke('#ff6b9d');
+    strokeWeight(3);
+    noFill();
+    rect(x - 2, y - 2, iconSize + 4, iconSize + 4, 10);
+  }
+  
+  // Draw key hint
+  fill(255, 200);
+  textAlign(CENTER, TOP);
+  textSize(10);
+  text('Q', x + iconSize/2, y + iconSize + 4);
+  
+  pop();
+}
+
+function drawDeathedgeUI(fighter, x, y) {
+  const iconSize = 48;
+  const cooldown = fighter.deathedgeCooldown || 0;
+  const maxCooldown = 14;
+  const isActive = fighter.deathedgeActive || false;
+  
+  push();
+  
+  // Draw ability icon background
+  fill(isActive ? '#ff4444' : '#333');
+  stroke(255, 100);
+  strokeWeight(2);
+  rect(x, y, iconSize, iconSize, 8);
+  
+  // Draw ability icon (using text as placeholder for now)
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(20);
+  text('⚔', x + iconSize/2, y + iconSize/2);
+  
+  // Draw cooldown overlay
+  if (cooldown > 0) {
+    fill(0, 150);
+    noStroke();
+    const cooldownHeight = (cooldown / maxCooldown) * iconSize;
+    rect(x, y + (iconSize - cooldownHeight), iconSize, cooldownHeight, 8);
+    
+    // Draw cooldown text
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(12);
+    text(cooldown.toFixed(1), x + iconSize/2, y + iconSize/2);
+  }
+  
+  // Draw activation indicator
+  if (isActive) {
+    stroke('#ff4444');
     strokeWeight(3);
     noFill();
     rect(x - 2, y - 2, iconSize + 4, iconSize + 4, 10);

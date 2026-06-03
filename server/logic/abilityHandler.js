@@ -104,6 +104,7 @@ function getFighterState(client, room) {
       baseDamage: client.fighter.baseDamage,
       facing: client.fighter.facing || 1,
       velocity: { x: 0, y: 0 },
+      pos: client.fighter.pos || { x: 0, y: 0 },
       resources: {
         precognition: client.fighter.precognition || 10,
         accelerationRounds: client.fighter.accelerationRounds || 5,
@@ -211,6 +212,24 @@ function executeAbility(data, fighterState, characterLogic, characterConfig, tar
       }
       break;
       
+    case 'deathedge':
+      if (characterLogic.executeDeathedge) {
+        // If no target provided, get any enemy target
+        if (!targetState) {
+          const allTargets = getAllTargets(fighterState, room, clientList);
+          console.log('[Deathedge] Found targets:', allTargets.length);
+          if (allTargets.length > 0) {
+            // Use first target (simplified targeting)
+            targetState = allTargets[0];
+            console.log('[Deathedge] Targeting:', targetState.id);
+          } else {
+            console.log('[Deathedge] No targets found');
+          }
+        }
+        result = characterLogic.executeDeathedge(fighterState, characterConfig.abilities.deathedge, targetState, characterConfig);
+      }
+      break;
+      
     case 'ultimate':
       if (characterLogic.activateUltimate) {
         const targets = getAllTargets(fighterState, room, clientList);
@@ -260,22 +279,75 @@ function getAllTargets(fighterState, room, clientList) {
   const targets = [];
   
   // Get all fighters in room except the caster
-  room.clients.forEach(clientId => {
-    if (!clientId || clientId === fighterState.id) return;
-    
-    const targetClient = clientList[clientId];
-    if (targetClient && targetClient.fighter) {
-      targets.push({
-        id: clientId,
-        characterKey: targetClient.fighter.class,
-        hp: targetClient.fighter.hp,
-        maxHp: targetClient.fighter.maxHp,
-        statuses: targetClient.fighter.statuses || []
-      });
+  if (room && room.clients && Array.isArray(room.clients)) {
+    room.clients.forEach(clientId => {
+      if (!clientId || clientId === fighterState.id) return;
+      
+      const targetClient = clientList[clientId];
+      if (targetClient && targetClient.fighter) {
+        targets.push({
+          id: clientId,
+          characterKey: targetClient.fighter.class,
+          hp: targetClient.fighter.hp,
+          maxHp: targetClient.fighter.maxHp,
+          statuses: targetClient.fighter.statuses || [],
+          pos: targetClient.fighter.pos || { x: 0, y: 0 }
+        });
+      }
+    });
+  }
+  
+  // Fallback: if no targets found from room.clients, check clientList directly
+  if (targets.length === 0 && clientList) {
+    Object.keys(clientList).forEach(clientId => {
+      if (!clientId || clientId === fighterState.id) return;
+      
+      const targetClient = clientList[clientId];
+      if (targetClient && targetClient.fighter) {
+        targets.push({
+          id: clientId,
+          characterKey: targetClient.fighter.class,
+          hp: targetClient.fighter.hp,
+          maxHp: targetClient.fighter.maxHp,
+          statuses: targetClient.fighter.statuses || [],
+          pos: targetClient.fighter.pos || { x: 0, y: 0 }
+        });
+      }
+    });
+  }
+  
+  return targets;
+}
+
+/**
+ * Get furthest enemy target
+ * @param {Object} fighterState - Fighter state
+ * @param {Object} room - Room object
+ * @param {Object} clientList - Client registry
+ * @returns {Object} Furthest target state or null
+ */
+function getFurthestTarget(fighterState, room, clientList) {
+  const targets = getAllTargets(fighterState, room, clientList);
+  if (targets.length === 0) return null;
+  
+  // If only one target, return it
+  if (targets.length === 1) return targets[0];
+  
+  // Find furthest target by horizontal distance
+  const fighterPos = fighterState.pos || { x: 0, y: 0 };
+  let furthestTarget = null;
+  let maxDistance = 0;
+  
+  targets.forEach(target => {
+    const targetPos = target.pos || { x: 0, y: 0 };
+    const distance = Math.abs(targetPos.x - fighterPos.x);
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      furthestTarget = target;
     }
   });
   
-  return targets;
+  return furthestTarget;
 }
 
 /**
@@ -312,6 +384,14 @@ function applyAbilityResults(fighterState, result, characterConfig) {
   // Set defeated state
   if (result.defeated) {
     fighterState.isDefeated = true;
+  }
+  
+  // Set cooldown if provided
+  if (result.cooldown !== undefined && result.abilityId) {
+    if (!fighterState.abilityCooldowns) {
+      fighterState.abilityCooldowns = {};
+    }
+    fighterState.abilityCooldowns[result.abilityId] = result.cooldown;
   }
 }
 

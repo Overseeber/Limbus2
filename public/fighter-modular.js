@@ -1482,6 +1482,11 @@ class Fighter {
     
     // STEP 7: Unified update pipeline
     
+    // Debug log to check if update is being called
+    if (this.characterKey === 'DIHUI') {
+      console.log(`[Deathedge] Fighter update called for DIHUI, deathedgeActive: ${this.deathedgeActive}`);
+    }
+    
     // 1. State synchronization
     this.syncState();
     
@@ -1507,7 +1512,8 @@ class Fighter {
     
     // 7. Character-specific onUpdate
     const character = CHARACTERS[this.characterKey];
-    if (character && character.onUpdate && this.shouldRunLocalCharacterUpdate()) {
+    if (character && character.onUpdate) {
+      // Always call onUpdate for abilities like Deathedge that need to run in network mode
       character.onUpdate(dt, opponent, this);
     }
     
@@ -1516,6 +1522,18 @@ class Fighter {
       const callistoCharacter = CHARACTERS['CALLISTO'];
       if (callistoCharacter && callistoCharacter.updateInstallationArt) {
         callistoCharacter.updateInstallationArt(this, dt);
+      }
+    }
+    
+    // Update Deathedge for Dihui Star
+    if (this.characterKey === 'DIHUI') {
+      console.log(`[Deathedge] Checking deathedgeActive: ${this.deathedgeActive}`);
+      if (this.deathedgeActive) {
+        const dihuiCharacter = CHARACTERS['DIHUI'];
+        if (dihuiCharacter && dihuiCharacter.updateDeathedge) {
+          console.log(`[Deathedge] Calling updateDeathedge`);
+          dihuiCharacter.updateDeathedge(this, dt, opponent);
+        }
       }
     }
     

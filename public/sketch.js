@@ -578,10 +578,12 @@ function processSnapshot(snapshot) {
         if (state.abilityCooldowns) {
             fighter.installationArtCooldown = state.abilityCooldowns.installationArt || 0;
             fighter.timeToHuntCooldown = state.abilityCooldowns.timeToHunt || 0;
+            fighter.deathedgeCooldown = state.abilityCooldowns.deathedge || 0;
             fighter.allAbilityCooldowns = { ...state.abilityCooldowns };
         } else {
             fighter.installationArtCooldown = fighter.installationArtCooldown || 0;
             fighter.timeToHuntCooldown = fighter.timeToHuntCooldown || 0;
+            fighter.deathedgeCooldown = fighter.deathedgeCooldown || 0;
         }
 
         // Apply character-specific resources from server snapshot

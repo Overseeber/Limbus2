@@ -2989,6 +2989,29 @@ CALLISTO: {
     // On hit effects
     onHitEffects: { bladetrailAfterimagePotency: 1, poiseCountGain: 1 },
 
+    // Ability definitions
+    abilities: {
+      deathedge: {
+        name: 'Deathedge [絶命]',
+        cooldown: 14,
+        range: 999,
+        baseDamage: 2.0,
+        knockback: 100,
+        damagePerAfterimage: 0.02,
+        target: 'furthest',
+        windupFrames: ['draw1', 'draw2', 'draw3', 'draw4', 'draw5', 'draw6'],
+        windupHoldDuration: 1.0,
+        windupFinalSprite: 'ds1f1',
+        postTeleportFrames: ['djoust3', 'djoust4', 'ds2f2'],
+        postTeleportHoldDuration: 1.0,
+        attackFrames: ['dhalt1', 'dhalt2'],
+        attackHoldDuration: 1.0,
+        dlinePerTenAfterimages: 1,
+        teleportBehind: true,
+        teleportFrontIfAtEdge: true
+      }
+    },
+
     // Character-specific methods
     onSuccessfulHit: function(damage, opponent, fighter) {
       if (!opponent) return;
@@ -3001,15 +3024,310 @@ CALLISTO: {
     },
 
     onUpdate: function(dt, opponent, fighter) {
-      // Update systems handled by server
+      // Update Deathedge ability
+      if (typeof this.updateDeathedge === 'function') {
+        console.log(`⚔️ Deathedge onUpdate called, deathedgeActive: ${fighter.deathedgeActive}`);
+        this.updateDeathedge(fighter, dt, opponent);
+      }
+      
+      // Update Deathedge cooldown locally
+      if (fighter.deathedgeCooldown > 0) {
+        fighter.deathedgeCooldown = Math.max(0, fighter.deathedgeCooldown - dt);
+      }
     },
 
     processKeyPressed: function(key, fighter) {
       if (key.toLowerCase() === 'q') {
+        if (fighter.deathedgeActive) return;
+        if (fighter.deathedgeCooldown > 0) {
+          console.log(`⚔️ Deathedge on cooldown: ${fighter.deathedgeCooldown.toFixed(1)}s`);
+          return;
+        }
+        // Start animation locally and request server (no targetId for auto-targeting)
+        this.useDeathedge(fighter, false);
         if (typeof Network !== 'undefined' && Network.requestAbility) {
-          Network.requestAbility('deathedge', fighter.lastHitOpponent ? fighter.lastHitOpponent.id : null);
+          Network.requestAbility('deathedge', null); // No targetId - server will auto-target
         }
       }
+    },
+
+    // Deathedge ability
+    useDeathedge: function(fighter, predictive = false) {
+      if (fighter.deathedgeActive) return;
+      if (fighter.deathedgeCooldown > 0) return;
+
+      fighter.deathedgeActive = true;
+      fighter.deathedgePhase = 0;
+      fighter.deathedgeTimer = 0.2; // Start with first frame duration
+      fighter.deathedgeFrameIndex = 0;
+      fighter.deathedgeExecuted = false;
+      fighter.deathedgePredictive = predictive;
+      fighter.deathedgeCastPosition = { x: fighter.pos.x, y: fighter.pos.y };
+
+      const config = CHARACTERS['DIHUI'].abilities.deathedge;
+      fighter.deathedgeWindupFrames = config.windupFrames;
+      fighter.deathedgeWindupHoldDuration = config.windupHoldDuration;
+      fighter.deathedgeWindupFinalSprite = config.windupFinalSprite;
+      fighter.deathedgePostTeleportFrames = config.postTeleportFrames;
+      fighter.deathedgePostTeleportHoldDuration = config.postTeleportHoldDuration;
+      fighter.deathedgeAttackFrames = config.attackFrames;
+      fighter.deathedgeAttackHoldDuration = config.attackHoldDuration;
+
+      console.log(`⚔️ Deathedge [絶命] activated! Phase: ${fighter.deathedgePhase}, Timer: ${fighter.deathedgeTimer}`);
+    },
+
+    updateDeathedge: function(fighter, dt, opponent) {
+      if (!fighter.deathedgeActive) {
+        return;
+      }
+
+      console.log(`⚔️ Deathedge update: Phase ${fighter.deathedgePhase}, Timer ${fighter.deathedgeTimer.toFixed(3)}, FrameIndex ${fighter.deathedgeFrameIndex}`);
+
+      const config = CHARACTERS['DIHUI'].abilities.deathedge;
+      const frameDuration = 0.2; // 0.2 secs per frame
+
+      switch (fighter.deathedgePhase) {
+        case 0: // Windup sequence
+          fighter.deathedgeTimer -= dt;
+          if (fighter.deathedgeTimer <= 0) {
+            if (fighter.deathedgeFrameIndex < fighter.deathedgeWindupFrames.length) {
+              fighter.currentSprite = fighter.deathedgeWindupFrames[fighter.deathedgeFrameIndex];
+              fighter.deathedgeFrameIndex++;
+              fighter.deathedgeTimer = frameDuration;
+              console.log(`⚔️ Deathedge windup frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
+            } else {
+              // Hold for 1 second after draw6
+              fighter.currentSprite = fighter.deathedgeWindupFrames[fighter.deathedgeWindupFrames.length - 1];
+              fighter.deathedgePhase = 1;
+              fighter.deathedgeTimer = fighter.deathedgeWindupHoldDuration;
+              console.log(`⚔️ Deathedge windup complete, holding for 1s`);
+            }
+          }
+          break;
+
+        case 1: // Windup hold, then switch to ds1f1
+          fighter.deathedgeTimer -= dt;
+          if (fighter.deathedgeTimer <= 0) {
+            fighter.currentSprite = fighter.deathedgeWindupFinalSprite;
+            fighter.deathedgePhase = 2;
+            fighter.deathedgeTimer = 0.1; // Brief pause before teleport
+            console.log(`⚔️ Deathedge switching to ${fighter.deathedgeWindupFinalSprite}, preparing teleport`);
+          }
+          break;
+
+        case 2: // Teleport behind enemy
+          fighter.deathedgeTimer -= dt;
+          if (fighter.deathedgeTimer <= 0) {
+            // Find furthest enemy
+            const allFighters = window.allFighters || [];
+            const enemies = allFighters.filter(f => f !== fighter && !f.isDefeated);
+            let furthestEnemy = null;
+            let maxDistance = 0;
+
+            enemies.forEach(enemy => {
+              if (enemy && enemy.pos) {
+                const dist = Math.abs(enemy.pos.x - fighter.pos.x);
+                if (dist > maxDistance) {
+                  maxDistance = dist;
+                  furthestEnemy = enemy;
+                }
+              }
+            });
+
+            if (furthestEnemy) {
+              // Determine teleport position (behind enemy, or front if at edge)
+              const arenaMargin = 100;
+              const teleportOffset = 150;
+              let teleportX;
+
+              if (furthestEnemy.facing === 1) {
+                // Enemy facing right, teleport behind (to the right of enemy)
+                teleportX = furthestEnemy.pos.x + teleportOffset;
+                // If at right edge, teleport in front instead
+                if (teleportX > width - arenaMargin) {
+                  teleportX = furthestEnemy.pos.x - teleportOffset;
+                }
+              } else {
+                // Enemy facing left, teleport behind (to the left of enemy)
+                teleportX = furthestEnemy.pos.x - teleportOffset;
+                // If at left edge, teleport in front instead
+                if (teleportX < arenaMargin) {
+                  teleportX = furthestEnemy.pos.x + teleportOffset;
+                }
+              }
+
+              // Clamp to arena
+              teleportX = Math.max(arenaMargin, Math.min(width - arenaMargin, teleportX));
+
+              // Teleport
+              fighter.pos.x = teleportX;
+              fighter.pos.y = furthestEnemy.pos.y;
+              fighter.vel.x = 0;
+              fighter.vel.y = 0;
+
+              fighter.deathedgeTeleportPosition = { x: teleportX, y: furthestEnemy.pos.y };
+              console.log(`⚔️ Deathedge teleported to (${teleportX.toFixed(0)}, ${furthestEnemy.pos.y.toFixed(0)})`);
+            }
+
+            fighter.deathedgePhase = 3;
+            fighter.deathedgeFrameIndex = 0;
+            fighter.deathedgeTimer = frameDuration;
+          }
+          break;
+
+        case 3: // Post-teleport sequence
+          fighter.deathedgeTimer -= dt;
+          if (fighter.deathedgeTimer <= 0) {
+            if (fighter.deathedgeFrameIndex < fighter.deathedgePostTeleportFrames.length) {
+              fighter.currentSprite = fighter.deathedgePostTeleportFrames[fighter.deathedgeFrameIndex];
+              fighter.deathedgeFrameIndex++;
+              fighter.deathedgeTimer = frameDuration;
+              console.log(`⚔️ Deathedge post-teleport frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
+            } else {
+              // Hold for 1 second after ds2f2
+              fighter.currentSprite = fighter.deathedgePostTeleportFrames[fighter.deathedgePostTeleportFrames.length - 1];
+              fighter.deathedgePhase = 4;
+              fighter.deathedgeTimer = fighter.deathedgePostTeleportHoldDuration;
+              console.log(`⚔️ Deathedge post-teleport complete, holding for 1s`);
+            }
+          }
+          break;
+
+        case 4: // Post-teleport hold, then attack
+          fighter.deathedgeTimer -= dt;
+          if (fighter.deathedgeTimer <= 0) {
+            fighter.deathedgePhase = 5;
+            fighter.deathedgeFrameIndex = 0;
+            fighter.deathedgeTimer = frameDuration;
+
+            // Execute attack locally for visual effects
+            this.executeDeathedgeAttack(fighter);
+            console.log(`⚔️ Deathedge executing attack`);
+          }
+          break;
+
+        case 5: // Attack sequence
+          fighter.deathedgeTimer -= dt;
+          if (fighter.deathedgeTimer <= 0) {
+            if (fighter.deathedgeFrameIndex < fighter.deathedgeAttackFrames.length) {
+              fighter.currentSprite = fighter.deathedgeAttackFrames[fighter.deathedgeFrameIndex];
+              
+              // Spawn dline on dhalt1
+              if (fighter.deathedgeAttackFrames[fighter.deathedgeFrameIndex] === 'dhalt1') {
+                this.spawnDeathedgeDlines(fighter);
+                console.log(`⚔️ Deathedge spawning dlines`);
+              }
+              
+              fighter.deathedgeFrameIndex++;
+              fighter.deathedgeTimer = frameDuration;
+              console.log(`⚔️ Deathedge attack frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
+            } else {
+              // Hold for 1 second after dhalt2
+              fighter.currentSprite = fighter.deathedgeAttackFrames[fighter.deathedgeAttackFrames.length - 1];
+              fighter.deathedgePhase = 6;
+              fighter.deathedgeTimer = fighter.deathedgeAttackHoldDuration;
+              console.log(`⚔️ Deathedge attack complete, holding for 1s`);
+            }
+          }
+          break;
+
+        case 6: // Attack hold, then end
+          fighter.deathedgeTimer -= dt;
+          if (fighter.deathedgeTimer <= 0) {
+            fighter.deathedgeActive = false;
+            fighter.deathedgePhase = 0;
+            fighter.deathedgeFrameIndex = 0;
+            fighter.deathedgeTimer = 0;
+            fighter.deathedgePredictive = false;
+            fighter.currentSprite = 'didle';
+
+            console.log(`⚔️ Deathedge [絶命] ended!`);
+          }
+          break;
+      }
+    },
+
+    executeDeathedgeAttack: function(fighter) {
+      const config = CHARACTERS['DIHUI'].abilities.deathedge;
+      const allFighters = window.allFighters || [];
+      const enemies = allFighters.filter(f => f !== fighter && !f.isDefeated);
+
+      // Calculate range from cast position to teleport position (horizontal only)
+      const castX = fighter.deathedgeCastPosition.x;
+      const teleportX = fighter.deathedgeTeleportPosition.x;
+      const attackRange = Math.abs(teleportX - castX);
+
+      let targetsHit = 0;
+
+      enemies.forEach(enemy => {
+        if (!enemy || !enemy.pos) return;
+
+        // Check if enemy is in horizontal range
+        const enemyX = enemy.pos.x;
+        const minX = Math.min(castX, teleportX);
+        const maxX = Math.max(castX, teleportX);
+
+        if (enemyX >= minX && enemyX <= maxX) {
+          // Calculate damage: +100% base + 2% per bladetrail afterimage
+          const bladetrailStacks = this.getBladetrailStacks(enemy) || 0;
+          const damageMultiplier = 2.0 + (bladetrailStacks * 0.02);
+          const damage = fighter.baseDamage * damageMultiplier;
+
+          // Deal damage
+          fighter.requestDamageTo(enemy, damage, config.knockback, { ability: 'deathedge' });
+          targetsHit++;
+
+          console.log(`⚔️ Deathedge hit enemy! Damage: ${damage.toFixed(1)} (base +${(damageMultiplier - 2.0) * 100}% from ${bladetrailStacks} stacks)`);
+        }
+      });
+
+      console.log(`⚔️ Deathedge executed! Hit ${targetsHit} targets in range`);
+    },
+
+    getBladetrailStacks: function(enemy) {
+      if (!enemy || !enemy.statuses) return 0;
+      const status = enemy.statuses.find(s => s.type === 'Bladetrail Afterimage');
+      return status ? status.potency : 0;
+    },
+
+    spawnDeathedgeDlines: function(fighter) {
+      const config = CHARACTERS['DIHUI'].abilities.deathedge;
+      const allFighters = window.allFighters || [];
+      const enemies = allFighters.filter(f => f !== fighter && !f.isDefeated);
+
+      // Calculate total bladetrail stacks on target enemy
+      let targetStacks = 0;
+      
+      // Find the target enemy (the one we teleported behind)
+      if (fighter.deathedgeTeleportPosition) {
+        enemies.forEach(enemy => {
+          if (enemy && enemy.pos) {
+            const dist = Math.abs(enemy.pos.x - fighter.deathedgeTeleportPosition.x);
+            // Target is the enemy closest to teleport position
+            if (dist < 200) {
+              targetStacks = this.getBladetrailStacks(enemy) || 0;
+            }
+          }
+        });
+      }
+
+      // Calculate dline count: floor(targetStacks / 10) + 1
+      const dlineCount = Math.floor(targetStacks / 10) + 1;
+
+      // Spawn dline effects in the attack range (from cast to teleport position)
+      const castX = fighter.deathedgeCastPosition.x;
+      const teleportX = fighter.deathedgeTeleportPosition.x;
+      const minX = Math.min(castX, teleportX);
+      const maxX = Math.max(castX, teleportX);
+      const range = maxX - minX;
+
+      for (let i = 0; i < dlineCount; i++) {
+        // Distribute dlines across the attack range
+        const offsetX = minX + (range * (i / Math.max(1, dlineCount - 1))) - fighter.pos.x;
+        fighter.spawnSlashEffect('dline', { x: offsetX, y: 0 });
+      }
+
+      console.log(`⚔️ Deathedge spawned ${dlineCount} dline effects (${targetStacks} bladetrail stacks on target)`);
     },
 
     initializeCharacter: function(fighter) {

@@ -262,14 +262,23 @@ function updateSystems(state, dt, config) {
 // DEATHEDGE - ABILITY
 //====================================================================
 function executeDeathedge(state, abilityConfig, targetState, config) {
-  if (!targetState || targetState.isDefeated) {
-    return { success: false, reason: 'No valid target' };
+  // If no target provided, find furthest enemy from combat state
+  if (!targetState) {
+    // This function is called by gameplayEngine which has access to combat state
+    // For now, we'll return success with no damage if no target is provided
+    // The client handles the visual effects and targeting
+    return { 
+      success: true, 
+      abilityId: 'deathedge',
+      ability: 'deathedge',
+      hit: false,
+      damage: 0,
+      cooldown: abilityConfig.cooldown || 14
+    };
   }
 
-  // Check blade requirement
-  const bladeCount = getStatusCount(state, "Dihui Star's Blade");
-  if (bladeCount < abilityConfig.bladeRequired) {
-    return { success: false, reason: 'Not enough Blade stacks', required: abilityConfig.bladeRequired, current: bladeCount };
+  if (targetState.isDefeated) {
+    return { success: false, reason: 'No valid target' };
   }
 
   // Base damage: +100%
@@ -296,11 +305,9 @@ function executeDeathedge(state, abilityConfig, targetState, config) {
   // Spawn dline instances: (BladetrailAfterimage / 10 rounded down) + 1
   const dlineCount = Math.floor(baCount / 10) + 1;
 
-  // Consume shield Poise from Dihui when using Deathedge
-  // (No additional blade cost - already checked above)
-
   return {
     success: true,
+    abilityId: 'deathedge',
     ability: 'deathedge',
     hit: true,
     damage: calculatedDamage,
@@ -308,7 +315,7 @@ function executeDeathedge(state, abilityConfig, targetState, config) {
     dlineCount: dlineCount,
     targetId: targetState.id,
     defeated: targetState.hp <= 0,
-    cooldown: abilityConfig.cooldown || 30
+    cooldown: abilityConfig.cooldown || 14
   };
 }
 
@@ -340,6 +347,7 @@ function initializeResources(state, config) {
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
+    deathedge: executeDeathedge,
     executeDeathedge,
     onSuccessfulHit,
     onReceiveHit,
@@ -355,8 +363,6 @@ if (typeof module !== 'undefined' && module.exports) {
     getStatusPotency,
     getStatusCount,
     ensureStatus,
-    removeStatus,
-
-    deathedge: executeDeathedge
+    removeStatus
   };
 }

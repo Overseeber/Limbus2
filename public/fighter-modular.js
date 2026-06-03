@@ -668,6 +668,11 @@ class Fighter {
         ultimate: 'du1'
       };
 
+      // Skip sprite selection if deathedge ability is active (ability overrides normal sprites)
+      if (this.deathedgeActive) {
+        return;
+      }
+
       // Handle special states for Dihui
       if (this.state === 'hit' || this.state === 'hurt') {
         this.currentSprite = 'dhurt';
@@ -797,7 +802,7 @@ class Fighter {
 
     // Time to Hunt ability animation - show dist1 sprite during casting
     if (this.timeToHuntCasting) {
-      this.currentSprite = 'dist1';
+      this.currentSprite = 'de1';
       return;
     }
 
@@ -959,6 +964,9 @@ class Fighter {
 
   updateDihuiAttackSequence() {
     if (this.attackSequence <= 0) return;
+
+    // Skip sprite setting if deathedge ability is active (ability overrides attack sprites)
+    if (this.deathedgeActive) return;
 
     const attackPhase = this.attackPhase || 'startup';
     const attackKey = this.attackSequence === 1 ? 'light' : this.attackSequence === 2 ? 'medium' : 'heavy';
@@ -1285,7 +1293,7 @@ class Fighter {
     if (this.ultimateRedLines && this.ultimateRedLines.length > 0) {
       push();
       stroke(255, 0, 0);
-      strokeWeight(3);
+      strokeWeight(1);
       this.ultimateRedLines.forEach(redLine => {
         if (redLine.opacity < redLine.maxOpacity) {
           redLine.opacity += redLine.fadeSpeed * dt;
@@ -1542,18 +1550,6 @@ class Fighter {
       const callistoCharacter = CHARACTERS['CALLISTO'];
       if (callistoCharacter && callistoCharacter.updateInstallationArt) {
         callistoCharacter.updateInstallationArt(this, dt);
-      }
-    }
-    
-    // Update Deathedge for Dihui Star
-    if (this.characterKey === 'DIHUI') {
-      console.log(`[Deathedge] Checking deathedgeActive: ${this.deathedgeActive}`);
-      if (this.deathedgeActive) {
-        const dihuiCharacter = CHARACTERS['DIHUI'];
-        if (dihuiCharacter && dihuiCharacter.updateDeathedge) {
-          console.log(`[Deathedge] Calling updateDeathedge`);
-          dihuiCharacter.updateDeathedge(this, dt, opponent);
-        }
       }
     }
     

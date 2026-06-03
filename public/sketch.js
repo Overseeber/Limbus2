@@ -623,11 +623,16 @@ function processSnapshot(snapshot) {
         fighter.timeToHuntCastTimer = state.timeToHuntCastTimer || 0;
         
         // Apply deathedge animation state from server (for synced ability visuals)
+        const oldActive = fighter.deathedgeActive;
         fighter.deathedgeActive = !!state.deathedgeActive;
         fighter.deathedgePhase = state.deathedgePhase || 0;
         fighter.deathedgeTimer = state.deathedgeTimer || 0;
         fighter.deathedgeFrameIndex = state.deathedgeFrameIndex || 0;
         fighter.deathedgeTargetId = state.deathedgeTargetId || null;
+        
+        if (oldActive !== fighter.deathedgeActive) {
+            console.log(`⚔️ Server synced deathedgeActive: ${fighter.deathedgeActive}, Phase: ${fighter.deathedgePhase}, FrameIndex: ${fighter.deathedgeFrameIndex}`);
+        }
         
         // Apply ultimate state from server (for synced ultimate sequences)
         if (typeof applyUltimateState === 'function') {

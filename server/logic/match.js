@@ -888,6 +888,13 @@ tick() {
                 const abilityConfig = config?.abilities?.deathedge;
                 const windupFrameCount = (abilityConfig?.windupFrames?.length || 6);
                 const windupDuration = (windupFrameCount * 0.2) + (abilityConfig?.windupHoldDuration || 1.0);
+                
+                // Increment frameIndex every 0.2 seconds
+                const frameTime = Math.floor(-player.deathedgeTimer / 0.2);
+                if (frameTime > player.deathedgeFrameIndex && frameTime < windupFrameCount) {
+                    player.deathedgeFrameIndex = frameTime;
+                }
+                
                 if (player.deathedgeTimer <= -windupDuration) {
                     player.deathedgePhase = 1;
                     player.deathedgeFrameIndex = 0;
@@ -898,6 +905,13 @@ tick() {
                 const abilityConfig = config?.abilities?.deathedge;
                 const postTeleportFrameCount = (abilityConfig?.postTeleportFrames?.length || 3);
                 const postTeleportDuration = (postTeleportFrameCount * 0.2) + (abilityConfig?.postTeleportHoldDuration || 1.0);
+                
+                // Increment frameIndex every 0.2 seconds
+                const frameTime = Math.floor(-player.deathedgeTimer / 0.2);
+                if (frameTime > player.deathedgeFrameIndex && frameTime < postTeleportFrameCount) {
+                    player.deathedgeFrameIndex = frameTime;
+                }
+                
                 if (player.deathedgeTimer <= -postTeleportDuration) {
                     player.deathedgePhase = 2;
                     player.deathedgeFrameIndex = 0;
@@ -908,6 +922,13 @@ tick() {
                 const abilityConfig = config?.abilities?.deathedge;
                 const attackFrameCount = (abilityConfig?.attackFrames?.length || 2);
                 const attackDuration = (attackFrameCount * 0.2) + (abilityConfig?.attackHoldDuration || 1.0);
+                
+                // Increment frameIndex every 0.2 seconds
+                const frameTime = Math.floor(-player.deathedgeTimer / 0.2);
+                if (frameTime > player.deathedgeFrameIndex && frameTime < attackFrameCount) {
+                    player.deathedgeFrameIndex = frameTime;
+                }
+                
                 if (player.deathedgeTimer <= -attackDuration / 2 && !player.deathedgeExecuted) {
                     player.deathedgeExecuted = true;
                     this._resolveDeathedgeExecution(player);

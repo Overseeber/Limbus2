@@ -3028,6 +3028,8 @@ CALLISTO: {
     },
 
     onUpdate: function(dt, opponent, fighter) {
+      console.log(`⚔️ DIHUI onUpdate called, deathedgeActive: ${fighter.deathedgeActive}, deathedgePhase: ${fighter.deathedgePhase}`);
+      
       // Update Deathedge ability
       if (typeof this.updateDeathedge === 'function') {
         console.log(`⚔️ Deathedge onUpdate called, deathedgeActive: ${fighter.deathedgeActive}`);
@@ -3057,6 +3059,8 @@ CALLISTO: {
 
     // Deathedge ability
     useDeathedge: function(fighter, predictive = false) {
+      console.log(`⚔️ useDeathedge called, deathedgeActive: ${fighter.deathedgeActive}, cooldown: ${fighter.deathedgeCooldown}`);
+      
       if (fighter.deathedgeActive) return;
       if (fighter.deathedgeCooldown > 0) return;
 
@@ -3064,9 +3068,12 @@ CALLISTO: {
       fighter.deathedgePhase = 0;
       fighter.deathedgeTimer = 0.2; // Start with first frame duration
       fighter.deathedgeFrameIndex = 0;
+      fighter.deathedgeFrameTimer = 0.2; // Initialize frame timer
       fighter.deathedgeExecuted = false;
       fighter.deathedgePredictive = predictive;
       fighter.deathedgeCastPosition = { x: fighter.pos.x, y: fighter.pos.y };
+      fighter.deathedgeTeleported = false;
+      fighter.deathedgeAttackStarted = false;
 
       const config = CHARACTERS['DIHUI'].abilities.deathedge;
       fighter.deathedgeWindupFrames = config.windupFrames;
@@ -3077,7 +3084,7 @@ CALLISTO: {
       fighter.deathedgeAttackFrames = config.attackFrames;
       fighter.deathedgeAttackHoldDuration = config.attackHoldDuration;
 
-      console.log(`⚔️ Deathedge [絶命] activated! Phase: ${fighter.deathedgePhase}, Timer: ${fighter.deathedgeTimer}`);
+      console.log(`⚔️ Deathedge [絶命] activated! Phase: ${fighter.deathedgePhase}, Timer: ${fighter.deathedgeTimer}, Active: ${fighter.deathedgeActive}`);
     },
 
     updateDeathedge: function(fighter, dt, opponent) {
@@ -3086,29 +3093,27 @@ CALLISTO: {
       }
 
       const config = CHARACTERS['DIHUI'].abilities.deathedge;
-      const frameDuration = 0.2; // 0.2 secs per frame
 
       // Server tracks 3 phases: 0=windup, 1=post-teleport, 2=attack
-      // Client animates sprites within each phase
-      
+      // Server manages frameIndex timing, client just sets sprites
+
+      console.log(`⚔️ Deathedge update - Phase: ${fighter.deathedgePhase}, FrameIndex: ${fighter.deathedgeFrameIndex}, Active: ${fighter.deathedgeActive}`);
+
       switch (fighter.deathedgePhase) {
-        case 0: // Windup phase (6 frames × 0.2s + 1.0s hold)
-          fighter.deathedgeTimer -= dt;
-          
-          if (fighter.deathedgeTimer <= 0) {
-            if (fighter.deathedgeFrameIndex < fighter.deathedgeWindupFrames.length) {
-              fighter.currentSprite = fighter.deathedgeWindupFrames[fighter.deathedgeFrameIndex];
-              fighter.deathedgeFrameIndex++;
-              fighter.deathedgeTimer = frameDuration;
-            } else {
-              // Hold final frame
-              fighter.currentSprite = fighter.deathedgeWindupFrames[fighter.deathedgeWindupFrames.length - 1];
-              fighter.deathedgeTimer = 0.1; // Keep timer going to match server
-            }
+        case 0: // Windup phase
+          // Windup frames: draw1 > draw2 > draw3 > draw4 > draw5 > draw6 (hold 1s) > ds1f1
+          const windupFrames = config.windupFrames;
+          if (fighter.deathedgeFrameIndex < windupFrames.length) {
+            fighter.currentSprite = windupFrames[fighter.deathedgeFrameIndex];
+            console.log(`⚔️ Deathedge windup frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
+          } else {
+            // After windup frames, hold ds1f1
+            fighter.currentSprite = config.windupFinalSprite;
+            console.log(`⚔️ Deathedge windup hold: ${fighter.currentSprite}`);
           }
           break;
 
-        case 1: // Post-teleport phase (3 frames × 0.2s + 1.0s hold)
+        case 1: // Post-teleport phase
           // First time entering this phase, perform teleport
           if (fighter.deathedgeFrameIndex === 0 && !fighter.deathedgeTeleported) {
             const allFighters = window.allFighters || [];
@@ -3149,47 +3154,41 @@ CALLISTO: {
               fighter.vel.x = 0;
               fighter.vel.y = 0;
               fighter.deathedgeTeleported = true;
+              console.log(`⚔️ Deathedge teleported to ${teleportX}`);
             }
           }
 
-          fighter.deathedgeTimer -= dt;
-          
-          if (fighter.deathedgeTimer <= 0) {
-            if (fighter.deathedgeFrameIndex < fighter.deathedgePostTeleportFrames.length) {
-              fighter.currentSprite = fighter.deathedgePostTeleportFrames[fighter.deathedgeFrameIndex];
-              fighter.deathedgeFrameIndex++;
-              fighter.deathedgeTimer = frameDuration;
-            } else {
-              // Hold final frame
-              fighter.currentSprite = fighter.deathedgePostTeleportFrames[fighter.deathedgePostTeleportFrames.length - 1];
-              fighter.deathedgeTimer = 0.1;
-            }
+          // Post-teleport frames: djoust3 > djoust4 > ds2f2 (hold 1s)
+          const postTeleportFrames = config.postTeleportFrames;
+          if (fighter.deathedgeFrameIndex < postTeleportFrames.length) {
+            fighter.currentSprite = postTeleportFrames[fighter.deathedgeFrameIndex];
+            console.log(`⚔️ Deathedge post-teleport frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
+          } else {
+            // Hold final frame
+            fighter.currentSprite = postTeleportFrames[postTeleportFrames.length - 1];
+            console.log(`⚔️ Deathedge post-teleport hold: ${fighter.currentSprite}`);
           }
           break;
 
-        case 2: // Attack phase (2 frames × 0.2s + 1.0s hold)
-          fighter.deathedgeTimer -= dt;
-          
-          if (fighter.deathedgeTimer <= 0) {
-            if (fighter.deathedgeFrameIndex < fighter.deathedgeAttackFrames.length) {
-              fighter.currentSprite = fighter.deathedgeAttackFrames[fighter.deathedgeFrameIndex];
-              
-              // Spawn dline on first attack frame (dhalt1)
-              if (fighter.deathedgeFrameIndex === 0) {
-                this.spawnDeathedgeDlines(fighter);
-              }
-              
-              fighter.deathedgeFrameIndex++;
-              fighter.deathedgeTimer = frameDuration;
-            } else {
-              // Hold final frame
-              fighter.currentSprite = fighter.deathedgeAttackFrames[fighter.deathedgeAttackFrames.length - 1];
-              fighter.deathedgeTimer = 0.1;
+        case 2: // Attack phase
+          // Attack frames: dhalt1 > dhalt2 (hold 1s)
+          const attackFrames = config.attackFrames;
+          if (fighter.deathedgeFrameIndex < attackFrames.length) {
+            fighter.currentSprite = attackFrames[fighter.deathedgeFrameIndex];
+            console.log(`⚔️ Deathedge attack frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
+            
+            // Spawn dline on first attack frame (dhalt1)
+            if (fighter.deathedgeFrameIndex === 0 && !fighter.deathedgeDlinesSpawned) {
+              this.spawnDeathedgeDlines(fighter);
+              fighter.deathedgeDlinesSpawned = true;
+              console.log(`⚔️ Deathedge spawned dlines`);
             }
+          } else {
+            // Hold final frame
+            fighter.currentSprite = attackFrames[attackFrames.length - 1];
+            console.log(`⚔️ Deathedge attack hold: ${fighter.currentSprite}`);
           }
           break;
-      }
-    },
       }
     },
 

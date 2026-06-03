@@ -880,6 +880,7 @@ tick() {
                 // Spawn cbsk1 at each enemy location on first execute tick
                 if (!player._installationArtCbskSpawned) {
                     player._installationArtCbskSpawned = true;
+                    this._resolveInstallationArtExecution(player);
                     // Find all enemies and broadcast cbsk spawn events per enemy
                     const enemies = Object.values(this.players).filter(p => 
                         p.clientId !== player.clientId && !p.gameState.isDefeated
@@ -904,6 +905,7 @@ tick() {
                 player.installationArtWindupPhase = false;
                 player.installationArtExecutePhase = false;
                 player._installationArtCbskSpawned = false;
+                player.installationArtPending = null;
                 // Return to idle state after ability animation completes
                 if (player.gameState.state === 'attack') {
                     player.gameState.state = 'idle';
@@ -1969,15 +1971,48 @@ tick() {
                 .map(p => p.gameState);
         }
 
-        // Set ability animation states BEFORE executing to ensure state is sent in next snapshot
         if (abilityId === 'installationArt') {
+            const config = this.engine.getCharacterConfig(attacker.gameState.characterKey);
+            const abilityConfig = config?.abilities?.installationArt || { cooldown: 10 };
+            const validation = this.engine.validateCharacterAbility(attacker.gameState, 'installationArt', abilityConfig, config);
+            if (!validation.success) {
+              return { success: false, abilityId: 'installationArt', reason: validation.reason || 'Cannot use ability' };
+            }
+
             attacker.installationArtActive = true;
             attacker.installationArtTimer = 1.3; // windup(0.5s) + execute(0.5s) + recovery(0.3s)
             attacker.installationArtWindupPhase = true;
             attacker.installationArtExecutePhase = false;
             attacker._installationArtCbskSpawned = false;
+            attacker.installationArtPending = {
+              targetId: resolvedTargetId
+            };
             attacker.gameState.state = 'attack';
             attacker.gameState.isAttacking = true;
+            attacker.gameState.abilityCooldowns = attacker.gameState.abilityCooldowns || {};
+            attacker.gameState.abilityCooldowns.installationArt = abilityConfig.cooldown || 10;
+
+            // Consume bleed or other on-ability-use effects immediately on activation
+            const bleedEvents = this.engine.consumeBleedOnAbility(attacker.gameState);
+            if (bleedEvents.length) this.handleEvents(attacker, bleedEvents);
+
+            const result = {
+              success: true,
+              abilityId: 'installationArt',
+              windupTime: 0.5,
+              totalTime: 1.3,
+              cooldown: abilityConfig.cooldown || 10,
+              fighterId: attackerId
+            };
+            if (targetPlayer) {
+              result.targetId = targetPlayer.clientId;
+            } else if (resolvedTargetId) {
+              result.targetId = resolvedTargetId;
+            }
+            const payload = { type: 'abilityResult', ...result };
+            this.broadcast(payload);
+            this.io.to(this.room.id).emit('abilityResult', result);
+            return result;
         } else if (abilityId === 'timeToHunt') {
             attacker.timeToHuntCasting = true;
             attacker.timeToHuntCastTimer = 0.8; // 0.8 second casting animation
@@ -2022,6 +2057,92 @@ tick() {
         this.io.to(this.room.id).emit('abilityResult', result);
 
         return result;
+    }
+
+    _resolveInstallationArtExecution(player) {
+        if (!player || !player.installationArtActive || !player.installationArtPending) return;
+
+        const targetId = player.installationArtPending.targetId;
+        let targetPlayer = targetId ? this.players[targetId] : null;
+        let targetState = targetPlayer ? targetPlayer.gameState : null;
+
+        if (!targetState) {
+            const closestEnemy = this.findClosestEnemy(player);
+            if (closestEnemy) {
+                targetPlayer = closestEnemy;
+                targetState = closestEnemy.gameState;
+            }
+        }
+
+        player.installationArtPending = null;
+        if (!targetState) return;
+
+        const config = this.engine.getCharacterConfig(player.gameState.characterKey);
+        const abilityConfig = config?.abilities?.installationArt;
+        if (!abilityConfig) return;
+
+        // Execute the character ability handler and capture results
+        const execResult = this.engine.executeCharacterAbility(player.gameState, 'installationArt', abilityConfig, targetState, config);
+        if (!execResult || !execResult.success) return;
+
+        // Apply per-target hit semantics so damage/status timing matches normal attacks
+        const results = execResult.results || [];
+        results.forEach(r => {
+            if (!r || !r.targetId) return;
+            const defender = this.players[r.targetId];
+            if (!defender) return;
+
+            if (typeof r.targetHp === 'number') defender.gameState.hp = r.targetHp;
+            if (r.defeated) defender.gameState.isDefeated = true;
+
+            // Put defender into 'hit' state (timing consistent with other hits)
+            defender.gameState.state = 'hit';
+            defender.gameState.hitTimer = 0.18;
+
+            // Hitstop rules (tunable)
+            let hitstopSeconds = abilityConfig.hitstop || 0.14;
+            if (r.defeated) hitstopSeconds = Math.max(hitstopSeconds, 0.22);
+            if (r.staggerDamage && r.staggerDamage > 0) hitstopSeconds = Math.max(hitstopSeconds, 0.18);
+            this.startHitstop(hitstopSeconds, 'ability-installationArt');
+
+            // Broadcast hit just like regular attacks so clients show damage/hurt
+            this.broadcast({
+                type: 'HIT',
+                attackerId: player.clientId,
+                targetId: defender.clientId,
+                damage: r.damage || 0,
+                isCrit: false,
+                attackType: 'ability',
+                attackSequence: null,
+                hp: defender.gameState.hp,
+                knockback: r.knockback || 0,
+                statuses: r.statusesApplied || [],
+                staggerResult: r.staggerDamage ? { staggerDamage: r.staggerDamage } : null,
+                chargeAttack: false,
+                defeated: !!r.defeated,
+                wasGuarded: false,
+                shakeType: 'hit',
+                shakeIntensity: computeHitShakeIntensity(r.damage || 0, { attackType: 'ability', defeated: !!r.defeated, staggered: !!r.staggerDamage })
+            });
+
+            if (r.consumeEvents && Array.isArray(r.consumeEvents)) {
+                r.consumeEvents.forEach(ev => {
+                    if (ev.type === 'STATUS_DAMAGE') {
+                        this.broadcast({
+                            type: 'STATUS_DAMAGE',
+                            fighterId: defender.clientId,
+                            statusType: ev.statusType,
+                            damage: ev.damage,
+                            hp: defender.gameState.hp
+                        });
+                    }
+                });
+            }
+
+            if (r.defeated) {
+                this.broadcast({ type: 'FIGHTER_DEFEATED', fighterId: defender.clientId, defeatedBy: player.clientId });
+            }
+        });
     }
 
     /**

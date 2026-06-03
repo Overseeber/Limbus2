@@ -95,6 +95,7 @@ class GameplayEngine {
   calculateDamage(base, attacker, defender) {
     let d = base * (attacker.baseDamage || 1);
     const cs = this.combatState[attacker.id] || {};
+    const config = this.getCharacterConfig(attacker.characterKey);
     
     // VALENCINA: Use custom formula: Damage = BaseDamage + (ComboDamage × ComboCount)
     if (attacker.characterKey === 'VALENCINA') {
@@ -109,7 +110,24 @@ class GameplayEngine {
     if (cs.chargeAttack) d *= 1.4;
     // DOUBLE DAMAGE while staggered (authoritative server-side)
     if (defender.state === 'staggered') d *= 2;
-    if (attacker.characterKey === 'CALLISTO' && attacker.resources.artworkTibiaStacks > 0) d *= 1 + 0.1 * attacker.resources.artworkTibiaStacks;
+    
+    // CALLISTO-SPECIFIC DAMAGE MODIFIERS (via character logic)
+    if (attacker.characterKey === 'CALLISTO' && config) {
+      try {
+        const callistoLogic = require('./characterLogic/callisto');
+        if (callistoLogic && callistoLogic.calculateCallistoDamage) {
+          return callistoLogic.calculateCallistoDamage.call(this, d, attacker, defender, config, cs.attackCounter);
+        }
+      } catch(e) {}
+      // Fallback: basic Artwork: Tibia bonus
+      if (attacker.resources.artworkTibiaStacks > 0) d *= 1 + 0.1 * attacker.resources.artworkTibiaStacks;
+    }
+
+    // Ingredient Shredding Wound on defender: -10% damage dealt (does not scale)
+    if (this.hasStatus(defender, 'IngredientShreddingWound')) {
+      d *= 0.9;
+    }
+    
     // Sinking on attacker: lose 1% damage dealt per potency
     if (this.hasStatus(attacker, 'Sinking')) { const s = this.getStatus(attacker, 'Sinking'); d *= Math.max(0.5, 1 - 0.01 * s.potency); }
     // Fragile on defender: take 10% more damage per potency stack
@@ -688,10 +706,23 @@ class GameplayEngine {
   }
 
   updateCallistoSystems(state, dt) {
-    const e = [];
-    if (state.resources.corpusIngredient < state.resources.maxCorpusIngredient) state.resources.corpusIngredient = Math.min(state.resources.maxCorpusIngredient, state.resources.corpusIngredient + 5 * dt);
-    if (state.resources.slamBuffActive) { state.resources.slamBuffTimer -= dt; if (state.resources.slamBuffTimer <= 0) { state.resources.slamBuffActive = false; e.push({ type: 'SLAM_BUFF_EXPIRED' }); } }
-    return e;
+    try {
+      const callistoLogic = require('./characterLogic/callisto');
+      const config = this.getCharacterConfig('CALLISTO');
+      if (!config) return [];
+      return callistoLogic.updateSystems(state, dt, config);
+    } catch (err) {
+      // Fallback: basic slam buff timer
+      const fallbackEvents = [];
+      if (state.resources.slamBuffActive) { 
+        state.resources.slamBuffTimer -= dt; 
+        if (state.resources.slamBuffTimer <= 0) { 
+          state.resources.slamBuffActive = false; 
+          fallbackEvents.push({ type: 'SLAM_BUFF_EXPIRED' }); 
+        } 
+      }
+      return fallbackEvents;
+    }
   }
 
   updateValencinaSystems(state, dt) {

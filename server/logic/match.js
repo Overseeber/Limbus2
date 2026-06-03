@@ -856,11 +856,54 @@ tick() {
      */
     updateAbilityAnimations(player, dt) {
         // Update Installation Art animation timer (Callisto)
+        // Animation has 3 phases:
+        //   Phase 0: Windup (0.5s) - show cguard sprite
+        //   Phase 1: Execute (0.5s) - show cevade sprite, spawn cbsk at enemy locations
+        //   Phase 2: Recovery (0.3s) - return to idle
         if (player.installationArtActive) {
             player.installationArtTimer -= dt;
+            
+            // Determine which phase we're in based on the timer
+            // Timer started at windupTime + executeTime + recoveryTime = 1.3s
+            // Phase 0 (windup): timer > executeTime + recoveryTime = 0.8s → cguard
+            // Phase 1 (execute): timer > recoveryTime = 0.3s → cevade, cbsk
+            // Phase 2 (recovery): timer <= recoveryTime → ending
+            
+            if (player.installationArtTimer > 0.8) {
+                // Phase 0: Windup - cguard sprite
+                player.installationArtWindupPhase = true;
+                player.installationArtExecutePhase = false;
+            } else if (player.installationArtTimer <= 0.8 && player.installationArtTimer > 0.3) {
+                // Phase 1: Execute - cevade sprite, first tick spawns cbsk
+                player.installationArtWindupPhase = false;
+                player.installationArtExecutePhase = true;
+                // Spawn cbsk1 at each enemy location on first execute tick
+                if (!player._installationArtCbskSpawned) {
+                    player._installationArtCbskSpawned = true;
+                    // Find all enemies and broadcast cbsk spawn events per enemy
+                    const enemies = Object.values(this.players).filter(p => 
+                        p.clientId !== player.clientId && !p.gameState.isDefeated
+                    );
+                    enemies.forEach(enemy => {
+                        this.broadcast({
+                            type: 'INSTALLATION_ART_CBSK',
+                            fighterId: player.clientId,
+                            targetId: enemy.clientId,
+                            cbskType: 'cbsk1',
+                            enemyX: enemy.gameState.position.x,
+                            enemyY: enemy.gameState.position.y
+                        });
+                    });
+                }
+            }
+            
             if (player.installationArtTimer <= 0) {
+                // Reset all ability state
                 player.installationArtActive = false;
                 player.installationArtTimer = 0;
+                player.installationArtWindupPhase = false;
+                player.installationArtExecutePhase = false;
+                player._installationArtCbskSpawned = false;
                 // Return to idle state after ability animation completes
                 if (player.gameState.state === 'attack') {
                     player.gameState.state = 'idle';
@@ -1530,6 +1573,34 @@ tick() {
                 attacker.gameState.resources.accelerationRoundActive = false;
             }
 
+                // CALLISTO: Apply per-attack effects on hit
+            if (attacker.characterKey === 'CALLISTO') {
+                const callistoLogic = require('./characterLogic/callisto');
+                
+                if (attacker.attackSequence === 1) {
+                    // Attack 1: inflict 1 Bind on enemy, gain 1 Haste
+                    callistoLogic.applyAttack1Effects(attacker.gameState, defender.gameState);
+                } else if (attacker.attackSequence === 2) {
+                    // Attack 2: inflict 1 Fragile on enemy (max 5), gain 1 Protection (max 5)
+                    callistoLogic.applyAttack2Effects(attacker.gameState, defender.gameState);
+                } else if (attacker.attackSequence === 3) {
+                    // Attack 3 bonus is calculated in calculateCallistoDamage
+                    // Process Damage Down / Damage Up stack reduction on attack hit
+                    // Damage Down and Damage Up both lose 1 stack on attack hit
+                    const stackEvents = callistoLogic.processPostAttackStackReduction(attacker.gameState);
+                    if (stackEvents && stackEvents.length) {
+                        stackEvents.forEach(ev => {
+                            this.broadcast({
+                                type: 'STACK_REDUCTION',
+                                fighterId: attacker.clientId,
+                                statusType: ev.type === 'DAMAGE_DOWN_EXPIRED' ? 'Damage Down' : 'Damage Up',
+                                action: ev.type
+                            });
+                        });
+                    }
+                }
+            }
+
             let hitstopSeconds = attackDef.hitstop || 0;
             if (!hitstopSeconds) {
                 hitstopSeconds = attackType === 'light' ? 0.03 : attackType === 'medium' ? 0.05 : 0.08;
@@ -1901,7 +1972,10 @@ tick() {
         // Set ability animation states BEFORE executing to ensure state is sent in next snapshot
         if (abilityId === 'installationArt') {
             attacker.installationArtActive = true;
-            attacker.installationArtTimer = 1.0; // 1 second animation
+            attacker.installationArtTimer = 1.3; // windup(0.5s) + execute(0.5s) + recovery(0.3s)
+            attacker.installationArtWindupPhase = true;
+            attacker.installationArtExecutePhase = false;
+            attacker._installationArtCbskSpawned = false;
             attacker.gameState.state = 'attack';
             attacker.gameState.isAttacking = true;
         } else if (abilityId === 'timeToHunt') {
@@ -2027,9 +2101,11 @@ tick() {
                 abilityCooldowns: { ...player.gameState.abilityCooldowns } || {},
                 // Character-specific ability resources
                 resources: { ...player.gameState.resources } || {},
-                // Ability animation states (for synced ability visuals)
+                // Installation Art phase flags for client animation
                 installationArtActive: !!player.installationArtActive,
                 installationArtTimer: player.installationArtTimer || 0,
+                installationArtWindupPhase: !!player.installationArtWindupPhase,
+                installationArtExecutePhase: !!player.installationArtExecutePhase,
                 timeToHuntCasting: !!player.timeToHuntCasting,
                 timeToHuntCastTimer: player.timeToHuntCastTimer || 0,
                 // Ultimate state (server-authoritative)

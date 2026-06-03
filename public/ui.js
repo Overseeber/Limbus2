@@ -114,8 +114,10 @@ function drawPlayerHud() {
 
   fill(255);
   textSize(14);
+  const safeHp = (controlledFighter.hp !== null && controlledFighter.hp !== undefined) ? controlledFighter.hp : 0;
+  const safeMaxHp = (controlledFighter.maxHp !== null && controlledFighter.maxHp !== undefined) ? controlledFighter.maxHp : 1;
   text(`Name: ${controlledFighter.name}`, panelX + 12, panelY + 52);
-  text(`HP: ${controlledFighter.hp.toFixed(0)} / ${controlledFighter.maxHp}`, panelX + 12, panelY + 72);
+  text(`HP: ${safeHp.toFixed(0)} / ${safeMaxHp}`, panelX + 12, panelY + 72);
   text(`State: ${controlledFighter.state}`, panelX + 12, panelY + 92);
 
   const hpBarX = panelX + 12;
@@ -124,7 +126,7 @@ function drawPlayerHud() {
   fill('#222');
   rect(hpBarX, hpBarY, hpWidth, 8, 4);
   fill('#42d492');
-  rect(hpBarX, hpBarY, hpWidth * (controlledFighter.hp / controlledFighter.maxHp), 8, 4);
+  rect(hpBarX, hpBarY, hpWidth * (safeHp / safeMaxHp), 8, 4);
   
   // Stagger Bar
   fill('#222');
@@ -385,8 +387,10 @@ function drawFighterHudPanel(fighter, panelX, panelY, playerLabel) {
     text('HP: 0 / ' + fighter.maxHp, panelX + 12, panelY + 52);
     text('State: DEFEATED', panelX + 12, panelY + 68);
   } else {
-    text(`HP: ${fighter.hp.toFixed(0)} / ${fighter.maxHp}`, panelX + 12, panelY + 52);
-    text(`State: ${fighter.state}`, panelX + 12, panelY + 68);
+    const safeHp = fighter.hp !== null && fighter.hp !== undefined ? fighter.hp : 0;
+    const safeMaxHp = fighter.maxHp || fighter.maxHp === 0 ? fighter.maxHp : 100;
+    text(`HP: ${safeHp.toFixed(0)} / ${safeMaxHp}`, panelX + 12, panelY + 52);
+    text(`State: ${fighter.state || 'unknown'}`, panelX + 12, panelY + 68);
   }
   
   // Health bar
@@ -543,8 +547,10 @@ function drawStatusPanel(fighter, x, y) {
   fill(255);
   textSize(14);
   textAlign(LEFT, TOP);
+  const safeHp = (fighter.hp !== null && fighter.hp !== undefined) ? fighter.hp : 0;
+  const safeMaxHp = (fighter.maxHp !== null && fighter.maxHp !== undefined) ? fighter.maxHp : 1;
   text(`${fighter.name}`, x + 12, y + 10);
-  text(`HP: ${fighter.hp.toFixed(0)} / ${fighter.maxHp}`, x + 12, y + 28);
+  text(`HP: ${safeHp.toFixed(0)} / ${safeMaxHp}`, x + 12, y + 28);
   text(`Combo: ${fighter.combo}`, x + 12, y + 46);
   text(`State: ${fighter.state}`, x + 12, y + 64);
 
@@ -552,7 +558,7 @@ function drawStatusPanel(fighter, x, y) {
   fill('#222');
   rect(x + 12, y + 86, barWidth, 14, 6);
   fill('#42d492');
-  rect(x + 12, y + 86, barWidth * (fighter.hp / fighter.maxHp), 14, 6);
+  rect(x + 12, y + 86, barWidth * (safeHp / safeMaxHp), 14, 6);
 
   const comboRatio = constrain(fighter.comboTimer / fighter.comboTimeout, 0, 1);
   fill('#222');

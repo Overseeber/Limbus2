@@ -715,9 +715,20 @@ class Fighter {
         ultimate: 'cuend'
       };
 
-      // Installation Art ability animation - show cguard sprite during casting
+      // Installation Art ability animation - respect timer: windup uses cguard, execute uses cevade
       if (this.installationArtActive) {
-        this.currentSprite = 'cguard';
+        if (typeof this.installationArtTimer === 'number') {
+          if (this.installationArtTimer > 0.5) {
+            this.currentSprite = 'cguard';
+          } else if (this.installationArtTimer > 0) {
+            this.currentSprite = 'cevade';
+          } else {
+            this.currentSprite = 'cidle';
+          }
+        } else {
+          // Fallback: while active but timer unknown, show guard
+          this.currentSprite = 'cguard';
+        }
         return;
       }
 
@@ -1126,12 +1137,14 @@ class Fighter {
     // Spawn slash effect that shares character position and fades out
     const effect = {
       type: slashType,
-      pos: { x: this.pos.x, y: this.pos.y }, // Avoid .copy() to reduce GC
+      // If a world position is provided, draw the effect at that world position
+      pos: (targetOffset && targetOffset.worldPos) ? { x: targetOffset.worldPos.x, y: targetOffset.worldPos.y } : { x: this.pos.x, y: this.pos.y },
       facing: this.facing,
       timer: isCbskEffect ? 5.0 : 0.4, // 5 seconds for cbsk effects, 0.4 for normal slashes
       targetOffset: targetOffset,
       owner: this,
-      rotation: null // Will be set randomly for cbsk effects
+      rotation: targetOffset && targetOffset.rotation ? targetOffset.rotation : null,
+      groundY: (targetOffset && (targetOffset.groundY !== undefined)) ? targetOffset.groundY : null
     };
     
     this.slashEffects.push(effect);
@@ -1209,8 +1222,8 @@ class Fighter {
             }
             tint(255, 255, 255, cbskAlpha);
             
-            // Position at ground level with only horizontal inheritance
-            const groundY = effect.owner.spawnY;
+            // Position at ground level: prefer effect.groundY, then effect.pos.y, then owner.spawnY
+            const groundY = (typeof effect.groundY === 'number') ? effect.groundY : ((effect.pos && typeof effect.pos.y === 'number') ? effect.pos.y : effect.owner.spawnY);
             translate(effect.pos.x + offsetX, groundY);
             
             // Random rotation between -45 to 45 degrees

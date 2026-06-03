@@ -135,8 +135,9 @@ const CallistoRenderer = {
     ellipse(0, 0, range, range);
     
     // Draw activation indicator
-    if (fighter.installationArtTimer > 0) {
-      const progress = fighter.installationArtTimer / 1.0;
+    if (fighter.installationArtTimer !== undefined) {
+      const windup = 0.5; // seconds
+      const progress = Math.max(0, Math.min(1, 1 - (fighter.installationArtTimer / windup)));
       stroke(139, 69, 19, 150);
       strokeWeight(4);
       ellipse(0, 0, range * progress, range * progress);

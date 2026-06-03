@@ -508,7 +508,10 @@ function executeInstallationArt(state, abilityConfig, targetStates, config) {
       targetHp: targetState.hp,
       statusesApplied: ['Bleed', 'IngredientShreddingWound', 'Sinking'],
       staggerDamage: Math.floor(damage * staggerMultiplier),
-      defeated: targetState.hp <= 0
+      defeated: targetState.hp <= 0,
+      // Provide world position for client VFX (if available)
+      worldPos: targetState.pos || null,
+      groundY: (targetState.pos && typeof targetState.pos.y === 'number') ? targetState.pos.y : null
     });
   });
 

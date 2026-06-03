@@ -977,10 +977,8 @@ CALLISTO: {
         fighter.slamCooldown -= dt;
       }
       
-      // Update Installation Art timer
-      if (typeof this.updateInstallationArt === 'function') {
-        this.updateInstallationArt(fighter, dt, opponent);
-      }
+      // Installation Art update is handled by the unified fighter update pipeline
+      // (fighter-modular.js calls the character-specific updateInstallationArt when active)
       
       // Update slam active state based on fighter state
       if (fighter.state === 'slam') {
@@ -995,35 +993,43 @@ CALLISTO: {
         fighter.installationArtCooldown = Math.max(0, fighter.installationArtCooldown - dt);
       }
       if (fighter.installationArtActive) {
-        fighter.installationArtTimer -= dt;
-        
-        // Execute attack after 1 second delay
-        if (fighter.installationArtTimer <= 0 && !fighter.installationArtExecuted) {
-          fighter.installationArtExecuted = true;
-          
-          // Use cevade sprite for execution - keep cguard for additional 0.5s
-          fighter.currentSprite = 'cevade';
-          console.log(`[DEBUG] Installation Art - Set sprite to cevade, current: ${fighter.currentSprite}`);
+          fighter.installationArtTimer -= dt;
+          // Compute windup/execute thresholds using server-provided total and windup
+          const total = fighter.installationArtTotal || 1.0; // fallback total
+          const windup = typeof fighter.installationArtWindup === 'number' ? fighter.installationArtWindup : 0.5;
+          const windupEnd = total - windup; // timer value at which windup ends and execute begins
 
-          if (!fighter.installationArtPredictive) {
-            console.log('[DEBUG] Installation Art - Executing local AOE attack!');
-            this.executeImprovisedRibcage(fighter);
-          } else {
-            console.log('[DEBUG] Installation Art - Predictive visual execution only');
+          // Windup phase
+          if (fighter.installationArtTimer > windupEnd) {
+            fighter.currentSprite = 'cguard';
           }
-        }
-        
-        // End ability after execution + additional 0.5 seconds (total 1.5s from start)
-        if (fighter.installationArtTimer <= -0.5) {
-          fighter.installationArtActive = false;
-          fighter.installationArtExecuted = false;
-          fighter.installationArtTimer = 0;
-          fighter.installationArtPredictive = false;
-          
-          // Reset sprite back to normal
-          fighter.currentSprite = 'cidle';
-          console.log(`[DEBUG] Installation Art - Reset sprite to cidle, current: ${fighter.currentSprite}`);
-        }
+
+          // Execution phase: trigger once when timer drops to <= windupEnd
+          if (fighter.installationArtTimer <= windupEnd && fighter.installationArtTimer > 0 && !fighter.installationArtExecuted) {
+            fighter.installationArtExecuted = true;
+            fighter.currentSprite = 'cevade';
+            console.log(`[DEBUG] Installation Art - Set sprite to cevade, current: ${fighter.currentSprite}`);
+
+            if (!fighter.installationArtPredictive) {
+              console.log('[DEBUG] Installation Art - Executing local AOE attack!');
+              this.executeImprovisedRibcage(fighter);
+            } else {
+              console.log('[DEBUG] Installation Art - Predictive visual execution only');
+            }
+          }
+
+          // End ability after timer reaches zero
+          if (fighter.installationArtTimer <= 0) {
+            fighter.installationArtActive = false;
+            fighter.installationArtExecuted = false;
+            fighter.installationArtTimer = 0;
+            fighter.installationArtPredictive = false;
+            fighter.currentSprite = 'cidle';
+            // Clear stored totals on end
+            fighter.installationArtTotal = undefined;
+            fighter.installationArtWindup = undefined;
+            console.log(`[DEBUG] Installation Art - Reset sprite to cidle, current: ${fighter.currentSprite}`);
+          }
       }
     },
     
@@ -1151,7 +1157,7 @@ CALLISTO: {
       }
 
       fighter.installationArtActive = true;
-      fighter.installationArtTimer = 1.0; // Increased to 1 second for visible pose
+      fighter.installationArtTimer = 1.3; // windup(0.5) + execute(0.5) + recovery(0.3)
       fighter.installationArtExecuted = false;
       fighter.installationArtPredictive = predictive;
 
@@ -1280,19 +1286,15 @@ CALLISTO: {
         fighter.requestApplyStatus(target, { type: 'Sinking', count: 1, potency: finalDamage });
         fighter.requestApplyStatus(target, { type: 'Stagger', potency: finalDamage * 5, duration: 1 });
         
-        // Spawn random cbsk slash effect at target location
-        const cbskEffects = ['cbsk1', 'cbsk2', 'cbsk3'];
-        const randomCbsk = random(cbskEffects);
-        
-        // Create slash effect directly at target position (horizontal only)
+        // Spawn cbsk1 slash effect exactly at the target's ground location (one per enemy)
         const effect = {
-          type: randomCbsk,
-          pos: { x: target.pos.x, y: 0 }, // Inherit only horizontal position, y will be ground level
+          type: 'cbsk1',
+          pos: { x: target.pos.x, y: (target.spawnY || target.pos.y || (height - 100)) },
           facing: target.facing,
-          timer: 5.0, // 5 seconds for cbsk effects
+          timer: 2.0, // Short-lived ground slash
           targetOffset: { x: 0, y: 0 },
-          owner: fighter, // Add to caster's effects so they get drawn
-          rotation: random(-PI/4, PI/4) // Random -45 to 45 degrees
+          owner: fighter,
+          rotation: 0
         };
         
         // Add to caster's slash effects (not target's) so all effects get drawn

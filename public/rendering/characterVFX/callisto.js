@@ -9,7 +9,8 @@ const CallistoRenderer = {
   /**
    * Spawn visual effects for Callisto's abilities
    */
-  spawnSlashEffect: function(fighter, abilityId) {
+  // `result` is optional; when provided for installationArt it contains per-target hit data
+  spawnSlashEffect: function(fighter, abilityId, result) {
     if (!fighter) return;
     
     switch (abilityId) {
@@ -17,7 +18,7 @@ const CallistoRenderer = {
         this._spawnSlamVisuals(fighter);
         break;
       case 'installationArt':
-        this._spawnInstallationArtVisuals(fighter);
+        this._spawnInstallationArtVisuals(fighter, result);
         break;
       case 'ultimate':
         this._spawnUltimateVisuals(fighter);
@@ -50,8 +51,27 @@ const CallistoRenderer = {
     }
   },
   
-  _spawnInstallationArtVisuals: function(fighter) {
-    // Spawn installation art slash entities
+  _spawnInstallationArtVisuals: function(fighter, result) {
+    // If the server provided per-target results, spawn one cbsk1 at each target's world position
+    if (result && Array.isArray(result.results) && result.results.length > 0) {
+      result.results.forEach(r => {
+        const wp = r.worldPos || (r.pos ? r.pos : null);
+        const groundY = r.groundY || (wp && wp.y) || fighter.spawnY || null;
+        if (wp && typeof wp.x === 'number') {
+          fighter.spawnSlashEffect('cbsk1', {
+            worldPos: { x: wp.x, y: wp.y },
+            groundY: groundY,
+            rotation: random(-PI/4, PI/4)
+          });
+        } else {
+          // Fallback: spawn around caster
+          fighter.spawnSlashEffect('cbsk1', { x: random(-30,30), y: 0 });
+        }
+      });
+      return;
+    }
+
+    // Fallback behavior: spawn a few cbsk effects around the caster
     fighter.spawnSlashEffect('cbsk1', { x: 0, y: 0 });
     fighter.spawnSlashEffect('cbsk2', { x: 30, y: 0 });
     fighter.spawnSlashEffect('cbsk3', { x: -30, y: 0 });

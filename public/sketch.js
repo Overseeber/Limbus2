@@ -604,7 +604,18 @@ function processSnapshot(snapshot) {
         // Apply ability animation states (for synced ability visuals)
         // These states drive which sprites are shown during abilities
         fighter.installationArtActive = !!state.installationArtActive;
+        // Authoritative timer from server snapshot
         fighter.installationArtTimer = state.installationArtTimer || 0;
+        // Capture server total timer on activation so client can compute phase thresholds
+        if (state.installationArtActive) {
+          if (!fighter.installationArtTotal || state.installationArtTimer > fighter.installationArtTotal) {
+            fighter.installationArtTotal = state.installationArtTimer;
+          }
+        } else {
+          // Clear stored total when ability not active
+          fighter.installationArtTotal = undefined;
+          fighter.installationArtWindup = fighter.installationArtWindup || undefined;
+        }
         fighter.timeToHuntCasting = !!state.timeToHuntCasting;
         fighter.timeToHuntCastTimer = state.timeToHuntCastTimer || 0;
         
@@ -1226,15 +1237,27 @@ function handleAbilityResult(result) {
     if (result.abilityId === 'installationArt') {
       fighter.installationArtPredictive = false;
       if (result.success) {
+        // Keep client visuals active and set timer based on server-provided windup
+        const windup = typeof result.windupTime === 'number' ? result.windupTime : 0.5;
+        const total = typeof result.totalTime === 'number' ? result.totalTime : (windup + 0.5);
+        fighter.installationArtActive = true;
+        fighter.installationArtExecuted = false;
+        // Record windup and total for phase computation (server snapshot will set authoritative timer)
+        fighter.installationArtWindup = windup;
+        fighter.installationArtTotal = total;
+        fighter.installationArtTimer = total;
         fighter.installationArtCooldown = result.cooldown || 10;
+        // Do not immediately reset the sprite; let `updateInstallationArt` and `updateSprite`
+        // manage the visual sequence (cguard -> cevade -> cidle). The snapshot code will
+        // populate the authoritative `installationArtTimer` shortly after.
       } else {
         fighter.installationArtActive = false;
         fighter.installationArtExecuted = false;
         fighter.installationArtTimer = 0;
+        // On failure, reset visuals
+        fighter.currentSprite = 'cidle';
+        fighter.setState('idle');
       }
-      // Reset sprite back to idle state after ability resolution
-      fighter.currentSprite = 'cidle';
-      fighter.setState('idle');
     }
 
     if (result.abilityId) {

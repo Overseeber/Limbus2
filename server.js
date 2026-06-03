@@ -18,7 +18,7 @@ const Match = require('./server/logic/match');
 // Create authoritative gameplay engine for all matches
 //const gameplayEngine = new GameplayEngine();
 
-console.log("Server is Running");
+console.log("Server is Running, git pull remindeer");
 class Client {
     constructor(id)
     {

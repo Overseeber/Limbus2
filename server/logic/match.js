@@ -706,6 +706,27 @@ tick() {
         return closestEnemy;
     }
 
+    findFurthestEnemy(player) {
+        let furthestEnemy = null;
+        let furthestDist = -Infinity;
+        
+        Object.values(this.players).forEach(other => {
+            if (other.clientId === player.clientId) return;
+            if (other.gameState.isDefeated) return;
+            
+            const dx = player.gameState.position.x - other.gameState.position.x;
+            const dy = player.gameState.position.y - other.gameState.position.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            if (dist > furthestDist) {
+                furthestDist = dist;
+                furthestEnemy = other;
+            }
+        });
+        
+        return furthestEnemy;
+    }
+
     /**
      * Auto-face the player toward their closest enemy.
      * Called ONCE at action startup (attack, guard, evade).
@@ -855,6 +876,53 @@ tick() {
      * Decrements timers and resets animation flags when timers expire
      */
     updateAbilityAnimations(player, dt) {
+        // Update Deathedge animation timer (Dihui Star)
+        // Animation has 3 phases:
+        //   Phase 0: Windup (6 frames × 0.2 + 1.0s hold)
+        //   Phase 1: Post-teleport (3 frames × 0.2 + 1.0s hold)
+        //   Phase 2: Attack (2 frames × 0.2 + 1.0s hold)
+        if (player.deathedgeActive) {
+            player.deathedgeTimer -= dt;
+            if (player.deathedgePhase === 0) {
+                const config = this.engine.getCharacterConfig(player.gameState.characterKey);
+                const abilityConfig = config?.abilities?.deathedge;
+                const windupFrameCount = (abilityConfig?.windupFrames?.length || 6);
+                const windupDuration = (windupFrameCount * 0.2) + (abilityConfig?.windupHoldDuration || 1.0);
+                if (player.deathedgeTimer <= -windupDuration) {
+                    player.deathedgePhase = 1;
+                    player.deathedgeFrameIndex = 0;
+                    player.deathedgeTimer = 0;
+                }
+            } else if (player.deathedgePhase === 1) {
+                const config = this.engine.getCharacterConfig(player.gameState.characterKey);
+                const abilityConfig = config?.abilities?.deathedge;
+                const postTeleportFrameCount = (abilityConfig?.postTeleportFrames?.length || 3);
+                const postTeleportDuration = (postTeleportFrameCount * 0.2) + (abilityConfig?.postTeleportHoldDuration || 1.0);
+                if (player.deathedgeTimer <= -postTeleportDuration) {
+                    player.deathedgePhase = 2;
+                    player.deathedgeFrameIndex = 0;
+                    player.deathedgeTimer = 0;
+                }
+            } else if (player.deathedgePhase === 2) {
+                const config = this.engine.getCharacterConfig(player.gameState.characterKey);
+                const abilityConfig = config?.abilities?.deathedge;
+                const attackFrameCount = (abilityConfig?.attackFrames?.length || 2);
+                const attackDuration = (attackFrameCount * 0.2) + (abilityConfig?.attackHoldDuration || 1.0);
+                if (player.deathedgeTimer <= -attackDuration / 2 && !player.deathedgeExecuted) {
+                    player.deathedgeExecuted = true;
+                    this._resolveDeathedgeExecution(player);
+                }
+                if (player.deathedgeTimer <= -attackDuration) {
+                    player.deathedgeActive = false;
+                    player.deathedgePhase = 0;
+                    if (player.gameState.state === 'attack') {
+                        player.gameState.state = 'idle';
+                        player.gameState.isAttacking = false;
+                    }
+                }
+            }
+        }
+
         // Update Installation Art animation timer (Callisto)
         // Animation has 3 phases:
         //   Phase 0: Windup (0.5s) - show cguard sprite
@@ -1971,7 +2039,44 @@ tick() {
                 .map(p => p.gameState);
         }
 
-        if (abilityId === 'installationArt') {
+        if (abilityId === 'deathedge') {
+            const furthestEnemy = this.findFurthestEnemy(attacker);
+            if (!furthestEnemy) {
+                return { success: false, abilityId: 'deathedge', reason: 'No enemies available' };
+            }
+            const config = this.engine.getCharacterConfig(attacker.gameState.characterKey);
+            const abilityConfig = config?.abilities?.deathedge || { cooldown: 14 };
+            const validation = this.engine.validateCharacterAbility(attacker.gameState, 'deathedge', abilityConfig, config);
+            if (!validation.success) {
+              return { success: false, abilityId: 'deathedge', reason: validation.reason || 'Cannot use ability' };
+            }
+            attacker.deathedgeActive = true;
+            attacker.deathedgePhase = 0;
+            attacker.deathedgeTimer = 0;
+            attacker.deathedgeFrameIndex = 0;
+            attacker.deathedgeTargetId = furthestEnemy.clientId;
+            attacker.deathedgeCastPosition = { x: attacker.gameState.position.x, y: attacker.gameState.position.y };
+            attacker.deathedgeTeleportPosition = null;
+            attacker.deathedgeExecuted = false;
+            attacker.gameState.state = 'attack';
+            attacker.gameState.isAttacking = true;
+            attacker.gameState.abilityCooldowns = attacker.gameState.abilityCooldowns || {};
+            attacker.gameState.abilityCooldowns.deathedge = abilityConfig.cooldown || 14;
+            const bleedEvents = this.engine.consumeBleedOnAbility(attacker.gameState);
+            if (bleedEvents.length) this.handleEvents(attacker, bleedEvents);
+            const result = {
+              success: true,
+              abilityId: 'deathedge',
+              totalPhases: 3,
+              cooldown: abilityConfig.cooldown || 14,
+              fighterId: attackerId,
+              targetId: furthestEnemy.clientId
+            };
+            const payload = { type: 'abilityResult', ...result };
+            this.broadcast(payload);
+            this.io.to(this.room.id).emit('abilityResult', result);
+            return result;
+        } else if (abilityId === 'installationArt') {
             const config = this.engine.getCharacterConfig(attacker.gameState.characterKey);
             const abilityConfig = config?.abilities?.installationArt || { cooldown: 10 };
             const validation = this.engine.validateCharacterAbility(attacker.gameState, 'installationArt', abilityConfig, config);
@@ -2057,6 +2162,56 @@ tick() {
         this.io.to(this.room.id).emit('abilityResult', result);
 
         return result;
+    }
+
+    _resolveDeathedgeExecution(player) {
+        if (!player || !player.deathedgeActive || !player.deathedgeTargetId) return;
+        const targetId = player.deathedgeTargetId;
+        const defender = this.players[targetId];
+        if (!defender) return;
+        const config = this.engine.getCharacterConfig(player.gameState.characterKey);
+        const abilityConfig = config?.abilities?.deathedge;
+        if (!abilityConfig) return;
+        const execResult = this.engine.executeCharacterAbility(player.gameState, 'deathedge', abilityConfig, defender.gameState, config);
+        if (!execResult || !execResult.success) return;
+        if (typeof execResult.targetHp === 'number') defender.gameState.hp = execResult.targetHp;
+        if (execResult.defeated) defender.gameState.isDefeated = true;
+        defender.gameState.state = 'hit';
+        defender.gameState.hitTimer = 0.18;
+        let hitstopSeconds = abilityConfig.hitstop || 0.14;
+        if (execResult.defeated) hitstopSeconds = Math.max(hitstopSeconds, 0.22);
+        this.startHitstop(hitstopSeconds, 'ability-deathedge');
+        this.broadcast({
+            type: 'HIT',
+            attackerId: player.clientId,
+            targetId: defender.clientId,
+            damage: execResult.damage || 0,
+            isCrit: false,
+            attackType: 'ability',
+            attackSequence: null,
+            hp: defender.gameState.hp,
+            knockback: abilityConfig.knockback || 0,
+            statuses: [],
+            staggerResult: null,
+            chargeAttack: false,
+            defeated: !!execResult.defeated,
+            wasGuarded: false,
+            shakeType: 'hit',
+            shakeIntensity: computeHitShakeIntensity(execResult.damage || 0, { attackType: 'ability', defeated: !!execResult.defeated })
+        });
+        if (execResult.dlineCount > 0) {
+            this.broadcast({
+                type: 'DEATHEDGE_DLINE_SPAWN',
+                fighterId: player.clientId,
+                targetId: defender.clientId,
+                dlineCount: execResult.dlineCount,
+                targetX: defender.gameState.position.x,
+                targetY: defender.gameState.position.y
+            });
+        }
+        if (execResult.defeated) {
+            this.broadcast({ type: 'FIGHTER_DEFEATED', fighterId: defender.clientId, defeatedBy: player.clientId });
+        }
     }
 
     _resolveInstallationArtExecution(player) {
@@ -2229,6 +2384,12 @@ tick() {
                 installationArtExecutePhase: !!player.installationArtExecutePhase,
                 timeToHuntCasting: !!player.timeToHuntCasting,
                 timeToHuntCastTimer: player.timeToHuntCastTimer || 0,
+                // Deathedge animation state for client synchronization
+                deathedgeActive: !!player.deathedgeActive,
+                deathedgePhase: player.deathedgePhase || 0,
+                deathedgeTimer: player.deathedgeTimer || 0,
+                deathedgeFrameIndex: player.deathedgeFrameIndex || 0,
+                deathedgeTargetId: player.deathedgeTargetId || null,
                 // Ultimate state (server-authoritative)
                 ultimateActive: !!player.ultimateActive,
                 ultimatePhase: player.ultimate ? player.ultimate.phase : 0,

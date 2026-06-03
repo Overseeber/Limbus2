@@ -622,6 +622,13 @@ function processSnapshot(snapshot) {
         fighter.timeToHuntCasting = !!state.timeToHuntCasting;
         fighter.timeToHuntCastTimer = state.timeToHuntCastTimer || 0;
         
+        // Apply deathedge animation state from server (for synced ability visuals)
+        fighter.deathedgeActive = !!state.deathedgeActive;
+        fighter.deathedgePhase = state.deathedgePhase || 0;
+        fighter.deathedgeTimer = state.deathedgeTimer || 0;
+        fighter.deathedgeFrameIndex = state.deathedgeFrameIndex || 0;
+        fighter.deathedgeTargetId = state.deathedgeTargetId || null;
+        
         // Apply ultimate state from server (for synced ultimate sequences)
         if (typeof applyUltimateState === 'function') {
             applyUltimateState(fighter, state);
@@ -1260,6 +1267,31 @@ function handleAbilityResult(result) {
         // On failure, reset visuals
         fighter.currentSprite = 'cidle';
         fighter.setState('idle');
+      }
+    }
+
+    if (result.abilityId === 'deathedge') {
+      if (result.success) {
+        // Initialize Deathedge animation on server approval
+        fighter.deathedgeActive = true;
+        fighter.deathedgePhase = 0;
+        fighter.deathedgeTimer = 0;
+        fighter.deathedgeFrameIndex = 0;
+        fighter.deathedgeExecuted = false;
+        fighter.deathedgeTargetId = result.targetId;
+        fighter.deathedgeCooldown = result.cooldown || 14;
+        
+        const config = CHARACTERS['DIHUI'].abilities.deathedge;
+        fighter.deathedgeWindupFrames = config.windupFrames || [];
+        fighter.deathedgeWindupHoldDuration = config.windupHoldDuration || 1.0;
+        fighter.deathedgePostTeleportFrames = config.postTeleportFrames || [];
+        fighter.deathedgePostTeleportHoldDuration = config.postTeleportHoldDuration || 1.0;
+        fighter.deathedgeAttackFrames = config.attackFrames || [];
+        fighter.deathedgeAttackHoldDuration = config.attackHoldDuration || 1.0;
+      } else {
+        fighter.deathedgeActive = false;
+        fighter.deathedgeTimer = 0;
+        fighter.deathedgePhase = 0;
       }
     }
 

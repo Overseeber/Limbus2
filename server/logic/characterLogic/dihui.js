@@ -302,6 +302,9 @@ function executeDeathedge(state, abilityConfig, targetState, config) {
   // Apply damage
   targetState.hp = Math.max(0, targetState.hp - calculatedDamage);
 
+  // Apply on-hit effects (inflict Bladetrail Afterimage, gain Poise)
+  const hitEffects = onSuccessfulHit(state, targetState, calculatedDamage, config);
+
   // Spawn dline instances: (BladetrailAfterimage / 10 rounded down) + 1
   const dlineCount = Math.floor(baCount / 10) + 1;
 
@@ -315,6 +318,7 @@ function executeDeathedge(state, abilityConfig, targetState, config) {
     dlineCount: dlineCount,
     targetId: targetState.id,
     defeated: targetState.hp <= 0,
+    statusesApplied: hitEffects?.statusesApplied || [],
     cooldown: abilityConfig.cooldown || 14
   };
 }

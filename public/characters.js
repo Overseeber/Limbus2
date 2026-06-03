@@ -3085,44 +3085,32 @@ CALLISTO: {
         return;
       }
 
-      console.log(`⚔️ Deathedge update: Phase ${fighter.deathedgePhase}, Timer ${fighter.deathedgeTimer.toFixed(3)}, FrameIndex ${fighter.deathedgeFrameIndex}`);
-
       const config = CHARACTERS['DIHUI'].abilities.deathedge;
       const frameDuration = 0.2; // 0.2 secs per frame
 
+      // Server tracks 3 phases: 0=windup, 1=post-teleport, 2=attack
+      // Client animates sprites within each phase
+      
       switch (fighter.deathedgePhase) {
-        case 0: // Windup sequence
+        case 0: // Windup phase (6 frames × 0.2s + 1.0s hold)
           fighter.deathedgeTimer -= dt;
+          
           if (fighter.deathedgeTimer <= 0) {
             if (fighter.deathedgeFrameIndex < fighter.deathedgeWindupFrames.length) {
               fighter.currentSprite = fighter.deathedgeWindupFrames[fighter.deathedgeFrameIndex];
               fighter.deathedgeFrameIndex++;
               fighter.deathedgeTimer = frameDuration;
-              console.log(`⚔️ Deathedge windup frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
             } else {
-              // Hold for 1 second after draw6
+              // Hold final frame
               fighter.currentSprite = fighter.deathedgeWindupFrames[fighter.deathedgeWindupFrames.length - 1];
-              fighter.deathedgePhase = 1;
-              fighter.deathedgeTimer = fighter.deathedgeWindupHoldDuration;
-              console.log(`⚔️ Deathedge windup complete, holding for 1s`);
+              fighter.deathedgeTimer = 0.1; // Keep timer going to match server
             }
           }
           break;
 
-        case 1: // Windup hold, then switch to ds1f1
-          fighter.deathedgeTimer -= dt;
-          if (fighter.deathedgeTimer <= 0) {
-            fighter.currentSprite = fighter.deathedgeWindupFinalSprite;
-            fighter.deathedgePhase = 2;
-            fighter.deathedgeTimer = 0.1; // Brief pause before teleport
-            console.log(`⚔️ Deathedge switching to ${fighter.deathedgeWindupFinalSprite}, preparing teleport`);
-          }
-          break;
-
-        case 2: // Teleport behind enemy
-          fighter.deathedgeTimer -= dt;
-          if (fighter.deathedgeTimer <= 0) {
-            // Find furthest enemy
+        case 1: // Post-teleport phase (3 frames × 0.2s + 1.0s hold)
+          // First time entering this phase, perform teleport
+          if (fighter.deathedgeFrameIndex === 0 && !fighter.deathedgeTeleported) {
             const allFighters = window.allFighters || [];
             const enemies = allFighters.filter(f => f !== fighter && !f.isDefeated);
             let furthestEnemy = null;
@@ -3139,115 +3127,69 @@ CALLISTO: {
             });
 
             if (furthestEnemy) {
-              // Determine teleport position (behind enemy, or front if at edge)
               const arenaMargin = 100;
               const teleportOffset = 150;
               let teleportX;
 
               if (furthestEnemy.facing === 1) {
-                // Enemy facing right, teleport behind (to the right of enemy)
                 teleportX = furthestEnemy.pos.x + teleportOffset;
-                // If at right edge, teleport in front instead
                 if (teleportX > width - arenaMargin) {
                   teleportX = furthestEnemy.pos.x - teleportOffset;
                 }
               } else {
-                // Enemy facing left, teleport behind (to the left of enemy)
                 teleportX = furthestEnemy.pos.x - teleportOffset;
-                // If at left edge, teleport in front instead
                 if (teleportX < arenaMargin) {
                   teleportX = furthestEnemy.pos.x + teleportOffset;
                 }
               }
 
-              // Clamp to arena
               teleportX = Math.max(arenaMargin, Math.min(width - arenaMargin, teleportX));
-
-              // Teleport
               fighter.pos.x = teleportX;
               fighter.pos.y = furthestEnemy.pos.y;
               fighter.vel.x = 0;
               fighter.vel.y = 0;
-
-              fighter.deathedgeTeleportPosition = { x: teleportX, y: furthestEnemy.pos.y };
-              console.log(`⚔️ Deathedge teleported to (${teleportX.toFixed(0)}, ${furthestEnemy.pos.y.toFixed(0)})`);
+              fighter.deathedgeTeleported = true;
             }
-
-            fighter.deathedgePhase = 3;
-            fighter.deathedgeFrameIndex = 0;
-            fighter.deathedgeTimer = frameDuration;
           }
-          break;
 
-        case 3: // Post-teleport sequence
           fighter.deathedgeTimer -= dt;
+          
           if (fighter.deathedgeTimer <= 0) {
             if (fighter.deathedgeFrameIndex < fighter.deathedgePostTeleportFrames.length) {
               fighter.currentSprite = fighter.deathedgePostTeleportFrames[fighter.deathedgeFrameIndex];
               fighter.deathedgeFrameIndex++;
               fighter.deathedgeTimer = frameDuration;
-              console.log(`⚔️ Deathedge post-teleport frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
             } else {
-              // Hold for 1 second after ds2f2
+              // Hold final frame
               fighter.currentSprite = fighter.deathedgePostTeleportFrames[fighter.deathedgePostTeleportFrames.length - 1];
-              fighter.deathedgePhase = 4;
-              fighter.deathedgeTimer = fighter.deathedgePostTeleportHoldDuration;
-              console.log(`⚔️ Deathedge post-teleport complete, holding for 1s`);
+              fighter.deathedgeTimer = 0.1;
             }
           }
           break;
 
-        case 4: // Post-teleport hold, then attack
+        case 2: // Attack phase (2 frames × 0.2s + 1.0s hold)
           fighter.deathedgeTimer -= dt;
-          if (fighter.deathedgeTimer <= 0) {
-            fighter.deathedgePhase = 5;
-            fighter.deathedgeFrameIndex = 0;
-            fighter.deathedgeTimer = frameDuration;
-
-            // Execute attack locally for visual effects
-            this.executeDeathedgeAttack(fighter);
-            console.log(`⚔️ Deathedge executing attack`);
-          }
-          break;
-
-        case 5: // Attack sequence
-          fighter.deathedgeTimer -= dt;
+          
           if (fighter.deathedgeTimer <= 0) {
             if (fighter.deathedgeFrameIndex < fighter.deathedgeAttackFrames.length) {
               fighter.currentSprite = fighter.deathedgeAttackFrames[fighter.deathedgeFrameIndex];
               
-              // Spawn dline on dhalt1
-              if (fighter.deathedgeAttackFrames[fighter.deathedgeFrameIndex] === 'dhalt1') {
+              // Spawn dline on first attack frame (dhalt1)
+              if (fighter.deathedgeFrameIndex === 0) {
                 this.spawnDeathedgeDlines(fighter);
-                console.log(`⚔️ Deathedge spawning dlines`);
               }
               
               fighter.deathedgeFrameIndex++;
               fighter.deathedgeTimer = frameDuration;
-              console.log(`⚔️ Deathedge attack frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
             } else {
-              // Hold for 1 second after dhalt2
+              // Hold final frame
               fighter.currentSprite = fighter.deathedgeAttackFrames[fighter.deathedgeAttackFrames.length - 1];
-              fighter.deathedgePhase = 6;
-              fighter.deathedgeTimer = fighter.deathedgeAttackHoldDuration;
-              console.log(`⚔️ Deathedge attack complete, holding for 1s`);
+              fighter.deathedgeTimer = 0.1;
             }
           }
           break;
-
-        case 6: // Attack hold, then end
-          fighter.deathedgeTimer -= dt;
-          if (fighter.deathedgeTimer <= 0) {
-            fighter.deathedgeActive = false;
-            fighter.deathedgePhase = 0;
-            fighter.deathedgeFrameIndex = 0;
-            fighter.deathedgeTimer = 0;
-            fighter.deathedgePredictive = false;
-            fighter.currentSprite = 'didle';
-
-            console.log(`⚔️ Deathedge [絶命] ended!`);
-          }
-          break;
+      }
+    },
       }
     },
 

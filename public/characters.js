@@ -3253,21 +3253,51 @@ CALLISTO: {
       fighter.bladeStacks = 0;
     },
 
-    // Ultimate methods
+    // =====================================================================
+    // DIHUI STAR ULTIMATE: Uttermost Rend Space - String Severance [空間斬 - 絕緣]
+    // =====================================================================
+    // Spec phases:
+    // Phase 0: du1 centered pose - teleport to center (1.5s)
+    // Phase 1: du1 at right edge, zoom in on Dihui - teleport opponent center, Dihui right (2s)
+    // Phase 2: du2 at right edge (1s)
+    // Phase 3: Teleport to left edge, zoom out entire arena, djoust1→2→3→4 (0.2s each) + blue line
+    // Phase 4: dhalt1→dhalt2 hold 3s, camera center on Dihui + zoom in
+    // Phase 5: du3→du4→du5→du6→du7 (0.3s each, du7 hold 2s)
+    // Phase 6: Zoom out, du8 + dline instances (at target location, ±50px, ±60° rotation), hold 2s, deal damage
+    // Phase 7: Return to combat, retain positions
+    // =====================================================================
     activateUltimate: function(fighter, enemies) {
       const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
+      
+      // Core ultimate initialization
       fighter.ultimateActive = true;
       fighter.ultimatePhase = 0;
-      fighter.ultimateTimer = 1.0;
+      fighter.ultimateTimer = 1.5; // du1 centered pose for 1.5s
       fighter.ultimateTotalDamage = 0;
       fighter.ultimateDamageDealt = 0;
-      fighter.ultimateCameraZoom = 1.0;
+      fighter.ultimateCameraZoom = 2.5; // Zoom in centered on fighters
       fighter.ultimateBackgroundDim = 0.7;
       fighter.ultimateName = "UTTERMOST REND SPACE - STRING SEVERANCE";
       fighter.ultimateDialogue = '空間斬 - 絕緣';
       fighter.currentSprite = 'du1';
-      fighter.ultimateForceLeftFacing = true; // Force sprites to face left during ultimate
+      fighter.ultimateForceLeftFacing = false; // Face dynamically
+      fighter.ultimateCameraCenterOnArena = false;
+      
+      // Track ultimate-specific state
+      fighter.ultimateDlinesSpawned = false;
+      fighter.ultimateDlineInstances = [];
+      fighter.ultimateSlashSpawned = false;
+      fighter.ultimateDamageDealtPhase6 = false;
+      fighter.ultimateJoustFrame = 0;
+      fighter.ultimateHaltFrame = 0;
 
+      // Face toward nearest enemy at start
+      const nearest = targetEnemies.find(e => e && !e.isDefeated);
+      if (nearest) {
+        fighter.facing = nearest.pos.x > fighter.pos.x ? 1 : -1;
+      }
+
+      // Ultimate protection for enemies
       targetEnemies.forEach(enemy => {
         if (enemy) {
           enemy.ultimateProtected = true;
@@ -3278,6 +3308,7 @@ CALLISTO: {
         }
       });
 
+      // Disable collision
       fighter.originalCollisionEnabled = fighter.collisionEnabled !== false;
       fighter.collisionEnabled = false;
       targetEnemies.forEach(enemy => {
@@ -3287,7 +3318,7 @@ CALLISTO: {
         }
       });
 
-      // Position fighter at center initially
+      // Teleport Dihui to center, opponent to center
       const centerPos = this.clampToArena(width / 2, height - 100);
       fighter.pos.x = centerPos.x;
       fighter.pos.y = centerPos.y;
@@ -3295,10 +3326,15 @@ CALLISTO: {
       fighter.vel.y = 0;
       targetEnemies.forEach(enemy => {
         if (enemy) {
+          const eCenter = this.clampToArena(width / 2, height - 100);
+          enemy.pos.x = eCenter.x;
+          enemy.pos.y = eCenter.y;
           enemy.vel.x = 0;
           enemy.vel.y = 0;
         }
       });
+      
+      console.log(`[DIHUI ULT] Phase 0: du1 centered pose 1.5s`);
     },
 
     updateUltimate: function(fighter, enemies, dt) {
@@ -3312,125 +3348,262 @@ CALLISTO: {
         }
       });
 
-      // Only decrement timer in specific phases
-      if (fighter.ultimatePhase === 0 || fighter.ultimatePhase === 2 || 
-          fighter.ultimatePhase === 4 || fighter.ultimatePhase === 6 ||
-          fighter.ultimatePhase === 9) {
+      // Timer decrement for non-attack phases (phases that are waiting/timing)
+      if (fighter.ultimatePhase === 0 || fighter.ultimatePhase === 1 || 
+          fighter.ultimatePhase === 2 || fighter.ultimatePhase === 4 ||
+          fighter.ultimatePhase === 6 || fighter.ultimatePhase === 7) {
         fighter.ultimateTimer -= dt;
       }
 
       switch (fighter.ultimatePhase) {
-        case 0: // du1 - initial pose (1 second)
+        // ===== PHASE 0: Centered pose - [du1] (1.5s) =====
+        case 0:
+          fighter.currentSprite = 'du1';
           if (fighter.ultimateTimer <= 0) {
-            fighter.ultimatePhase = 1;
-            fighter.ultimateTimer = 0.5;
-            fighter.currentSprite = 'du2';
-          }
-          break;
-
-        case 1: // du2 - teleport to right edge
-          if (fighter.ultimateTimer <= 0) {
-            // Teleport to right edge of arena
-            const rightEdge = this.clampToArena(width - 150, height - 100);
-            fighter.pos.x = rightEdge.x;
-            fighter.pos.y = rightEdge.y;
-            fighter.vel.x = 0;
-            fighter.vel.y = 0;
-
-            // Position enemy at center
+            // Transition: teleport opponent to center, Dihui to right edge
+            const centerX = this.clampToArena(width / 2, height - 100).x;
             targetEnemies.forEach(enemy => {
               if (enemy) {
-                const centerPos = this.clampToArena(width / 2, height - 100);
-                enemy.pos.x = centerPos.x;
-                enemy.pos.y = centerPos.y;
+                enemy.pos.x = centerX;
+                enemy.pos.y = height - 100;
                 enemy.vel.x = 0;
                 enemy.vel.y = 0;
               }
             });
+            // Dihui to right edge
+            const rightX = this.clampToArena(width - 150, height - 100).x;
+            fighter.pos.x = rightX;
+            fighter.pos.y = height - 100;
+            fighter.vel.x = 0;
+            fighter.vel.y = 0;
+            fighter.facing = -1; // Face left toward center
+            
+            fighter.ultimateCameraZoom = 2.5; // Zoom in centered on Dihui at right edge
+            fighter.ultimateCameraCenterOnArena = false;
+            fighter.ultimatePhase = 1;
+            fighter.ultimateTimer = 2.0; // Hold du1 for 2s
+            console.log(`[DIHUI ULT] Phase 1: du1 at right edge, zoom in 2s`);
+          }
+          break;
 
-            // Zoom out to show 100% of arena, centered on arena
+        // ===== PHASE 1: du1 hold at right edge (2s) =====
+        case 1:
+          fighter.currentSprite = 'du1';
+          if (fighter.ultimateTimer <= 0) {
+            fighter.currentSprite = 'du2';
+            fighter.ultimatePhase = 2;
+            fighter.ultimateTimer = 1.0; // Hold du2 for 1s
+            console.log(`[DIHUI ULT] Phase 2: du2 hold 1s`);
+          }
+          break;
+
+        // ===== PHASE 2: du2 hold at right edge (1s) =====
+        case 2:
+          fighter.currentSprite = 'du2';
+          if (fighter.ultimateTimer <= 0) {
+            // Teleport Dihui to left edge, zoom out entire arena
+            const leftX = this.clampToArena(100, height - 100).x;
+            fighter.pos.x = leftX;
+            fighter.pos.y = height - 100;
+            fighter.vel.x = 0;
+            fighter.vel.y = 0;
+            
+            // Face right toward center
+            fighter.facing = 1;
+            
+            // Zoom out to show 100% of arena centered (left end to right end visible)
             fighter.ultimateCameraZoom = 1.0;
             fighter.ultimateCameraCenterOnArena = true;
-            fighter.ultimatePhase = 2;
-            fighter.ultimateTimer = 0.5;
-          }
-          break;
-
-        case 2: // Transition to du3, zoom in
-          if (fighter.ultimateTimer <= 0) {
-            fighter.currentSprite = 'du3';
-            fighter.ultimateCameraZoom = 2.0; // Zoom in
-            fighter.ultimateCameraCenterOnArena = false;
+            
+            // Start joust sequence
+            fighter.ultimateJoustFrame = 0;
+            fighter.currentSprite = 'djoust1';
             fighter.ultimatePhase = 3;
-            fighter.ultimateTimer = 0.3;
+            fighter.ultimateTimer = 0.2; // 0.2s per joust sprite
+            
+            // Draw blue line at 144px above floor, full arena width
+            const arenaFloorY = height - 100;
+            const lineY = arenaFloorY - 144; // 144px above floor
+            fighter.ultimateLineDrawn = true;
+            fighter.ultimateLineY = lineY;
+            fighter.ultimateLineThickness = 8; // Initial thickness
+            fighter.ultimateLineColor = [46, 116, 255];
+            
+            console.log(`[DIHUI ULT] Phase 3: joust sequence + blue line`);
           }
           break;
 
-        case 3: // du3 - attack setup
+        // ===== PHASE 3: Joust sequence at left edge =====
+        case 3:
+          fighter.ultimateTimer -= dt;
           if (fighter.ultimateTimer <= 0) {
-            fighter.currentSprite = 'du4';
-            fighter.ultimatePhase = 4;
-            fighter.ultimateTimer = 0.2;
+            fighter.ultimateJoustFrame++;
+            const joustSprites = ['djoust1', 'djoust2', 'djoust3', 'djoust4'];
+            if (fighter.ultimateJoustFrame < joustSprites.length) {
+              fighter.currentSprite = joustSprites[fighter.ultimateJoustFrame];
+              fighter.ultimateTimer = 0.2; // 0.2s per sprite
+            } else {
+              // Joust complete, transition to halt sequence
+              fighter.ultimateTimer = 0.1; // Brief gap
+              fighter.ultimatePhase = 4;
+              fighter.ultimateHaltFrame = 0;
+              fighter.currentSprite = 'dhalt1';
+              fighter.ultimateTimer = 0.5; // Brief before hold
+              console.log(`[DIHUI ULT] Phase 4: halt sequence`);
+            }
+          }
+          
+          // Decrease line thickness during joust phase
+          if (fighter.ultimateLineDrawn && fighter.ultimateLineThickness > 0) {
+            fighter.ultimateLineThickness = Math.max(0, fighter.ultimateLineThickness - dt * 4);
           }
           break;
 
-        case 4: // du4 - attack 1
+        // ===== PHASE 4: dhalt1>dhalt2 hold 3s, camera center on Dihui + zoom in =====
+        case 4:
+          fighter.ultimateTimer -= dt;
           if (fighter.ultimateTimer <= 0) {
-            // Deal damage
-            targetEnemies.forEach(enemy => {
-              if (enemy) {
-                this.dealUltimateDamage(fighter, enemy, fighter.baseDamage * 2, false, 1);
-              }
-            });
-            fighter.spawnSlashEffect('ds3s1', { x: 0, y: -10 });
-            fighter.currentSprite = 'du5';
-            fighter.ultimatePhase = 5;
-            fighter.ultimateTimer = 0.2;
+            if (fighter.ultimateHaltFrame === 0) {
+              // Switch to dhalt2
+              fighter.currentSprite = 'dhalt2';
+              fighter.ultimateHaltFrame = 1;
+              
+              // Camera centers on Dihui's position and zooms in
+              fighter.ultimateCameraCenterOnArena = false;
+              fighter.ultimateCameraZoom = 2.5;
+              
+              fighter.ultimateTimer = 3.0; // Hold for 3s
+              console.log(`[DIHUI ULT] Phase 4: dhalt2 hold 3s, camera zoom in`);
+            } else {
+              // Halt complete, transition to du3 sequence
+              fighter.ultimatePhase = 5;
+              fighter.ultimateAttackFrame = 0;
+              fighter.ultimateTimer = 0.3;
+              fighter.currentSprite = 'du3';
+              console.log(`[DIHUI ULT] Phase 5: du3→du7 sequence`);
+            }
           }
           break;
 
-        case 5: // du5 - attack 2
+        // ===== PHASE 5: du3→du4→du5→du6→du7 (0.3s each, du7 hold 2s) =====
+        case 5:
+          fighter.ultimateTimer -= dt;
           if (fighter.ultimateTimer <= 0) {
-            // Deal damage
-            targetEnemies.forEach(enemy => {
-              if (enemy) {
-                this.dealUltimateDamage(fighter, enemy, fighter.baseDamage * 2, false, 2);
-              }
-            });
-            fighter.spawnSlashEffect('ds3s1', { x: 0, y: -10 });
-            fighter.currentSprite = 'du6';
-            fighter.ultimatePhase = 6;
-            fighter.ultimateTimer = 0.2;
+            fighter.ultimateAttackFrame = (fighter.ultimateAttackFrame || 0) + 1;
+            const duSprites = ['du3', 'du4', 'du5', 'du6', 'du7'];
+            if (fighter.ultimateAttackFrame < duSprites.length) {
+              fighter.currentSprite = duSprites[fighter.ultimateAttackFrame];
+              fighter.ultimateTimer = 0.3; // 0.3s between frames
+            } else {
+              // On du7, hold for 2s
+              fighter.currentSprite = 'du7';
+              fighter.ultimateTimer = 2.0; // Hold 2s
+              fighter.ultimateAttackFrame = -1; // Signal we're in hold
+              console.log(`[DIHUI ULT] Phase 5: du7 hold 2s`);
+            }
           }
-          break;
-
-        case 6: // du6 - attack 3
-          if (fighter.ultimateTimer <= 0) {
-            // Deal damage
-            targetEnemies.forEach(enemy => {
-              if (enemy) {
-                this.dealUltimateDamage(fighter, enemy, fighter.baseDamage * 3, true, 3);
-              }
-            });
-            fighter.spawnSlashEffect('ds3s1', { x: 0, y: -10 });
-            fighter.currentSprite = 'du7';
-            fighter.ultimatePhase = 7;
-            fighter.ultimateTimer = 0.3;
-          }
-          break;
-
-        case 7: // du7 - transition to final
-          if (fighter.ultimateTimer <= 0) {
-            fighter.currentSprite = 'du8';
-            fighter.ultimateCameraZoom = 1.0; // Zoom to x1, centered on arena
+          
+          // When du7 hold completes, move to phase 6
+          if (fighter.ultimateAttackFrame === -1 && fighter.ultimateTimer <= 0) {
+            // Zoom out to show entire arena (same as before)
+            fighter.ultimateCameraZoom = 1.0;
             fighter.ultimateCameraCenterOnArena = true;
-            fighter.ultimatePhase = 9;
-            fighter.ultimateTimer = 2.0; // Hold for 2 seconds then end
+            
+            // Switch to du8
+            fighter.currentSprite = 'du8';
+            fighter.ultimatePhase = 6;
+            fighter.ultimateTimer = 2.0; // Hold for 2s
+            fighter.ultimateDlinesSpawned = false;
+            fighter.ultimateDamageDealtPhase6 = false;
+            console.log(`[DIHUI ULT] Phase 6: du8 + dlines + damage`);
+            
+            // Reset attackFrame
+            fighter.ultimateAttackFrame = 0;
           }
           break;
 
-        case 9: // du8 - final pose, let automatic system handle ending
-          // Timer decrements automatically, system will end when timer reaches 0
+        // ===== PHASE 6: du8 + dline spawn + deal damage =====
+        case 6:
+          fighter.currentSprite = 'du8';
+          
+          // On first entry, spawn dline instances and deal damage
+          if (!fighter.ultimateDlinesSpawned) {
+            fighter.ultimateDlinesSpawned = true;
+            
+            // Calculate total bladetrail afterimages from all enemies
+            let totalAfterimage = 0;
+            targetEnemies.forEach(enemy => {
+              if (enemy && enemy.statuses) {
+                const ba = enemy.statuses.find(s => s.type === 'Bladetrail Afterimage');
+                if (ba) totalAfterimage += ba.count;
+              }
+            });
+            
+            const dlineCount = Math.min(Math.floor(totalAfterimage / 3), 33);
+            console.log(`[DIHUI ULT] Spawning ${dlineCount} dline instances from ${totalAfterimage} afterimages`);
+            
+            // Spawn dline instances at target locations with random rotation
+            for (let i = 0; i < dlineCount; i++) {
+              const targetEnemy = targetEnemies.find(e => e && !e.isDefeated);
+              if (targetEnemy) {
+                const offsetX = random(-50, 50);
+                const offsetY = random(-50, 50);
+                const rotationDeg = random(-60, 60);
+                const rotationRad = radians(rotationDeg);
+                
+                fighter.spawnSlashEffect('dline', {
+                  x: offsetX,
+                  y: offsetY,
+                  rotation: rotationRad,
+                  // Position dline at world position relative to target
+                  worldPos: { x: targetEnemy.pos.x, y: targetEnemy.pos.y }
+                });
+              }
+            }
+            
+            // Also spawn at least 1 dba slash effect
+            fighter.spawnSlashEffect('dba', { x: 0, y: -10 });
+            fighter.ultimateSlashSpawned = true;
+            
+            // Deal damage with combo, bladetrail HP% bonus
+            if (!fighter.ultimateDamageDealtPhase6) {
+              fighter.ultimateDamageDealtPhase6 = true;
+              targetEnemies.forEach(enemy => {
+                if (enemy && !enemy.isDefeated) {
+                  // Base damage: +24 Base Damage
+                  // HP% damage: Target Max HP × Bladetrail Afterimage %
+                  const baStatus = enemy.statuses ? enemy.statuses.find(s => s.type === 'Bladetrail Afterimage') : null;
+                  const baCount = baStatus ? baStatus.count : 0;
+                  const hpPercentDamage = Math.floor(enemy.maxHp * baCount * 0.01);
+                  const comboCount = fighter.combo || 0;
+                  const totalDmg = Math.floor(24 + (5 * comboCount) + hpPercentDamage);
+                  
+                  this.dealUltimateDamage(fighter, enemy, totalDmg, false, 6);
+                  
+                  // Consume ALL Bladetrail Afterimage at ult end
+                  if (baStatus) {
+                    baStatus.count = 0;
+                    enemy.statuses = enemy.statuses.filter(s => s.type !== 'Bladetrail Afterimage');
+                  }
+                }
+              });
+            }
+          }
+          
+          // Timer decremented at top. Phase 7 when timer <= 0.
+          if (fighter.ultimateTimer <= 0) {
+            fighter.ultimatePhase = 7;
+            fighter.ultimateTimer = 0.5;
+            console.log(`[DIHUI ULT] Phase 7: return to combat`);
+          }
+          break;
+
+        // ===== PHASE 7: Return to combat =====
+        case 7:
+          if (fighter.ultimateTimer <= 0) {
+            // Set final timer to 0 so the generic system ends the ultimate
+            fighter.ultimateTimer = 0;
+          }
           break;
       }
     },
@@ -3439,8 +3612,17 @@ CALLISTO: {
       fighter.currentSprite = 'didle';
       fighter.ultimateCameraZoom = 1;
       fighter.ultimateBackgroundDim = 0;
-      fighter.ultimateForceLeftFacing = false;
       fighter.ultimateCameraCenterOnArena = false;
+      fighter.ultimateForceLeftFacing = false;
+      
+      // Clear ultimate-specific state
+      fighter.ultimateLineDrawn = false;
+      fighter.ultimateLineThickness = 0;
+      fighter.ultimateDlinesSpawned = false;
+      fighter.ultimateSlashSpawned = false;
+      fighter.ultimateDamageDealtPhase6 = false;
+      fighter.ultimateJoustFrame = 0;
+      fighter.ultimateHaltFrame = 0;
 
       if (fighter.allEnemies && Array.isArray(fighter.allEnemies)) {
         fighter.allEnemies.forEach(enemy => {
@@ -3459,6 +3641,7 @@ CALLISTO: {
         fighter.collisionEnabled = fighter.originalCollisionEnabled;
       }
     },
+    // REPLACE END
 
     // Helper methods
     clampToArena: function(x, y) {

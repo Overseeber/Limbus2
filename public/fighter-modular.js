@@ -1395,10 +1395,14 @@ class Fighter {
       }
     }
 
-    // Draw ultimate-specific effects (red lines and skulls)
-    if (this.ultimateActive && this.characterKey === 'CALLISTO') {
-      this.drawUltimateEffects(dt);
-    }
+      // Draw ultimate-specific effects (Callisto red lines/skulls, Dihui blue line)
+      if (this.ultimateActive) {
+        if (this.characterKey === 'CALLISTO') {
+          this.drawUltimateEffects(dt);
+        } else if (this.characterKey === 'DIHUI') {
+          this.drawDihuiUltimateEffects();
+        }
+      }
   }
 
   drawUltimateEffects(dt) {
@@ -1431,6 +1435,25 @@ class Fighter {
           pop();
         }
       });
+    }
+  }
+
+  drawDihuiUltimateEffects() {
+    // Draw the blue line at 144px above floor during joust phase
+    if (this.ultimateLineDrawn && this.ultimateLineThickness > 0) {
+      push();
+      const lineColor = this.ultimateLineColor || [46, 116, 255];
+      const lineY = this.ultimateLineY || (height - 100 - 144);
+      const thickness = Math.max(0, this.ultimateLineThickness);
+      const alpha = constrain(thickness / 8 * 255, 0, 255);
+      
+      stroke(lineColor[0], lineColor[1], lineColor[2], alpha);
+      strokeWeight(thickness);
+      
+      // Draw from left edge to right edge of arena
+      const margin = 100;
+      line(margin, lineY, width - margin, lineY);
+      pop();
     }
   }
 
@@ -3085,12 +3108,9 @@ addCombo(attacker) {
     if (this.spriteType === 'atlas' && this.currentSprite) {
       push();
 
-      // Flip atlas sprites based on facing, but force left facing during ultimate if flag is set
-      if (this.ultimateForceLeftFacing) {
-        scale(-1, 1); // Always face left during ultimate
-      } else {
-        scale(this.facing === 1 ? -1 : 1, 1);
-      }
+      // Flip atlas sprites based on facing direction
+      // (ultimateForceLeftFacing removed - use fighter.facing for dynamic direction)
+      scale(this.facing === 1 ? -1 : 1, 1);
 
       // Debug missing sprite
       const spriteInfo = SPRITES?.[this.currentSprite];

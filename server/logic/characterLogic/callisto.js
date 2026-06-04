@@ -136,11 +136,18 @@ function initializeResources(state, config) {
   state.resources = state.resources || {};
   state.statuses = state.statuses || [];
   
-  // Unique charge resource (not a status - tracked directly)
+  // Unique charge resource - tracked as BOTH resource AND status effect for client visibility
+  // [Corpus Ingredient] - unique charge, max 20, no decay - shows on status row like Precognition
   state.resources.corpusIngredient = 0;
   state.resources.maxCorpusIngredient = config.corpusIngredient.max || 20;
+  // Add as status so it renders on the client status bar
+  ensureStatus(state, 'Corpus Ingredient', 0, 0);
+  
+  // [Artwork: Tibia] - per stack: +10% damage, +1 bleed potency/count (max 3) - shows on status row
   state.resources.artworkTibiaStacks = 0;
   state.resources.corpusSpentTotal = 0;
+  // Add as status so it renders on the client status bar
+  ensureStatus(state, 'Artwork Tibia', 0, 0);
   
   // Slam tracking
   state.resources.slamBuffActive = false;
@@ -598,7 +605,6 @@ function updateSystems(state, dt, config) {
       const targetFragileCount = Math.min(existingFragileCount + fragileToGain, 5);
       if (targetFragileCount > existingFragileCount) {
         setStatusCount(state, 'Fragile', targetFragileCount);
-        setStatusCount(state, 'Fragile', targetFragileCount); // Also set potency
         const fragileStatus = getStatus(state, 'Fragile');
         if (fragileStatus) fragileStatus.potency = targetFragileCount;
         events.push({ type: 'FRAGILE_GAINED_FROM_NEGATIVE', source: 'passive1', amount: fragileToGain });
@@ -606,11 +612,28 @@ function updateSystems(state, dt, config) {
     }
   }
 
-  // 3. Calculate effective speed with Haste/Bind/IngredientShreddingWound
+  // 3. SYNC CORPUS INGREDIENT STATUS with resource (for client visibility)
+  const corpusStatus = getStatus(state, 'Corpus Ingredient');
+  if (corpusStatus) {
+    corpusStatus.count = state.resources.corpusIngredient;
+    corpusStatus.potency = state.resources.corpusIngredient;
+  } else if (state.resources.corpusIngredient > 0) {
+    ensureStatus(state, 'Corpus Ingredient', state.resources.corpusIngredient, state.resources.corpusIngredient);
+  }
+
+  // 4. SYNC ARTWORK: TIBIA STATUS with resource (for client visibility)
+  const artworkStatus = getStatus(state, 'Artwork Tibia');
+  if (artworkStatus) {
+    artworkStatus.count = state.resources.artworkTibiaStacks;
+    artworkStatus.potency = state.resources.artworkTibiaStacks;
+  } else if (state.resources.artworkTibiaStacks > 0) {
+    ensureStatus(state, 'Artwork Tibia', state.resources.artworkTibiaStacks, state.resources.artworkTibiaStacks);
+  }
+
+  // 5. Calculate effective speed with Haste/Bind/IngredientShreddingWound
   const baseSpeed = config.speed || 9;
   const hasteStacks = getStatusCount(state, 'Haste');
   const bindStacks = getStatusCount(state, 'Bind');
-  const iswStacks = getStatusCount(state, 'IngredientShreddingWound'); // Does not scale with stack
   const iswActive = hasStatus(state, 'IngredientShreddingWound');
   
   let effectiveSpeed = baseSpeed + hasteStacks - bindStacks;
@@ -618,11 +641,11 @@ function updateSystems(state, dt, config) {
   effectiveSpeed = Math.max(1, effectiveSpeed);
   state.resources.effectiveSpeed = effectiveSpeed;
 
-  // 4. Calculate damage bonuses for UI display
+  // 6. Calculate damage bonuses for UI display
   const artworkStacks = state.resources.artworkTibiaStacks || 0;
   state.resources.artworkDamageBonus = artworkStacks * (config.artworkTibia.damageBonus || 0.1);
 
-  // 5. Check ultimate availability
+  // 7. Check ultimate availability
   state.resources.ultimateAvailable = artworkStacks >= (config.ultimate.artworkRequired || 5);
 
   return events;

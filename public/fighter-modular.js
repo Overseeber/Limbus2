@@ -604,7 +604,9 @@ class Fighter {
     // Initialize dash sprite properties
     this.usePostDashSprite = false;
     
-    // Initialize slam attack properties
+    // Initialize slam costure sprite properties (cuf6/cus4 at max Corpus consumption)
+    this.slamCostumeSprite = null;
+    this.slamCostumeSlash = null;
     this.slamHoldPosition = false;
     
     // Initialize slash effects management
@@ -858,9 +860,15 @@ class Fighter {
       if (this.state === 'hit' || this.state === 'hurt') {
         this.currentSprite = 'churt';
       } else if (this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition) {
-        this.currentSprite = 'cs1f2';
+        // Check for empowered slam costume sprites (cuf6/cus4 when consuming 20 Corpus)
+        if (this.slamCostumeSprite) {
+          this.currentSprite = this.slamCostumeSprite;
+        } else {
+          this.currentSprite = 'cs1f2';
+        }
         if (slamJustActivated) {
-          this.spawnSlashEffect('cs1s1', { x: 0, y: -10 });
+          const slashName = this.slamCostumeSlash || 'cs1s1';
+          this.spawnSlashEffect(slashName, { x: 0, y: -10 });
         }
       } else if (this.dashAttackActive) {
         // Dash attack deceleration - show cjoust sprite while slowing down

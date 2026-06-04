@@ -1594,6 +1594,16 @@ function handleSlamLandingEvent(event) {
     timer: 0.35,
     alpha: 255
   });
+
+  // CALLISTO: Apply empowered slam costume sprites if present
+  if (event.costumeSprite || event.useCostumeSprite) {
+    const attacker = window.allFighters?.find(f => f.clientId === event.attackerId);
+    if (attacker && attacker.characterKey === 'CALLISTO') {
+      attacker.slamCostumeSprite = event.costumeSprite || null;
+      attacker.slamCostumeSlash = event.costumeSlash || null;
+      console.log(`🎨 Callisto empowered slam! Sprite: ${event.costumeSprite}, Slash: ${event.costumeSlash}`);
+    }
+  }
 }
 
 function updateSlamLandingOverlays(dt) {

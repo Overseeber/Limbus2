@@ -1941,7 +1941,35 @@ tick() {
         
         // Slam position (at ground level)
         const slamPos = { x: state.position.x, y: 600 };
-        const slamRadius = SLAM_ATTACK_RADIUS;
+        let slamRadius = SLAM_ATTACK_RADIUS;
+        // Slam base damage is a multiplier (like attackDef.damage = 1.0, 1.25, 1.8).
+        // calculateDamage will multiply this by attacker.baseDamage to get final damage.
+        // So 1.5 means 1.5 * baseDamage = 1.5 * 27 ≈ 40 for Callisto normal slam.
+        let dmgMultiplier = 1.5;
+        let useCostumeSprite = false; // For Callisto: cuf6/cus4 at max consumption
+        let corpusConsumed = 0;
+        
+        // CALLISTO: Consume up to 20 Corpus Ingredient on slam landing
+        if (state.characterKey === 'CALLISTO' && state.resources) {
+            const callistoLogic = require('./characterLogic/callisto');
+            const maxConsumable = config.corpusIngredient?.spendPerSlam || 20;
+            const corpusToConsume = Math.min(state.resources.corpusIngredient || 0, maxConsumable);
+            if (corpusToConsume > 0) {
+                const consumeResult = callistoLogic.consumeCorpusIngredient(state, corpusToConsume, config);
+                corpusConsumed = consumeResult.consumed || 0;
+                // At max consumption (20): +100% range, +50% damage, costume sprites
+                if (corpusToConsume >= maxConsumable) {
+                    slamRadius *= 2.0;      // +100% range
+                    dmgMultiplier *= 1.5;    // +50% damage: 1.5 * 1.5 = 2.25x
+                    useCostumeSprite = true;  // Use cuf6 sprite + cus4 slash
+                }
+                
+                // Slam buff active for client visual sync
+                state.resources.slamBuffActive = true;
+                state.resources.slamBuffTimer = 0.5;
+                state.resources.corpusConsumedLastSlam = corpusConsumed;
+            }
+        }
         
         const defenders = Object.values(this.players).filter(p => 
             p.clientId !== player.clientId && !p.gameState.isDefeated
@@ -1960,9 +1988,9 @@ tick() {
 
                 const attackData = {
                     range: slamRadius,
-                    baseDamage: config.baseDamage * 2,
+                    baseDamage: dmgMultiplier, // Multiplier (1.5 base, 2.25 at max consumption)
                     knockback: 150,
-                    staggerDamage: config.baseDamage * 100,
+                    staggerDamage: dmgMultiplier * 50, // Scale stagger with actual damage
                     statusEffects: [],
                     chargeAttack: false,
                     isDashAttack: false,
@@ -2012,14 +2040,24 @@ tick() {
             }
         });
         
-        // Broadcast slam landing for VFX
-        this.broadcast({
+        // Broadcast slam landing for VFX - includes costume sprite info for Callisto
+        const slamBroadcast = {
             type: 'slamLanding',
             attackerId: player.clientId,
             slamPos: slamPos,
             radius: slamRadius,
-            hitAny: hitAny
-        });
+            hitAny: hitAny,
+            corpusConsumed: corpusConsumed
+        };
+        // Callisto: tell client which slashes/sprites to use at max consumption
+        if (state.characterKey === 'CALLISTO') {
+            slamBroadcast.useCostumeSprite = useCostumeSprite;
+            slamBroadcast.costumeSprite = useCostumeSprite ? 'cuf6' : null;
+            slamBroadcast.costumeSlash = useCostumeSprite ? 'cus4' : null;
+            slamBroadcast.defaultSprite = 'cs1f2';
+            slamBroadcast.defaultSlash = 'cs1s1';
+        }
+        this.broadcast(slamBroadcast);
     }
 
     executeAbility(attackerId, abilityId, targetId) {

@@ -1356,7 +1356,7 @@ class Fighter {
             
             // Position at ground level: prefer effect.groundY, then effect.pos.y, then owner.spawnY
             const groundY = (typeof effect.groundY === 'number') ? effect.groundY : ((effect.pos && typeof effect.pos.y === 'number') ? effect.pos.y : effect.owner.spawnY);
-            translate(effect.pos.x + offsetX, groundY);
+            translate(effect.pos.x + offsetX, groundY - 70);
             
             // Random rotation between -45 to 45 degrees
             if (!effect.rotation) {
@@ -1365,8 +1365,8 @@ class Fighter {
             rotate(effect.rotation);
             
             // FIX 3: Do NOT apply facing flip - use fixed orientation
-            scale(scaleFactor, 1);
-            
+            //scale(scaleFactor, scaleFactor);
+            scale(1,1);
             // Draw the sprite
             drawSpriteScaled(effect.type, 0, 0, scaleFactor);
             

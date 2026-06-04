@@ -1350,8 +1350,8 @@ CALLISTO: {
       fighter.ultimateBackgroundDim = 0.7;
 
       // Set ultimate name and dialogue
-      fighter.ultimateName = "CLOSING TIME";
-      fighter.ultimateDialogue = "Installation Art no. 1: Your Flesh and Bones as the Gallery's Seats";
+      fighter.ultimateName = "CLOSING TIME Installation Art no. 1: Your Flesh and Bones as the Gallery's Seats";
+      fighter.ultimateDialogue = "";
 
       // Initialize ultimate-specific properties
       fighter.ultimateRedLines = []; // Array to store red line effects
@@ -1719,6 +1719,11 @@ CALLISTO: {
                 };
                 fighter.ultimateSkulls.push(skullEffect);
               }
+              targetEnemies.forEach(enemy => {
+                  if (enemy) {
+                    this.dealUltimateDamage(fighter, enemy, fighter.baseDamage*2.7, false, 4);
+                  }
+                });
 
               fighter.ultimatePhase = 11;
               fighter.ultimateTimer = 3; // Hold for 3 seconds
@@ -2115,7 +2120,7 @@ CALLISTO: {
       // Gain 1 precognition after 5 seconds without evade/hit
       const timeSinceLastAction = (Date.now() - Math.max(fighter.lastEvadeTime, fighter.lastHitTime)) / 1000;
       if (timeSinceLastAction >= 5 && fighter.precognition < fighter.maxPrecognition) {
-        fighter.precognition++;
+        //fighter.precognition++;
         fighter.lastEvadeTime = Date.now(); // Reset timer
       }
       
@@ -2157,7 +2162,7 @@ CALLISTO: {
       const speedBuff = Math.min(fighter.combo, 5); // Cap speed buff at +5
       fighter.speed = 9 + speedBuff; // Base 9 + buff (max 14)
       
-      const intervalReduction = Math.min(fighter.combo * 0.05, 0.5); // Cap reduction at 50%
+      const intervalReduction = Math.min(fighter.combo * 0.05, 0.8); // Cap reduction at 80%
       fighter.attackInterval = 1 * (1 - intervalReduction); // Base 1 second
       
       if (fighter.requestApplyStatus) {
@@ -2168,7 +2173,7 @@ CALLISTO: {
     // ❤️ Shin (心) - Valencina passive
     checkShinActivation: function(fighter) {
       if (fighter.hp < fighter.maxHp * 0.5 && !fighter.shinActive) {
-        fighter.shinActive = true;
+        fighter.shinActive = true;//shin should be an status effect
         fighter.protection = 1; // Gain 1 protection (10% damage reduction)
         
         if (fighter.requestApplyStatus) {

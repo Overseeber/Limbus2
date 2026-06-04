@@ -252,7 +252,7 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
       if (ult.timer <= 0) {
         // Teleport Callisto upward by 500 pixels
         fighter.position.y = clampY(fighter.position.y - 500);
-        fighter.velocity.x = fighter.facing * 2; // Slow drift toward enemy
+        fighter.velocity.x = fighter.facing * 10; // Slow drift toward enemy
         fighter.velocity.y = 0;
         ult.currentSprite = 'cuf5';
         ult.cameraZoom = 1.8;
@@ -393,6 +393,7 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
         // Mark damageInstances as 0 so we only spawn once
         ult.damageInstances = 0;
       }
+      //deal damage instance here 270% bouns damage at the end of ultimate
 
       // Keep enemies in place
       targetEnemies.forEach(e => { if (e) e.velocity.y = 0; });
@@ -780,7 +781,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
         fighter.position.y = clampY(ARENA_HEIGHT - 100);
         fighter.velocity.x = 0;
         fighter.velocity.y = 0;
-        ult.cameraZoom = 1.0; // Zoom out to show entire arena
+        ult.cameraZoom = 2.0; // Zoom out to show entire arena
         ult.phase = 3;
         ult.timer = 0.2;
         ult.attackFrame = 0;
@@ -790,6 +791,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
     // ============ PHASE 3: Joust sequence ============
     case 3:
       ult.timer -= dt;
+      ult.cameraZoom = 0.5; // Zoom in on Dihui
       if (ult.timer <= 0) {
         ult.attackFrame++;
         switch (ult.attackFrame) {
@@ -813,6 +815,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
             ult.phase = 4;
             ult.timer = 1.0;
             ult.currentSprite = 'dhalt1';
+           
             break;
         }
       }
@@ -823,10 +826,10 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
       if (ult.timer <= 0) {
         if (ult.currentSprite === 'dhalt1') {
           ult.currentSprite = 'dhalt2';
-          ult.timer = 3.0; // Hold for 3 seconds
-          ult.cameraZoom = 2.5; // Zoom in on Dihui
+          ult.timer = 1.5; // Hold for 3 seconds
+  
         } else {
-          ult.cameraZoom = 1.5;
+          ult.cameraZoom = 0.5;
           ult.phase = 5;
           ult.timer = 0.3;
           ult.attackFrame = 0;
@@ -837,6 +840,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
     // ============ PHASE 5: du3→du4→du5→du6→du7 ============
     case 5:
       ult.timer -= dt;
+       ult.cameraZoom = 2.25;
       if (ult.timer <= 0) {
         ult.attackFrame++;
         switch (ult.attackFrame) {
@@ -864,7 +868,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
             ult.phase = 6;
             ult.timer = 0.5;
             ult.currentSprite = 'du8';
-            ult.cameraZoom = 1.0; // Zoom out
+            ult.cameraZoom = 0.5; // Zoom out
             break;
         }
       }
@@ -885,9 +889,14 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
             if (ba) totalAfterimage += ba.count;
           }
         });
-        ult.dlineCount = Math.min(Math.floor(totalAfterimage / 3), 33);
+        ult.dlineCount = Math.min(Math.floor(totalAfterimage / 3)+1, 33);
         ult.dlineSpawned = true;
-        
+        for (let i = 0; i < ult.dlineCount; i++) {
+          const offsetX = random(-50, 50);
+          const offsetY = random(-50, 50);
+          ult.slashEvents.push({ type: 'dline', frame: 1, offsetX, offsetY });// should be spawned at random rotations on each enemy
+        }
+      
         // Deal damage: +24 Base Damage, + Target Max HP × Bladetrail Afterimage %
         targetEnemies.forEach(e => {
           if (e && !e.isDefeated) {
@@ -910,8 +919,9 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
             }
           }
         });
-        
-        ult.timer = 3.0; // Hold for 3 seconds
+           ult.cameraZoom = 0.25; // Zoom out
+        ult.phase = 7;
+        ult.timer = 0.0; // Hold for 3 seconds
       }
       
       if (ult.timer <= 0) {
@@ -922,6 +932,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
 
     // ============ PHASE 7: Return to combat ============
     case 7:
+       ult.timer -= dt;
       if (ult.timer <= 0) {
         ult.phase = 8;
         ult.timer = 0.1;
@@ -929,6 +940,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
       break;
 
     case 8:
+       ult.timer -= dt;
       break;
   }
 }

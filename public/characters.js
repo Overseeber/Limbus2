@@ -3275,7 +3275,7 @@ CALLISTO: {
       fighter.ultimateTimer = 1.5; // du1 centered pose for 1.5s
       fighter.ultimateTotalDamage = 0;
       fighter.ultimateDamageDealt = 0;
-      fighter.ultimateCameraZoom = 2.5; // Zoom in centered on fighters
+      fighter.ultimateCameraZoom = 1.0; // Start with normal zoom for centered pose
       fighter.ultimateBackgroundDim = 0.7;
       fighter.ultimateName = "UTTERMOST REND SPACE - STRING SEVERANCE";
       fighter.ultimateDialogue = '空間斬 - 絕緣';
@@ -3291,10 +3291,12 @@ CALLISTO: {
       fighter.ultimateJoustFrame = 0;
       fighter.ultimateHaltFrame = 0;
 
-      // Face toward nearest enemy at start
+      // Face opposite direction (away from nearest enemy) at start
       const nearest = targetEnemies.find(e => e && !e.isDefeated);
       if (nearest) {
-        fighter.facing = nearest.pos.x > fighter.pos.x ? 1 : -1;
+        // Force face left (opposite of normal facing)
+        fighter.facing = -1;
+        console.log(`[DIHUI ULT] Forced facing to -1 (left) at start`);
       }
 
       // Ultimate protection for enemies
@@ -3349,9 +3351,11 @@ CALLISTO: {
       });
 
       // Timer decrement for non-attack phases (phases that are waiting/timing)
+      // Phase 7 also needs timer decrement to end properly
       if (fighter.ultimatePhase === 0 || fighter.ultimatePhase === 1 || 
           fighter.ultimatePhase === 2 || fighter.ultimatePhase === 4 ||
-          fighter.ultimatePhase === 6 || fighter.ultimatePhase === 7) {
+          fighter.ultimatePhase === 5 || fighter.ultimatePhase === 6 ||
+          fighter.ultimatePhase === 7) {
         fighter.ultimateTimer -= dt;
       }
 
@@ -3376,7 +3380,7 @@ CALLISTO: {
             fighter.pos.y = height - 100;
             fighter.vel.x = 0;
             fighter.vel.y = 0;
-            fighter.facing = -1; // Face left toward center
+            fighter.facing = 1; // Face right (away from center)
             
             fighter.ultimateCameraZoom = 2.5; // Zoom in centered on Dihui at right edge
             fighter.ultimateCameraCenterOnArena = false;
@@ -3408,11 +3412,11 @@ CALLISTO: {
             fighter.vel.x = 0;
             fighter.vel.y = 0;
             
-            // Face right toward center
-            fighter.facing = 1;
+            // Face left (away from center)
+            fighter.facing = -1;
             
-            // Zoom out to show 100% of arena centered (left end to right end visible)
-            fighter.ultimateCameraZoom = 1.0;
+            // Zoom out, decenter camera from fighter and center to arena, set camera zoom to keep all players in frame
+            fighter.ultimateCameraZoom = 0.6; // Lower zoom to ensure all players visible
             fighter.ultimateCameraCenterOnArena = true;
             
             // Start joust sequence
@@ -3442,6 +3446,10 @@ CALLISTO: {
             if (fighter.ultimateJoustFrame < joustSprites.length) {
               fighter.currentSprite = joustSprites[fighter.ultimateJoustFrame];
               fighter.ultimateTimer = 0.2; // 0.2s per sprite
+              
+              // Spawn slash effect on each joust frame (minimum 1)
+              console.log(`[DIHUI ULT] Joust frame ${fighter.ultimateJoustFrame}, spawning slash`);
+              fighter.spawnSlashEffect('ds3s1', { x: 0, y: -10 });
             } else {
               // Joust complete, transition to halt sequence
               fighter.ultimateTimer = 0.1; // Brief gap
@@ -3459,23 +3467,22 @@ CALLISTO: {
           }
           break;
 
-        // ===== PHASE 4: dhalt1>dhalt2 hold 3s, camera center on Dihui + zoom in =====
+        // ===== PHASE 4: dhalt1>dhalt2 hold 1.5s (stay zoomed out), then camera center on Dihui + zoom in =====
         case 4:
           fighter.ultimateTimer -= dt;
           if (fighter.ultimateTimer <= 0) {
             if (fighter.ultimateHaltFrame === 0) {
-              // Switch to dhalt2
+              // Switch to dhalt2, stay zoomed out
               fighter.currentSprite = 'dhalt2';
               fighter.ultimateHaltFrame = 1;
-              
-              // Camera centers on Dihui's position and zooms in
-              fighter.ultimateCameraCenterOnArena = false;
-              fighter.ultimateCameraZoom = 2.5;
-              
-              fighter.ultimateTimer = 3.0; // Hold for 3s
-              console.log(`[DIHUI ULT] Phase 4: dhalt2 hold 3s, camera zoom in`);
+              fighter.ultimateTimer = 1.5; // Hold for 1.5s (stay zoomed out)
+              console.log(`[DIHUI ULT] Phase 4: dhalt2 hold 1.5s, stay zoomed out`);
             } else {
-              // Halt complete, transition to du3 sequence
+              // Halt complete, camera center on Dihui + zoom in (but keep all players in frame)
+              fighter.ultimateCameraCenterOnArena = false;
+              fighter.ultimateCameraZoom = 1.2; // Moderate zoom to keep all players visible
+              
+              // Transition to du3 sequence
               fighter.ultimatePhase = 5;
               fighter.ultimateAttackFrame = 0;
               fighter.ultimateTimer = 0.3;
@@ -3505,8 +3512,8 @@ CALLISTO: {
           
           // When du7 hold completes, move to phase 6
           if (fighter.ultimateAttackFrame === -1 && fighter.ultimateTimer <= 0) {
-            // Zoom out to show entire arena (same as before)
-            fighter.ultimateCameraZoom = 1.0;
+            // Zoom out, decenter camera from fighter and center to arena, set camera zoom to keep all players in frame
+            fighter.ultimateCameraZoom = 0.6; // Lower zoom to ensure all players visible
             fighter.ultimateCameraCenterOnArena = true;
             
             // Switch to du8
@@ -3542,12 +3549,13 @@ CALLISTO: {
             const dlineCount = Math.min(Math.floor(totalAfterimage / 3), 33);
             console.log(`[DIHUI ULT] Spawning ${dlineCount} dline instances from ${totalAfterimage} afterimages`);
             
-            // Spawn dline instances at target locations with random rotation
+            // Spawn dline instances at target locations with random rotation (±60 degrees)
             for (let i = 0; i < dlineCount; i++) {
               const targetEnemy = targetEnemies.find(e => e && !e.isDefeated);
               if (targetEnemy) {
                 const offsetX = random(-50, 50);
                 const offsetY = random(-50, 50);
+                // Rotation: ±60 degrees (spec says +60 degrees, but likely means ±60)
                 const rotationDeg = random(-60, 60);
                 const rotationRad = radians(rotationDeg);
                 
@@ -3600,9 +3608,14 @@ CALLISTO: {
 
         // ===== PHASE 7: Return to combat =====
         case 7:
+          fighter.ultimateTimer -= dt;
           if (fighter.ultimateTimer <= 0) {
-            // Set final timer to 0 so the generic system ends the ultimate
+            // Force end ultimate immediately
+            console.log(`[DIHUI ULT] Phase 7 timer reached 0, forcing end`);
+            fighter.ultimateActive = false;
+            fighter.ultimatePhase = 0;
             fighter.ultimateTimer = 0;
+            this.endUltimate(fighter);
           }
           break;
       }

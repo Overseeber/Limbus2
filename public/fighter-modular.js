@@ -1751,8 +1751,9 @@ class Fighter {
       }
       
       // End ultimate when timer reaches 0 and we're not in attack sequences
+      // Dihui uses phases 0-7, so we need to exclude phase 5 (attack sequence)
       if (this.ultimateTimer <= 0 && this.ultimatePhase !== 2 && this.ultimatePhase !== 4 && 
-          this.ultimatePhase !== 6 && this.ultimatePhase !== 8 && this.ultimatePhase !== 10) {
+          this.ultimatePhase !== 5 && this.ultimatePhase !== 6 && this.ultimatePhase !== 8 && this.ultimatePhase !== 10) {
         console.log('[ULTIMATE DEBUG] Ultimate ending, timer:', this.ultimateTimer, 'phase:', this.ultimatePhase);
         this.endUltimate();
       }
@@ -3110,7 +3111,12 @@ addCombo(attacker) {
 
       // Flip atlas sprites based on facing direction
       // (ultimateForceLeftFacing removed - use fighter.facing for dynamic direction)
-      scale(this.facing === 1 ? -1 : 1, 1);
+      // For Dihui ultimate sprites, invert the flip to face opposite direction
+      if (this.characterKey === 'DIHUI' && this.ultimateActive) {
+        scale(this.facing === 1 ? 1 : -1, 1); // Invert flip for ultimate
+      } else {
+        scale(this.facing === 1 ? -1 : 1, 1);
+      }
 
       // Debug missing sprite
       const spriteInfo = SPRITES?.[this.currentSprite];

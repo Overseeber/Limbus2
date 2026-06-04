@@ -191,8 +191,8 @@ const SPRITES = {
   // ===== Star2 =====
   draw1: { atlas:"star2", x:0, y:0, w:3, h:3 },
   draw2: { atlas:"star2", x:0, y:3, w:3, h:3 },
-  draw3: { atlas:"star2", x:3, y:1, w:3, h:3 },
-  draw4: { atlas:"star2", x:3, y:3, w:3, h:3 },
+  draw3: { atlas:"star2", x:3, y:0, w:3, h:3 },
+  draw4: { atlas:"star2", x:3, y:3, w:3, h:4 },
 
   // ===== Star3 =====
   draw5: { atlas:"star3", x:4, y:0, w:4, h:3 },
@@ -3128,15 +3128,20 @@ CALLISTO: {
               const teleportOffset = 150;
               let teleportX;
 
+              // Teleport behind the enemy; if enemy is at edge, teleport in front instead
               if (furthestEnemy.facing === 1) {
-                teleportX = furthestEnemy.pos.x + teleportOffset;
-                if (teleportX > width - arenaMargin) {
-                  teleportX = furthestEnemy.pos.x - teleportOffset;
-                }
-              } else {
+                // Enemy facing right → behind is to the left
                 teleportX = furthestEnemy.pos.x - teleportOffset;
+                // If at left edge, teleport in front
                 if (teleportX < arenaMargin) {
                   teleportX = furthestEnemy.pos.x + teleportOffset;
+                }
+              } else {
+                // Enemy facing left → behind is to the right
+                teleportX = furthestEnemy.pos.x + teleportOffset;
+                // If at right edge, teleport in front
+                if (teleportX > width - arenaMargin) {
+                  teleportX = furthestEnemy.pos.x - teleportOffset;
                 }
               }
 
@@ -3146,7 +3151,11 @@ CALLISTO: {
               fighter.vel.x = 0;
               fighter.vel.y = 0;
               fighter.deathedgeTeleported = true;
-              console.log(`⚔️ Deathedge teleported to ${teleportX}`);
+              // Store teleport position for attack range calculation and dline targeting
+              fighter.deathedgeTeleportPosition = { x: teleportX, y: furthestEnemy.pos.y };
+              // Store the target enemy for dline spawning
+              fighter.deathedgeTargetEnemy = furthestEnemy;
+              console.log(`⚔️ Deathedge teleported behind ${furthestEnemy.name} to ${teleportX}`);
             }
           }
           break;
@@ -3207,42 +3216,34 @@ CALLISTO: {
 
     spawnDeathedgeDlines: function(fighter) {
       const config = CHARACTERS['DIHUI'].abilities.deathedge;
-      const allFighters = window.allFighters || [];
-      const enemies = allFighters.filter(f => f !== fighter && !f.isDefeated);
 
-      // Calculate total bladetrail stacks on target enemy
-      let targetStacks = 0;
-      
-      // Find the target enemy (the one we teleported behind)
-      if (fighter.deathedgeTeleportPosition) {
-        enemies.forEach(enemy => {
-          if (enemy && enemy.pos) {
-            const dist = Math.abs(enemy.pos.x - fighter.deathedgeTeleportPosition.x);
-            // Target is the enemy closest to teleport position
-            if (dist < 200) {
-              targetStacks = this.getBladetrailStacks(enemy) || 0;
-            }
-          }
-        });
+      // Use the stored target enemy (the one we teleported behind)
+      const targetEnemy = fighter.deathedgeTargetEnemy;
+      if (!targetEnemy || !targetEnemy.pos) {
+        console.log('⚔️ Deathedge dlines: no target enemy found');
+        return;
       }
+
+      // Get bladetrail afterimage stacks on the target
+      const targetStacks = this.getBladetrailStacks(targetEnemy) || 0;
 
       // Calculate dline count: floor(targetStacks / 10) + 1
       const dlineCount = Math.floor(targetStacks / 10) + 1;
 
-      // Spawn dline effects in the attack range (from cast to teleport position)
-      const castX = fighter.deathedgeCastPosition.x;
-      const teleportX = fighter.deathedgeTeleportPosition.x;
-      const minX = Math.min(castX, teleportX);
-      const maxX = Math.max(castX, teleportX);
-      const range = maxX - minX;
-
+      // Spawn dlines at target enemy's position with random rotation and ±50px spread
       for (let i = 0; i < dlineCount; i++) {
-        // Distribute dlines across the attack range
-        const offsetX = minX + (range * (i / Math.max(1, dlineCount - 1))) - fighter.pos.x;
-        fighter.spawnSlashEffect('dline', { x: offsetX, y: 0 });
+        // Random offset within ±50px of the target's center
+        const offsetX = targetEnemy.pos.x - fighter.pos.x + random(-50, 50);
+        // Random rotation between -45 and 45 degrees
+        const randomRotation = random(-PI/4, PI/4);
+        fighter.spawnSlashEffect('dline', { 
+          x: offsetX, 
+          y: 0,
+          rotation: randomRotation
+        });
       }
 
-      console.log(`⚔️ Deathedge spawned ${dlineCount} dline effects (${targetStacks} bladetrail stacks on target)`);
+      console.log(`⚔️ Deathedge spawned ${dlineCount} dline effects at target (${targetStacks} bladetrail stacks, dlines each have random rotation ±50px spread)`);
     },
 
     initializeCharacter: function(fighter) {

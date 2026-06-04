@@ -154,8 +154,14 @@ class Fighter {
     // Update authoritative gameplay state from server
     if (stateUpdate.hp !== undefined) this.hp = stateUpdate.hp;
     if (stateUpdate.position) {
-      this.pos.x = stateUpdate.position.x;
-      this.pos.y = stateUpdate.position.y;
+      // If Deathedge has teleported the fighter, preserve the teleport position
+      // (server doesn't teleport the fighter, so it would broadcast the old position)
+      if (this.deathedgeActive && this.deathedgeTeleported && this.deathedgeTeleportPosition) {
+        // Keep client-side teleport position — server position is stale for this ability
+      } else {
+        this.pos.x = stateUpdate.position.x;
+        this.pos.y = stateUpdate.position.y;
+      }
     }
     if (stateUpdate.velocity) {
       this.vel.x = stateUpdate.velocity.x;
@@ -670,8 +676,28 @@ class Fighter {
 
       // Deathedge ability animation — driven by server phase/frameIndex, same as other abilities
       if (this.deathedgeActive) {
+        // Reset one-shot flags when ability newly activates (for subsequent uses)
+        if (!this._deathedgeWasActive) {
+          this.deathedgeTeleported = false;
+          this.deathedgeDlinesSpawned = false;
+          this.deathedgeTeleportPosition = null;
+          this.deathedgeTargetEnemy = null;
+          this._prevDeathedgePhase = undefined;
+          this._prevDeathedgeFrameIndex = undefined;
+        }
+        this._deathedgeWasActive = true;
+
         const deathedgeConfig = CHARACTERS['DIHUI'].abilities.deathedge;
         if (deathedgeConfig) {
+          // Track phase/frame transitions for one-shot triggers (teleport, dlines)
+          const prevPhase = this._prevDeathedgePhase;
+          const prevFrameIndex = this._prevDeathedgeFrameIndex;
+          this._prevDeathedgePhase = this.deathedgePhase;
+          this._prevDeathedgeFrameIndex = this.deathedgeFrameIndex;
+
+          const phaseJustEntered = this.deathedgePhase !== prevPhase;
+          const frameAdvanced = this.deathedgeFrameIndex !== prevFrameIndex && this.deathedgeFrameIndex > (prevFrameIndex || 0);
+
           switch (this.deathedgePhase) {
             case 0: // Windup phase
               {
@@ -683,8 +709,41 @@ class Fighter {
                 }
               }
               break;
-            case 1: // Post-teleport phase
+            case 1: // Post-teleport phase — teleport on first entry
               {
+                // Teleport on phase entry (server-authoritative, but client needs visual teleport too)
+                if (phaseJustEntered && !this.deathedgeTeleported) {
+                  const allFighters = window.allFighters || [];
+                  const enemies = allFighters.filter(f => f !== this && !f.isDefeated);
+                  let furthestEnemy = null;
+                  let maxDistance = 0;
+                  enemies.forEach(enemy => {
+                    const dist = Math.abs(enemy.pos.x - this.pos.x);
+                    if (dist > maxDistance) { maxDistance = dist; furthestEnemy = enemy; }
+                  });
+                  if (furthestEnemy) {
+                    const arenaMargin = 100;
+                    const teleportOffset = 150;
+                    let teleportX;
+                    // Teleport behind the enemy; if at edge, teleport in front
+                    if (furthestEnemy.facing === 1) {
+                      teleportX = furthestEnemy.pos.x - teleportOffset;
+                      if (teleportX < arenaMargin) teleportX = furthestEnemy.pos.x + teleportOffset;
+                    } else {
+                      teleportX = furthestEnemy.pos.x + teleportOffset;
+                      if (teleportX > width - arenaMargin) teleportX = furthestEnemy.pos.x - teleportOffset;
+                    }
+                    teleportX = Math.max(arenaMargin, Math.min(width - arenaMargin, teleportX));
+                    this.pos.x = teleportX;
+                    this.pos.y = furthestEnemy.pos.y;
+                    this.vel.x = 0;
+                    this.vel.y = 0;
+                    this.deathedgeTeleported = true;
+                    this.deathedgeTeleportPosition = { x: teleportX, y: furthestEnemy.pos.y };
+                    this.deathedgeTargetEnemy = furthestEnemy;
+                    console.log(`⚔️ Deathedge teleported behind ${furthestEnemy.name} to ${teleportX}`);
+                  }
+                }
                 const postTeleportFrames = deathedgeConfig.postTeleportFrames;
                 if (this.deathedgeFrameIndex < postTeleportFrames.length) {
                   this.currentSprite = postTeleportFrames[this.deathedgeFrameIndex];
@@ -693,8 +752,16 @@ class Fighter {
                 }
               }
               break;
-            case 2: // Attack phase
+            case 2: // Attack phase — spawn dlines on first entry
               {
+                if (phaseJustEntered && !this.deathedgeDlinesSpawned) {
+                  const dihuiChar = CHARACTERS['DIHUI'];
+                  if (dihuiChar && dihuiChar.spawnDeathedgeDlines) {
+                    dihuiChar.spawnDeathedgeDlines(this);
+                  }
+                  this.deathedgeDlinesSpawned = true;
+                  console.log(`⚔️ Deathedge spawned dlines`);
+                }
                 const attackFrames = deathedgeConfig.attackFrames;
                 if (this.deathedgeFrameIndex < attackFrames.length) {
                   this.currentSprite = attackFrames[this.deathedgeFrameIndex];
@@ -706,6 +773,13 @@ class Fighter {
           }
         }
         return; // Deathedge handles its own sprites above
+      }
+
+      // Deathedge just ended — reset tracking flag for next use
+      if (this._deathedgeWasActive) {
+        this._deathedgeWasActive = false;
+        this._prevDeathedgePhase = undefined;
+        this._prevDeathedgeFrameIndex = undefined;
       }
 
       // Handle special states for Dihui
@@ -1296,6 +1370,10 @@ class Fighter {
             translate(baseX + offsetX * facing, baseY + offsetY + 84);
             if (facing === -1) {
               scale(-1, 1); // Flip horizontally when facing right
+            }
+            // Apply rotation if set (used by dline effects)
+            if (effect.rotation) {
+              rotate(effect.rotation);
             }
             drawSpriteScaled(effect.type, 0, 0, scaleFactor);
             pop();
@@ -3341,8 +3419,12 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
 
   applyStateSnapshot(snapshot) {
     // Position and velocity
-    this.pos.x = snapshot.position.x;
-    this.pos.y = snapshot.position.y;
+    // If Deathedge has teleported the fighter, preserve the teleport position
+    // (server doesn't teleport, so snapshot position is stale)
+    if (!(this.deathedgeActive && this.deathedgeTeleported && this.deathedgeTeleportPosition)) {
+      this.pos.x = snapshot.position.x;
+      this.pos.y = snapshot.position.y;
+    }
     this.vel.x = snapshot.velocity.x;
     this.vel.y = snapshot.velocity.y;
     

@@ -392,9 +392,11 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
         }
         // Mark damageInstances as 0 so we only spawn once
         ult.damageInstances = 0;
+        
+        // Deal bonus damage once when debris spawns
+        targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, fighter.baseDamage*2.7, false, 4, false); });
       }
-      //deal damage instance here 270% bouns damage at the end of ultimate
-
+      
       // Keep enemies in place
       targetEnemies.forEach(e => { if (e) e.velocity.y = 0; });
       break;
@@ -737,28 +739,57 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
   ult.prevPhase = ult.phase;
 
   switch (ult.phase) {
-    // ============ PHASE 0: OPENING POSE - "du1" for 3 seconds ============
+    // ============ PHASE 0: OPENING POSE - Animation sequence ============
     case 0:
-      ult.currentSprite = 'du1';
+      ult.currentSprite = 'draw5';
       ult.cameraZoom = 2.5;
       ult.backgroundDim = 0.7;
+      
+      // Initialize attackFrame on first entry and start animation immediately
+      if (ult.attackFrame === undefined) {
+        ult.attackFrame = 0;
+        ult.timer = 0; // Start immediately
+      }
+      
       if (ult.timer <= 0) {
-        // Teleport target to center, Dihui to right edge
-        const centerX = clampX(ARENA_WIDTH / 2);
-        targetEnemies.forEach(e => {
-          if (e) {
-            e.position.x = centerX;
-            e.position.y = clampY(ARENA_HEIGHT - 100);
-            e.velocity.x = 0;
-            e.velocity.y = 0;
-          }
-        });
-        fighter.position.x = clampX(ARENA_WIDTH - 150);
-        fighter.position.y = clampY(ARENA_HEIGHT - 100);
-        fighter.velocity.x = 0;
-        fighter.velocity.y = 0;
-        ult.phase = 1;
-        ult.timer = 2.0; // Hold du1 for 2 more seconds
+        ult.attackFrame++;
+        switch (ult.attackFrame) {
+          case 1:
+            ult.currentSprite = 'draw4';
+            ult.timer = 0.2;
+            break;
+          case 2:
+            ult.currentSprite = 'draw3';
+            ult.timer = 0.2;
+            break;
+          case 3:
+            ult.currentSprite = 'draw2';
+            ult.timer = 0.2;
+            break;
+          case 4:
+            ult.currentSprite = 'draw1';
+            ult.timer = 1.0;
+            break;
+          case 5:
+            // Animation complete, transition to phase 1
+            // Teleport target to center, Dihui to right edge
+            const centerX = clampX(ARENA_WIDTH / 2);
+            targetEnemies.forEach(e => {
+              if (e) {
+                e.position.x = centerX;
+                e.position.y = clampY(ARENA_HEIGHT - 100);
+                e.velocity.x = 0;
+                e.velocity.y = 0;
+              }
+            });
+            fighter.position.x = clampX(ARENA_WIDTH - 150);
+            fighter.position.y = clampY(ARENA_HEIGHT - 100);
+            fighter.velocity.x = 0;
+            fighter.velocity.y = 0;
+            ult.phase = 1;
+            ult.timer = 2.0; // Hold du1 for 2 more seconds
+            break;
+        }
       }
       break;
 

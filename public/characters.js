@@ -192,7 +192,7 @@ const SPRITES = {
   draw1: { atlas:"star2", x:0, y:0, w:3, h:3 },
   draw2: { atlas:"star2", x:0, y:3, w:3, h:3 },
   draw3: { atlas:"star2", x:3, y:1, w:3, h:3 },
-  draw4: { atlas:"star2", x:3, y:3, w:3, h:4 },
+  draw4: { atlas:"star2", x:3, y:3, w:3, h:3 },
 
   // ===== Star3 =====
   draw5: { atlas:"star3", x:4, y:0, w:4, h:3 },
@@ -3094,23 +3094,15 @@ CALLISTO: {
 
       const config = CHARACTERS['DIHUI'].abilities.deathedge;
 
-      // Server tracks 3 phases: 0=windup, 1=post-teleport, 2=attack
-      // Server manages frameIndex timing, client just sets sprites
+      // Sprites are now handled by fighter-modular.js updateSprite() based on
+      // server-driven deathedgePhase and deathedgeFrameIndex — same as all other abilities.
+      // This method only handles gameplay logic: teleport, dlines, and execution.
 
       console.log(`⚔️ Deathedge update - Phase: ${fighter.deathedgePhase}, FrameIndex: ${fighter.deathedgeFrameIndex}, Active: ${fighter.deathedgeActive}`);
 
       switch (fighter.deathedgePhase) {
         case 0: // Windup phase
-          // Windup frames: draw1 > draw2 > draw3 > draw4 > draw5 > draw6 (hold 1s) > ds1f1
-          const windupFrames = config.windupFrames;
-          if (fighter.deathedgeFrameIndex < windupFrames.length) {
-            fighter.currentSprite = windupFrames[fighter.deathedgeFrameIndex];
-            console.log(`⚔️ Deathedge windup frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
-          } else {
-            // After windup frames, hold ds1f1
-            fighter.currentSprite = config.windupFinalSprite;
-            console.log(`⚔️ Deathedge windup hold: ${fighter.currentSprite}`);
-          }
+          // Only need pass-through logging; sprites handled by fighter-modular updateSprite()
           break;
 
         case 1: // Post-teleport phase
@@ -3157,36 +3149,14 @@ CALLISTO: {
               console.log(`⚔️ Deathedge teleported to ${teleportX}`);
             }
           }
-
-          // Post-teleport frames: djoust3 > djoust4 > ds2f2 (hold 1s)
-          const postTeleportFrames = config.postTeleportFrames;
-          if (fighter.deathedgeFrameIndex < postTeleportFrames.length) {
-            fighter.currentSprite = postTeleportFrames[fighter.deathedgeFrameIndex];
-            console.log(`⚔️ Deathedge post-teleport frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
-          } else {
-            // Hold final frame
-            fighter.currentSprite = postTeleportFrames[postTeleportFrames.length - 1];
-            console.log(`⚔️ Deathedge post-teleport hold: ${fighter.currentSprite}`);
-          }
           break;
 
         case 2: // Attack phase
-          // Attack frames: dhalt1 > dhalt2 (hold 1s)
-          const attackFrames = config.attackFrames;
-          if (fighter.deathedgeFrameIndex < attackFrames.length) {
-            fighter.currentSprite = attackFrames[fighter.deathedgeFrameIndex];
-            console.log(`⚔️ Deathedge attack frame ${fighter.deathedgeFrameIndex}: ${fighter.currentSprite}`);
-            
-            // Spawn dline on first attack frame (dhalt1)
-            if (fighter.deathedgeFrameIndex === 0 && !fighter.deathedgeDlinesSpawned) {
-              this.spawnDeathedgeDlines(fighter);
-              fighter.deathedgeDlinesSpawned = true;
-              console.log(`⚔️ Deathedge spawned dlines`);
-            }
-          } else {
-            // Hold final frame
-            fighter.currentSprite = attackFrames[attackFrames.length - 1];
-            console.log(`⚔️ Deathedge attack hold: ${fighter.currentSprite}`);
+          // Spawn dline on first attack frame (dhalt1)
+          if (fighter.deathedgeFrameIndex === 0 && !fighter.deathedgeDlinesSpawned) {
+            this.spawnDeathedgeDlines(fighter);
+            fighter.deathedgeDlinesSpawned = true;
+            console.log(`⚔️ Deathedge spawned dlines`);
           }
           break;
       }

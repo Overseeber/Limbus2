@@ -668,9 +668,44 @@ class Fighter {
         ultimate: 'du1'
       };
 
-      // Skip sprite selection if deathedge ability is active (ability overrides normal sprites)
+      // Deathedge ability animation — driven by server phase/frameIndex, same as other abilities
       if (this.deathedgeActive) {
-        return;
+        const deathedgeConfig = CHARACTERS['DIHUI'].abilities.deathedge;
+        if (deathedgeConfig) {
+          switch (this.deathedgePhase) {
+            case 0: // Windup phase
+              {
+                const windupFrames = deathedgeConfig.windupFrames;
+                if (this.deathedgeFrameIndex < windupFrames.length) {
+                  this.currentSprite = windupFrames[this.deathedgeFrameIndex];
+                } else {
+                  this.currentSprite = deathedgeConfig.windupFinalSprite;
+                }
+              }
+              break;
+            case 1: // Post-teleport phase
+              {
+                const postTeleportFrames = deathedgeConfig.postTeleportFrames;
+                if (this.deathedgeFrameIndex < postTeleportFrames.length) {
+                  this.currentSprite = postTeleportFrames[this.deathedgeFrameIndex];
+                } else {
+                  this.currentSprite = postTeleportFrames[postTeleportFrames.length - 1];
+                }
+              }
+              break;
+            case 2: // Attack phase
+              {
+                const attackFrames = deathedgeConfig.attackFrames;
+                if (this.deathedgeFrameIndex < attackFrames.length) {
+                  this.currentSprite = attackFrames[this.deathedgeFrameIndex];
+                } else {
+                  this.currentSprite = attackFrames[attackFrames.length - 1];
+                }
+              }
+              break;
+          }
+        }
+        return; // Deathedge handles its own sprites above
       }
 
       // Handle special states for Dihui

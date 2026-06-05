@@ -255,7 +255,7 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
         fighter.velocity.x = fighter.facing * 10; // Slow drift toward enemy
         fighter.velocity.y = 0;
         ult.currentSprite = 'cuf5';
-        ult.cameraZoom = 1.8;
+        ult.cameraZoom = 1.0;
         ult.gravityDisabled = true; // Prevent gravity during ascent
         ult.phase = 8;
         ult.attackFrame = 0;
@@ -361,7 +361,7 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
     // ============ PHASE 11: FINAL HOLD - cuend, debris, zoom out ============
     case 11:
       ult.currentSprite = 'cuend';
-      ult.cameraZoom = 1.0; // Zoom out
+      ult.cameraZoom = 0.25; // Zoom out
       ult.backgroundDim = 0;
       
       // Fade in red lines
@@ -374,11 +374,11 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
         const skullTypes = ['cbsk1', 'cbsk2', 'cbsk3'];
         for (let i = 0; i < 21; i++) {
           const randomSkull = skullTypes[Math.floor(random(0, 3))];
-          const randomScale = random(1.0, 3.0);
+          const randomScale = random(0.2, 2.0);
           const randomX = clampX(fighter.position.x + random(-500, 500));
           // Y starts 500 pixels UNDER the arena
-          const randomY = ARENA_HEIGHT + random(100, 500);
-          const randomRotation = random(-Math.PI / 3, Math.PI / 3);
+          const randomY = ARENA_HEIGHT + random(100, 200);
+          const randomRotation = random(-Math.PI / 5, Math.PI / 5);
 
           ult.skulls = ult.skulls || [];
           ult.skulls.push({
@@ -684,6 +684,7 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
           ult.attackFrame++;
         } else {
           ult.currentSprite = 'de3';
+          ult.cameraZoom = 0.25; 
           targetEnemies.forEach(e => {
             if (e) {
               dealUltDamage(fighter, ult, e, fighter.baseDamage * 2, true, 5, false);
@@ -700,7 +701,7 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
             fighter.resources.accelerationRounds = 20;
           }
           
-          ult.cameraZoom = 1.0; ult.backgroundDim = 0;
+          ult.cameraZoom = 0.5; ult.backgroundDim = 0;
           ult.phase = 11; ult.timer = 3.0;
         }
       }
@@ -798,7 +799,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
       if (ult.timer <= 0) {
         ult.currentSprite = 'du2';
         ult.phase = 2;
-        ult.cameraZoom = 2.0; // Zoom out for du2
+        ult.cameraZoom = 3.5; // Zoom out for du2
         ult.timer = 1.0; // Hold du2 for 1 second
       }
       break;
@@ -899,7 +900,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
             ult.phase = 6;
             ult.timer = 0.5;
             ult.currentSprite = 'du8';
-            ult.cameraZoom = 0.5; // Zoom out
+            ult.cameraZoom = 0.25; // Zoom out
             break;
         }
       }
@@ -927,7 +928,18 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
           const offsetY = random(-50, 50);
           ult.slashEvents.push({ type: 'dline', frame: 1, offsetX, offsetY });// should be spawned at random rotations on each enemy
         }
+        for (let i = 0; i < 10; i++) {
+          const arenaX = random(0, ARENA_WIDTH);
+          const arenaY = random(0, ARENA_HEIGHT);
+                const randomScale = random(0.2, 2.0);
+                 const randomRotation = random(-Math.PI / 5, Math.PI / 5);
+          ult.slashEvents.push({ type: 'dline', frame: 1,  x: arenaX,
+            y: arenaY,
+            scale: randomScale,
+            rotation: randomRotation,});
+        }
       
+ 
         // Deal damage: +24 Base Damage, + Target Max HP × Bladetrail Afterimage %
         targetEnemies.forEach(e => {
           if (e && !e.isDefeated) {

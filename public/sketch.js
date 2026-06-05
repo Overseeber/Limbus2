@@ -2029,7 +2029,7 @@ function drawOpeningSequence() {
   
   cameraZoom = openingZoom;
   cameraX = ARENA_WIDTH / 2; // Center of arena
-  cameraY = ARENA_HEIGHT / 2;
+  cameraY = ARENA_HEIGHT / 2+300;
   
   beginCamera();
   drawArena();

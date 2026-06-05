@@ -255,7 +255,7 @@ const STATUS_SPRITES = {
   "Corpus Ingredient": { atlas:"status", x:7, y:1, w:1, h:1 },
   "Artwork Tibia": { atlas:"status", x:8, y:1, w:1, h:1 },
   "Ingredient Shredding Wound": { atlas:"status", x:9, y:1, w:1, h:1 },
-   "Acceration Round": { atlas:"status", x:10, y:1, w:1, h:1 },
+   "Acceleration Round": { atlas:"status", x:10, y:1, w:1, h:1 },
     "Bladetrail Afterimage": { atlas:"status", x:7, y:2, w:1, h:1 },
      "Dihui Star's Blade": { atlas:"status", x:8, y:2, w:1, h:1 }
 };

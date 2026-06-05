@@ -896,6 +896,37 @@ tick() {
                 }
                 
                 if (player.deathedgeTimer <= -windupDuration) {
+                    // PERFORM TELEPORT at end of windup (after draw6→ds1f1)
+                    // Teleport behind the furthest enemy (same calculation as activation)
+                    if (player.deathedgeTargetId && !player.deathedgeTeleportPosition) {
+                        const targetPlayer = this.players[player.deathedgeTargetId];
+                        if (targetPlayer && !targetPlayer.gameState.isDefeated) {
+                            const enemyState = targetPlayer.gameState;
+                            const arenaMargin = 100;
+                            const teleportOffset = 150;
+                            let teleportX;
+                            
+                            if (enemyState.facing === 1) {
+                                teleportX = enemyState.position.x - teleportOffset;
+                                if (teleportX < arenaMargin) {
+                                    teleportX = enemyState.position.x + teleportOffset;
+                                }
+                            } else {
+                                teleportX = enemyState.position.x + teleportOffset;
+                                if (teleportX > ARENA_WIDTH - arenaMargin) {
+                                    teleportX = enemyState.position.x - teleportOffset;
+                                }
+                            }
+                            teleportX = Math.max(arenaMargin, Math.min(ARENA_WIDTH - arenaMargin, teleportX));
+                            
+                            player.gameState.position.x = teleportX;
+                            player.gameState.position.y = enemyState.position.y;
+                            player.gameState.velocity.x = 0;
+                            player.gameState.velocity.y = 0;
+                            player.gameState.facing = enemyState.position.x > teleportX ? 1 : -1;
+                            player.deathedgeTeleportPosition = { x: teleportX, y: enemyState.position.y };
+                        }
+                    }
                     player.deathedgePhase = 1;
                     player.deathedgeFrameIndex = 0;
                     player.deathedgeTimer = 0;
@@ -2109,6 +2140,34 @@ tick() {
             if (!validation.success) {
               return { success: false, abilityId: 'deathedge', reason: validation.reason || 'Cannot use ability' };
             }
+            
+            // Find furthest enemy and calculate teleport destination for later use
+            // Actual teleport happens after windup ends (Phase 0 → 1 transition in updateAbilityAnimations)
+            const enemyState = furthestEnemy.gameState;
+            const arenaMargin = 100;
+            const teleportOffset = 150;
+            let teleportX;
+            
+            // Determine behind-position based on enemy facing
+            if (enemyState.facing === 1) {
+              // Enemy facing right → behind is to the left
+              teleportX = enemyState.position.x - teleportOffset;
+              // If at left edge, teleport in front instead
+              if (teleportX < arenaMargin) {
+                teleportX = enemyState.position.x + teleportOffset;
+              }
+            } else {
+              // Enemy facing left → behind is to the right
+              teleportX = enemyState.position.x + teleportOffset;
+              // If at right edge, teleport in front instead
+              if (teleportX > ARENA_WIDTH - arenaMargin) {
+                teleportX = enemyState.position.x - teleportOffset;
+              }
+            }
+            teleportX = Math.max(arenaMargin, Math.min(ARENA_WIDTH - arenaMargin, teleportX));
+            
+            // Save cast position (before teleport) for range calculation
+            // Teleport happens after windup phase ends (Phase 0 → Phase 1 transition)
             attacker.deathedgeActive = true;
             attacker.deathedgePhase = 0;
             attacker.deathedgeTimer = 0;
@@ -2129,7 +2188,8 @@ tick() {
               totalPhases: 3,
               cooldown: abilityConfig.cooldown || 14,
               fighterId: attackerId,
-              targetId: furthestEnemy.clientId
+              targetId: furthestEnemy.clientId,
+              teleportPosition: { x: teleportX, y: enemyState.position.y }
             };
             const payload = { type: 'abilityResult', ...result };
             this.broadcast(payload);

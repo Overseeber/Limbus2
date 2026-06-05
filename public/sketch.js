@@ -1385,6 +1385,9 @@ function handleNetworkEvent(event) {
     case 'INSTALLATION_ART_CBSK':
       handleInstallationArtCbskEvent(event);
       break;
+    case 'DEATHEDGE_DLINE_SPAWN':
+      handleDeathedgeDlineSpawnEvent(event);
+      break;
     case 'MATCH_END':
       // Server signaled match end — start ending sequence
       startEndingSequence(event.winnerId, event.winnerCharacter, {
@@ -1439,6 +1442,32 @@ function handleInstallationArtCbskEvent(event) {
     groundY,
     rotation: random(-PI/4, PI/4)
   });
+}
+
+function handleDeathedgeDlineSpawnEvent(event) {
+  if (!event || !window.allFighters) return;
+
+  const attacker = window.allFighters.find(f => f.clientId === event.fighterId);
+  const target = window.allFighters.find(f => f.clientId === event.targetId);
+  const source = attacker || target || window.allFighters[0];
+  if (!source || typeof source.spawnSlashEffect !== 'function') return;
+
+  const worldX = (typeof event.targetX === 'number') ? event.targetX : (target ? target.pos.x : source.pos.x);
+  const worldY = (typeof event.targetY === 'number') ? event.targetY : (target ? target.pos.y : source.pos.y);
+  const dlineCount = event.dlineCount || 1;
+
+  // Spawn dlines at the target's location with random rotation
+  for (let i = 0; i < dlineCount; i++) {
+    const offsetX = random(-50, 50);
+    const offsetY = random(-50, 50);
+    const rotation = random(-PI/4, PI/4);
+    source.spawnSlashEffect('dline', {
+      x: offsetX,
+      y: offsetY,
+      rotation: rotation,
+      worldPos: { x: worldX, y: worldY }
+    });
+  }
 }
 
 function handleHitNetworkEvent(event) {

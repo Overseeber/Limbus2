@@ -741,14 +741,13 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
   switch (ult.phase) {
     // ============ PHASE 0: OPENING POSE - Animation sequence ============
     case 0:
-      ult.currentSprite = 'draw5';
       ult.cameraZoom = 2.5;
       ult.backgroundDim = 0.7;
       
-      // Initialize attackFrame on first entry and start animation immediately
-      if (ult.attackFrame === undefined) {
-        ult.attackFrame = 0;
-        ult.timer = 0; // Start immediately
+      // Set initial sprite to draw5 on first frame (attackFrame starts at 0 from initUltimate)
+      if (ult.attackFrame === 0 && ult.currentSprite !== 'draw5') {
+        ult.currentSprite = 'draw5';
+        ult.timer = 0.05; // Small delay so draw5 renders for at least one frame
       }
       
       if (ult.timer <= 0) {
@@ -799,6 +798,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
       if (ult.timer <= 0) {
         ult.currentSprite = 'du2';
         ult.phase = 2;
+        ult.cameraZoom = 2.0; // Zoom out for du2
         ult.timer = 1.0; // Hold du2 for 1 second
       }
       break;

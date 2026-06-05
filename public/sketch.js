@@ -265,6 +265,13 @@ function preload() {
   window.bgTr = loadImage('data/batlbkg/bkgtr.png');
   window.bgFlr = loadImage('data/batlbkg/bkgflr.png');
   window.bgView = loadImage('data/batlbkg/bkgview.png');
+
+  // Load shadow image
+  window.shadowImg = loadImage('data/particles/shade.png', () => {
+    console.log('Shadow image loaded successfully');
+  }, (err) => {
+    console.error('Failed to load shadow image:', err);
+  });
 }
 
 function setup() {//test
@@ -1820,6 +1827,21 @@ function draw() {
     beginCamera(displayCameraZoom, true);
     drawArena();
 
+    // Draw shadows (above floor, below characters)
+    if (window.shadowImg && window.allFighters) {
+      window.allFighters.forEach(fighter => {
+        const groundY = fighter.spawnY - 34; // Ground level (moved up 100 pixels)
+        push();
+        imageMode(CENTER);
+        tint(255, 200); // Slight transparency
+        const shadowScale = 0.5; // Smaller scale
+        image(window.shadowImg, fighter.pos.x, groundY, 
+              window.shadowImg.width * shadowScale, 
+              window.shadowImg.height * shadowScale);
+        pop();
+      });
+    }
+
     // Darken the battle background during ultimate sequences.
     if (typeof drawUltimateBackgroundDim === 'function') {
       const targetDim = ultimateActive
@@ -1878,6 +1900,21 @@ function draw() {
   } else if (battleState === BATTLE_STATES.SUMMARY) {
     beginCamera();
     drawArena();
+    
+    // Draw shadows (above floor, below characters)
+    if (window.shadowImg && window.allFighters) {
+      window.allFighters.forEach(fighter => {
+        const groundY = fighter.spawnY - 34; // Ground level (moved up 100 pixels)
+        push();
+        imageMode(CENTER);
+        tint(255, 200); // Slight transparency
+        const shadowScale = 0.5; // Smaller scale
+        image(window.shadowImg, fighter.pos.x, groundY, 
+              window.shadowImg.width * shadowScale, 
+              window.shadowImg.height * shadowScale);
+        pop();
+      });
+    }
     
     // Update interpolation targets before rendering
     updateClientInterpolation();
@@ -2034,6 +2071,21 @@ function drawOpeningSequence() {
   beginCamera();
   drawArena();
   
+  // Draw shadows (above floor, below characters)
+  if (window.shadowImg && window.allFighters) {
+    window.allFighters.forEach(fighter => {
+      const groundY = fighter.spawnY - 34; // Ground level (moved up 100 pixels)
+      push();
+      imageMode(CENTER);
+      tint(255, 200); // Slight transparency
+      const shadowScale = 0.5; // Smaller scale
+      image(window.shadowImg, fighter.pos.x, groundY, 
+            window.shadowImg.width * shadowScale, 
+            window.shadowImg.height * shadowScale);
+      pop();
+    });
+  }
+  
   // Update interpolation targets before rendering
   updateClientInterpolation();
   // Draw all fighters
@@ -2155,6 +2207,22 @@ function drawEndingSequence() {
   background(0);
   beginCamera();
   drawArena();
+  
+  // Draw shadows (above floor, below characters)
+  if (window.shadowImg && window.allFighters) {
+    window.allFighters.forEach(fighter => {
+      const groundY = fighter.spawnY - 34; // Ground level (moved up 100 pixels)
+      push();
+      imageMode(CENTER);
+      tint(255, 200); // Slight transparency
+      const shadowScale = 0.5; // Smaller scale
+      image(window.shadowImg, fighter.pos.x, groundY, 
+            window.shadowImg.width * shadowScale, 
+            window.shadowImg.height * shadowScale);
+      pop();
+    });
+  }
+  
   if (window.allFighters) {
     window.allFighters.forEach(f => f.draw());
   }

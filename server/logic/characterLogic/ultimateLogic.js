@@ -733,7 +733,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
   clampToArena(fighter);
 
   // Timer decrement (non-attack phases only)
-  if (ult.phase === 0 || ult.phase === 1 || ult.phase === 2 || ult.phase === 3 || ult.phase === 4 || ult.phase === 5 || ult.phase === 6 || ult.phase === 7)
+  if (ult.phase === 0 || ult.phase === 1 || ult.phase === 2 || ult.phase === 3 || ult.phase === 4 || ult.phase === 5 || ult.phase === 6 || ult.phase === 7 || ult.phase === 11)
     ult.timer -= dt;
 
   ult.prevPhase = ult.phase;
@@ -965,13 +965,21 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
     case 7:
        ult.timer -= dt;
       if (ult.timer <= 0) {
-        ult.phase = 8;
-        ult.timer = 0.1;
+        // Transition to phase 11 (final hold) so match.js updateUltimates detects phase >= 11
+        // and calls endUltimate to restore normal gameplay
+        
+        ult.phase = 11;
+        ult.timer = 3.0; // Hold for 3 seconds, then match.js ends the ultimate
       }
       break;
 
-    case 8:
-       ult.timer -= dt;
+    // ============ PHASE 11: Final hold - wait for match.js to end ultimate ============
+    case 11:
+      ult.currentSprite = ult.currentSprite || 'du8';
+      ult.cameraZoom = 0.5;
+      ult.backgroundDim = 0;
+      // Timer counts down; when it reaches 0, match.js updateUltimates will detect
+      // phase >= 11 and timer <= 0 and call endUltimate() to restore gameplay.
       break;
   }
 }

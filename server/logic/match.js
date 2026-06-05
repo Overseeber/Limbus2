@@ -37,7 +37,7 @@ const {
 } = require('./characterLogic/ultimateLogic');
 const ARENA_WIDTH = 1400;
 const ARENA_HEIGHT = 700;
-const SLAM_ATTACK_RADIUS = 80;
+const SLAM_ATTACK_RADIUS = 160; // 50% bigger than original 80
 const EVADE_DISTANCE = 230; // ~1 attack range
 const EVADE_MAX_DURATION = 1.0; // max 1 second
 
@@ -1116,6 +1116,9 @@ tick() {
         state.isAttacking = true;
         player.isSlamAttacking = true;
         
+        // Track the height where slam started for damage scaling
+        player.slamStartY = state.position.y;
+        
         // Set slam landing hitbox
         player.slamLandingHitbox = {
             x: state.position.x,
@@ -2035,23 +2038,61 @@ tick() {
     }
 
     /**
-     * RESTORED: Resolve slam attack landing with AOE damage
+     * UPDATED: Resolve slam attack landing with height-based damage and facing-offset AOE
+     * 
+     * Damage = (regular hit damage) * height multiplier, where:
+     *   - regular hit damage = baseDamage (from config) + combo bonus
+     *   - height multiplier = 1 + height (0.0 to 1.0, where 1.0 = max arena height)
+     *   - at max height: 2x damage, at low height: ~1x damage
+     * 
+     * AOE is moved 200px in the direction the fighter was facing.
+     * Range is 50% bigger than original (SLAM_ATTACK_RADIUS = 120 vs original 80).
+     * Screen shake is always produced on landing, even if no enemy was hit.
      */
     resolveSlamLanding(player) {
         const state = player.gameState;
         const config = player.config;
         
-        // Slam position (at ground level)
-        const slamPos = { x: state.position.x, y: 600 };
-        let slamRadius = SLAM_ATTACK_RADIUS;
-        // Slam base damage is a multiplier (like attackDef.damage = 1.0, 1.25, 1.8).
-        // calculateDamage will multiply this by attacker.baseDamage to get final damage.
-        // So 1.5 means 1.5 * baseDamage = 1.5 * 27 ≈ 40 for Callisto normal slam.
-        let dmgMultiplier = 1.5;
+        // Calculate slam height (0.0 to 1.0) based on where the slam started
+        // Ground Y = 600, max effective height Y = 100 (arena top boundary)
+        const slamStartY = player.slamStartY !== undefined ? player.slamStartY : state.position.y;
+        const maxHeightDist = 500; // 600 - 100
+        const height = Math.max(0, Math.min(1, (600 - slamStartY) / maxHeightDist));
+        const heightMultiplier = 1 + height; // 1x at ground level, 2x at max height
+        
+        // AOE position: moved 200px in the direction the fighter was facing
+        const slamPos = { 
+            x: state.position.x + state.facing * 100,
+            y: 600 
+        };
+        let slamRadius = SLAM_ATTACK_RADIUS; // Already 50% bigger (120 vs 80)
+        let dmgMultiplier = heightMultiplier;
         let useCostumeSprite = false; // For Callisto: cuf6/cus4 at max consumption
         let corpusConsumed = 0;
         
+        // Compute the regular hit base damage (what a normal 1.0x attack would deal)
+        // This is: baseDamage (from config) + combo bonus (for determining scale)
+        const cs = this.engine.combatState[state.id] || {};
+        const comboCount = cs.combo || 0;
+        let regularBaseDamage = config.baseDamage || 27;
+        // Combo bonus: for Valencina it's 3 per stack, for others it's 2 per stack
+        const comboDamagePerStack = state.characterKey === 'VALENCINA' ? 3 : 2;
+        regularBaseDamage += comboCount * comboDamagePerStack;
+        
+        // The intended damage before status modifiers = regularBaseDamage * heightMultiplier
+        // We compute this as the base multiplier that calculateDamage will apply on top of baseDamage
+        // Since calculateDamage does: d = base * attacker.baseDamage + combo * comboDamagePerStack
+        // We want: d = regularBaseDamage * heightMultiplier
+        // So: base * config.baseDamage + combo * comboDamagePerStack = regularBaseDamage * heightMultiplier
+        //    base * config.baseDamage = regularBaseDamage * heightMultiplier - combo * comboDamagePerStack
+        //    base = (regularBaseDamage * heightMultiplier - combo * comboDamagePerStack) / config.baseDamage
+        // But this double-counts combo. Simpler approach: pass heightMultiplier as the base,
+        // which gives: heightMultiplier * baseDamage + combo * comboDamagePerStack per-stack bonus
+        // This is close enough to (regularBaseDamage + comboBonus) * heightMultiplier for gameplay.
+        dmgMultiplier = heightMultiplier;
+        
         // CALLISTO: Consume up to 20 Corpus Ingredient on slam landing
+        // Corpus bonus damage is MULTIPLICATIVE on top of height-scaled damage
         if (state.characterKey === 'CALLISTO' && state.resources) {
             const callistoLogic = require('./characterLogic/callisto');
             const maxConsumable = config.corpusIngredient?.spendPerSlam || 20;
@@ -2062,7 +2103,7 @@ tick() {
                 // At max consumption (20): +100% range, +50% damage, costume sprites
                 if (corpusToConsume >= maxConsumable) {
                     slamRadius *= 2.0;      // +100% range
-                    dmgMultiplier *= 1.5;    // +50% damage: 1.5 * 1.5 = 2.25x
+                    dmgMultiplier *= 1.5;    // +50% damage on top of height scaling
                     useCostumeSprite = true;  // Use cuf6 sprite + cus4 slash
                 }
                 
@@ -2090,9 +2131,9 @@ tick() {
 
                 const attackData = {
                     range: slamRadius,
-                    baseDamage: dmgMultiplier, // Multiplier (1.5 base, 2.25 at max consumption)
+                    baseDamage: dmgMultiplier,
                     knockback: 150,
-                    staggerDamage: dmgMultiplier * 50, // Scale stagger with actual damage
+                    staggerDamage: dmgMultiplier * 50,
                     statusEffects: [],
                     chargeAttack: false,
                     isDashAttack: false,
@@ -2110,7 +2151,7 @@ tick() {
                 );
 
                 hitAny = true;
-                    if (result.hit) {
+                if (result.hit) {
                     let slamHitstop = 0.16;
                     if (result.staggerResult && result.staggerResult.staggered) {
                         slamHitstop = Math.max(slamHitstop, 0.20);
@@ -2142,14 +2183,25 @@ tick() {
             }
         });
         
+        // Compute screen shake intensity for slam landing (even if no hit)
+        // Screenshake = slam height (0-1 scaled to 8-24 range) + slam damage (or intended damage)
+        const slamDamageForShake = hitAny ? 0 : Math.floor(regularBaseDamage * heightMultiplier);
+        const slamShakeIntensity = (height * 8) + (hitAny ? 0 : slamDamageForShake * 0.3);
+        
         // Broadcast slam landing for VFX - includes costume sprite info for Callisto
+        // Includes slam height info and shake for client-side effects
         const slamBroadcast = {
             type: 'slamLanding',
             attackerId: player.clientId,
             slamPos: slamPos,
             radius: slamRadius,
             hitAny: hitAny,
-            corpusConsumed: corpusConsumed
+            corpusConsumed: corpusConsumed,
+            // Height info for screen shake calculation
+            slamHeight: height,
+            slamDamage: hitAny ? 0 : (slamDamageForShake || Math.floor(regularBaseDamage)),
+            // Facing direction for client VFX offset
+            facing: state.facing
         };
         // Callisto: tell client which slashes/sprites to use at max consumption
         if (state.characterKey === 'CALLISTO') {

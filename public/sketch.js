@@ -1631,6 +1631,15 @@ function handleSlamLandingEvent(event) {
     alpha: 255
   });
 
+  // Trigger screen shake on slam landing (even if it did not damage anyone)
+  // Shake = slam height + slam damage
+  const slamHeight = event.slamHeight || 0;
+  const slamDamage = event.slamDamage || 0;
+  const shakeIntensity = (slamHeight * 8) + (slamDamage * 0.3);
+  if (typeof addScreenShake === 'function') {
+    addScreenShake(shakeIntensity, false);
+  }
+
   // CALLISTO: Apply empowered slam costume sprites if present
   if (event.costumeSprite || event.useCostumeSprite) {
     const attacker = window.allFighters?.find(f => f.clientId === event.attackerId);

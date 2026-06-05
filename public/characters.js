@@ -245,7 +245,9 @@ const STATUS_SPRITES = {
   Overheat: { atlas:"status", x:8, y:0, w:1, h:1 },
   "Accelerating Future": { atlas:"status", x:9, y:0, w:1, h:1 },
   Shin: { atlas:"status", x:10, y:0, w:1, h:1 },
+  "Shin (心) - Valencina": { atlas:"status", x:10, y:0, w:1, h:1 },
   "Time To Hunt": { atlas:"status", x:11, y:0, w:1, h:1 },
+  "Game Target": { atlas:"status", x:11, y:0, w:1, h:1 },
   Haste: { atlas:"status", x:0, y:1, w:1, h:1 },
   Bind: { atlas:"status", x:1, y:1, w:1, h:1 },
   Protection: { atlas:"status", x:2, y:1, w:1, h:1 },
@@ -255,9 +257,10 @@ const STATUS_SPRITES = {
   "Corpus Ingredient": { atlas:"status", x:7, y:1, w:1, h:1 },
   "Artwork Tibia": { atlas:"status", x:8, y:1, w:1, h:1 },
   "Ingredient Shredding Wound": { atlas:"status", x:9, y:1, w:1, h:1 },
-   "Acceleration Round": { atlas:"status", x:10, y:1, w:1, h:1 },
-    "Bladetrail Afterimage": { atlas:"status", x:7, y:2, w:1, h:1 },
-     "Dihui Star's Blade": { atlas:"status", x:8, y:2, w:1, h:1 }
+  "Acceleration Round": { atlas:"status", x:10, y:1, w:1, h:1 },
+  "Acceleration Rounds": { atlas:"status", x:10, y:1, w:1, h:1 },
+  "Bladetrail Afterimage": { atlas:"status", x:7, y:2, w:1, h:1 },
+  "Dihui Star's Blade": { atlas:"status", x:8, y:2, w:1, h:1 }
 };
 const STATUS_CELL = 64;
 

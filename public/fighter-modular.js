@@ -3035,20 +3035,20 @@ addCombo(attacker) {
         push();
         textAlign(CENTER, CENTER);
         
-        // Draw status potency on left
+        // Draw status potency on left, closer to icon
         fill(255);
         textSize(8);
         textAlign(LEFT, CENTER);
-        text(status.potency, x - 20, y);
+        text(status.potency, x - 15, y+80);
         
-        // Draw status icon from atlas (scaled to match placeholder footprint)
-        drawStatusIcon(status.type, x, y, 14);
+        // Draw status icon from atlas (50% bigger = 21px)
+        drawStatusIcon(status.type, x, y+80, 21);
         
-        // Draw status count on right
+        // Draw status count on right, closer to icon
         fill(255);
         textSize(8);
         textAlign(RIGHT, CENTER);
-        text(status.count, x + 20, y);
+        text(status.count, x + 15, y+80);
         pop();
       });
     }

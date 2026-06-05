@@ -580,20 +580,20 @@ function drawStatusRows(fighter, x, y) {
     const px = x + col * 30;
     const py = y + row * rowHeight;
     
-    // Draw potency on the left
+    // Draw potency on the left, closer to icon
     fill(255);
     textSize(8);
     textAlign(LEFT, CENTER);
-    text(status.potency, px, py + 9);
+    text(status.potency, px + 2, py + 9);
     
-    // Draw status icon from atlas (scaled to match placeholder footprint)
-    drawStatusIcon(status.type, px + 13, py + 9, 14);
+    // Draw status icon from atlas (50% bigger = 21px)
+    drawStatusIcon(status.type, px + 15, py + 9, 21);
     
-    // Draw status count on the right
+    // Draw status count on the right, closer to icon
     fill(255);
     textSize(8);
     textAlign(RIGHT, CENTER);
-    text(status.count, px + 24, py + 9);
+    text(status.count, px + 25, py + 9);
   }
 }
 

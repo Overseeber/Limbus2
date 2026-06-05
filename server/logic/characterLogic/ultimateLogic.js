@@ -696,9 +696,14 @@ function updateValencinaUltimate(fighter, ult, enemies, dt) {
             }
           });
           
-          // Reload Acceleration Round to 20
-          if (fighter.resources) {
-            fighter.resources.accelerationRounds = 20;
+          // Reload Acceleration Rounds to 10 after Disposal ultimate
+          if (fighter.statuses) {
+            const existingAR = fighter.statuses.find(s => s.type === 'Acceleration Round');
+            if (existingAR) {
+              existingAR.count = 10;
+            } else {
+              fighter.statuses.push({ type: 'Acceleration Round', count: 10, potency: 0, timer: 0 });
+            }
           }
           
           ult.cameraZoom = 0.5; ult.backgroundDim = 0;

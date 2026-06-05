@@ -106,6 +106,14 @@ class GameplayEngine {
       d += (cs.combo || 0) * COMBO_DAMAGE_PER_STACK;
     }
     
+    // Overheat: Valencina deals -20% damage while in Overheat
+    if (attacker.characterKey === 'VALENCINA') {
+      const overheat = this.getStatus(attacker, 'Overheat');
+      if (overheat && overheat.count > 0) {
+        d *= (1 - (attacker.resources.overheatDamageReduction || 0.2));
+      }
+    }
+    
     if (cs.attackCounter === 3) d *= 2;
     if (cs.chargeAttack) d *= 1.4;
     // DOUBLE DAMAGE while staggered (authoritative server-side)
@@ -580,6 +588,20 @@ class GameplayEngine {
           result.evaded = true;
           result.evadeReason = 'PRECOGNITION_EVADE';
           return result;
+        }
+        
+        // Evade failed - being hit loses 1 Precognition
+        const precog = defender.statuses.find(s => s.type === 'Precognition');
+        if (precog && precog.count > 0) {
+          precog.count = Math.max(0, precog.count - 1);
+        }
+        
+        // If Precognition reaches 0 and no Overheat active, enter Overheat immediately
+        if (precog && precog.count <= 0) {
+          const overheat = defender.statuses.find(s => s.type === 'Overheat');
+          if (!overheat || overheat.count <= 0) {
+            valencinaLogic.enterOverheat(defender, this.getCharacterConfig('VALENCINA'));
+          }
         }
       } catch(e) {}
     }

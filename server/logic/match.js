@@ -1924,6 +1924,29 @@ tick() {
             // FIX 1: Set lastHitOpponent for dash attacks
             state.lastHitOpponent = defender.clientId;
 
+            // VALENCINA: Check Precognition on hit (dash attack bypasses engine.resolveAttack)
+            if (defender.characterKey === 'VALENCINA') {
+                const valencinaLogic = require('./characterLogic/valencina');
+                if (!valencinaLogic.checkPrecognitionEvade(defender)) {
+                    // Evade failed - being hit loses 1 Precognition
+                    const precog = defender.gameState.statuses.find(s => s.type === 'Precognition');
+                    if (precog && precog.count > 0) {
+                        precog.count = Math.max(0, precog.count - 1);
+                    }
+                    
+                    // If Precognition reaches 0 and no Overheat active, enter Overheat immediately
+                    if (precog && precog.count <= 0) {
+                        const overheat = defender.gameState.statuses.find(s => s.type === 'Overheat');
+                        if (!overheat || overheat.count <= 0) {
+                            try {
+                                const valencinaConfig = require('./characterLogic/valencina');
+                                valencinaLogic.enterOverheat(defender.gameState, defender.config);
+                            } catch(e) {}
+                        }
+                    }
+                }
+            }
+
             // Apply damage and knockback directly without going through
             // engine.resolveAttack (which re-checks facing with rect-based detection).
             // Dash attacks hit regardless of facing.

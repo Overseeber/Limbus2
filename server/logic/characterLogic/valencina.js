@@ -83,7 +83,7 @@ function calculateAccelerationRoundBonusDamage(attackerState, targetState) {
  * - Track last hit opponent for Time to Hunt
  */
 function onSuccessfulHit(state, targetState, damage, config) {
-  const effects = { statusesApplied: [], acceleratingFutureGained: false };
+  const effects = { statusesApplied: [], acceleratingFutureGained: false, overheatLost: false };
 
   if (!targetState || targetState.isDefeated) {
     return { success: false, reason: 'No valid target' };
@@ -107,6 +107,17 @@ function onSuccessfulHit(state, targetState, damage, config) {
 
   // Apply Accelerating Future effects to speed/interval
   applyAcceleratingFutureEffects(state, config);
+
+  // On hit (landing an attack): lose 1 Overheat
+  const oh = getStatus(state, 'Overheat');
+  if (oh && oh.count > 0) {
+    oh.count = Math.max(0, oh.count - 1);
+    effects.overheatLost = true;
+    if (oh.count <= 0) {
+      exitOverheat(state, config);
+      effects.overheatExited = true;
+    }
+  }
 
   return { success: true, ...effects };
 }
@@ -405,11 +416,22 @@ function onReceiveHit(state, damage, attacker, config) {
     return { success: true, evaded: true, reason: 'PRECOGNITION_EVADE' };
   }
 
+  // Lose 1 Precognition if she has Precognition (not in Overheat)
+  const precog = getStatus(state, 'Precognition');
+  if (precog && precog.count > 0) {
+    precog.count = Math.max(0, precog.count - 10);
+    effects.precognitionLost = 1;
+  }
+
   // Lose 1 Overheat on being hit
   const oh = getStatus(state, 'Overheat');
   if (oh && oh.count > 0) {
     oh.count = Math.max(0, oh.count - (config.overheat.losePerHit || 1));
     effects.overheatLoss = config.overheat.losePerHit || 1;
+    if (oh.count <= 0) {
+      exitOverheat(state, config);
+      effects.overheatExited = true;
+    }
   }
 
   // Check Shin activation

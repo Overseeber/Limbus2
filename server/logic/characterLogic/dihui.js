@@ -233,6 +233,214 @@ function onReceiveHit(state, damage, attacker, config) {
 }
 
 //====================================================================
+// SUPERPOSED AFTERIMAGE - STATE HISTORY TRACKING
+//====================================================================
+/**
+ * Initialize afterimage history buffer on the fighter state.
+ * Stores structured state snapshots for delayed afterimage rendering and attacks.
+ */
+function initAfterimageHistory(state) {
+  if (!state.afterimageHistory) {
+    state.afterimageHistory = [];
+  }
+}
+
+/**
+ * Record current state into the afterimage history buffer.
+ * Stores position, facing, sprite/state info, and attack state at this tick.
+ * Cap the buffer to the maximum needed (delay * tickRate + margin).
+ */
+function recordAfterimageSnapshot(state, dt, config) {
+  const maxDelay = config.superposedAfterimage.count * config.superposedAfterimage.delayPerImage; // 1.5s
+  const maxSamples = Math.ceil(maxDelay / dt) + 5;
+
+  state.afterimageHistory = state.afterimageHistory || [];
+  state.afterimageHistory.push({
+    x: state.position.x,
+    y: state.position.y,
+    facing: state.facing,
+    isAttacking: state.isAttacking || false,
+    state: state.state,
+    attackSequence: state.attackSequence,
+    attackPhase: state.attackPhase,
+    strikeActive: state.strikeActive || false,
+    timestamp: Date.now()
+  });
+
+  // Keep buffer capped
+  if (state.afterimageHistory.length > maxSamples) {
+    state.afterimageHistory.splice(0, state.afterimageHistory.length - maxSamples);
+  }
+}
+
+/**
+ * Get a historical state snapshot at a specific delay in seconds.
+ * Returns the closest recorded state to (now - delayMs).
+ */
+function getAfterimageState(state, delaySeconds, config) {
+  if (!state.afterimageHistory || state.afterimageHistory.length === 0) return null;
+  
+  const history = state.afterimageHistory;
+  const targetTime = Date.now() - (delaySeconds * 1000);
+  
+  // Binary search for closest timestamp
+  let lo = 0, hi = history.length - 1;
+  let best = 0;
+  while (lo <= hi) {
+    const mid = Math.floor((lo + hi) / 2);
+    if (history[mid].timestamp <= targetTime) {
+      best = mid;
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  
+  return history[best] || null;
+}
+
+/**
+ * Resolve attacks from all afterimages.
+ * Afterimages mimic the real Dihui's attack state with a delay.
+ * They deal damage, raise combo, use poise/crit, but:
+ *  - Cannot be hit / inflict on-hit effects
+ *  - No collision
+ * 
+ * @param {Object} state - Dihui's current state
+ * @param {Object} config - Dihui config
+ * @param {Array} enemies - Array of enemy states to check hits against
+ * @param {Function} engineReference - Reference to gameplay engine methods (resolveAttack, calculateDamage, etc.)
+ * @returns {Array} afterimageHitEvents - Events for broadcasting
+ */
+function resolveAfterimageAttacks(state, config, enemies, engineRef) {
+  const events = [];
+  if (!state.afterimageHistory || state.afterimageHistory.length === 0) return events;
+  
+  const afterimageConfig = config.superposedAfterimage;
+  if (!afterimageConfig) return events;
+  
+  const scConfig = afterimageConfig.colors; // color config (just for reference)
+  
+  // Check each afterimage
+  for (let i = 0; i < afterimageConfig.count; i++) {
+    const delay = (i + 1) * afterimageConfig.delayPerImage; // 0.5, 1.0, 1.5
+    const histState = getAfterimageState(state, delay, config);
+    
+    if (!histState) continue;
+    
+    // Only resolve attacks if the afterimage was in an attacking state with strike active
+    if (!histState.strikeActive || !histState.isAttacking) continue;
+    
+    // The afterimage attacks using the delayed position and facing
+    const atkPos = { x: histState.x, y: histState.y };
+    const atkFacing = histState.facing;
+    
+    // Determine attack data based on the sequence from the historical state
+    const attackKey = histState.attackSequence === 1 ? 'light' : 
+                     histState.attackSequence === 2 ? 'medium' : 'heavy';
+    const attackDef = config.attacks[attackKey];
+    if (!attackDef) continue;
+    
+    // Check each enemy for hit
+    enemies.forEach(enemy => {
+      if (enemy.isDefeated) return;
+      
+      // Simple distance + facing check (same as GameplayEngine.checkAttackHit)
+      const dx = Math.abs(atkPos.x - enemy.position.x);
+      const dy = Math.abs(atkPos.y - enemy.position.y);
+      const inRange = dx < attackDef.range && dy < 72;
+      const inFront = atkFacing > 0 ? enemy.position.x > atkPos.x : enemy.position.x < atkPos.x;
+      const behindGrace = Math.abs(atkPos.x - enemy.position.x) < attackDef.range * 0.3;
+      
+      if (!inRange) return;
+      if (!inFront && !behindGrace) return;
+      
+      // Hit detected!
+      let baseDamage = attackDef.damage || 1.0;
+      
+      // Knockback
+      const knockback = attackDef.knockback || 0;
+      const knockDir = enemy.position.x < atkPos.x ? -1 : 1;
+      
+      // Calculate damage with combo and poise/crit (same as real Dihui)
+      // Combo bonus
+      let d = baseDamage * (state.baseDamage || 5);
+      const comboCount = engineRef.combatState?.[state.id]?.combo || 0;
+      d += comboCount * 2; // COMBO_DAMAGE_PER_STACK from engine
+      
+      // Attack 3 bonus
+      if (histState.attackSequence === 3) d *= 2;
+      
+      // Poise crit system
+      let isCrit = false;
+      const poise = getStatus(state, 'Poise');
+      let critChance = 0;
+      if (poise) critChance += 0.05 * poise.potency;
+      if (critChance > 0 && Math.random() < critChance) {
+        isCrit = true;
+        d *= 1.5;
+        // Consume 1 poise count
+        if (poise) {
+          poise.count -= 1;
+          if (poise.count <= 0) removeStatus(state, 'Poise');
+        }
+      }
+      
+      // Stagger bonus
+      if (enemy.state === 'staggered') d *= 2;
+      
+      const finalDamage = Math.floor(d);
+      
+      // Apply damage directly
+      enemy.hp = Math.max(0, enemy.hp - finalDamage);
+      
+      // Apply stagger
+      if (!enemy.isGuarding) {
+        enemy.stagger += finalDamage * 1.2;
+        const threshold = enemy.staggerThreshold || 1000;
+        if (enemy.stagger >= threshold && enemy.state !== 'staggered') {
+          enemy.state = 'staggered';
+          enemy.staggerTimer = enemy.staggerDuration || 5;
+          enemy.stagger = threshold;
+        }
+      }
+      
+      // Hit reaction
+      if (enemy.state !== 'staggered') {
+        enemy.state = 'hit';
+        enemy.hitTimer = 0.18;
+      }
+      
+      // Apply knockback
+      if (knockback > 0) {
+        const mult = (state.knockbackMultiplier) || 1.0;
+        enemy.velocity.x = knockDir * knockback * 8 * mult;
+        enemy.position.x = Math.max(60, Math.min(1400 - 60, enemy.position.x));
+      }
+      
+      // Raise combo count for afterimage hits
+      if (engineRef.addCombo) {
+        engineRef.addCombo(state.id);
+      }
+      
+      // Store hit event for broadcasting
+      events.push({
+        type: 'AFTERIMAGE_HIT',
+        afterimageIndex: i,
+        targetId: enemy.id,
+        damage: finalDamage,
+        knockback: knockback,
+        isCrit: isCrit,
+        defenderHp: enemy.hp,
+        defeated: enemy.hp <= 0
+      });
+    });
+  }
+  
+  return events;
+}
+
+//====================================================================
 // PER-TICK SYSTEM UPDATES
 //====================================================================
 function updateSystems(state, dt, config) {
@@ -240,6 +448,10 @@ function updateSystems(state, dt, config) {
 
   // Update shield system
   events.push(...updateShieldSystem(state, dt, config));
+  
+  // Record afterimage history snapshot
+  initAfterimageHistory(state);
+  recordAfterimageSnapshot(state, dt, config);
 
   // Consume excess Poise Potency (>20) to inflict Bladetrail Afterimage
   const poise = getStatus(state, 'Poise');
@@ -367,6 +579,11 @@ if (typeof module !== 'undefined' && module.exports) {
     getStatusPotency,
     getStatusCount,
     ensureStatus,
-    removeStatus
+    removeStatus,
+    // Superposed Afterimage exports
+    initAfterimageHistory,
+    recordAfterimageSnapshot,
+    getAfterimageState,
+    resolveAfterimageAttacks
   };
 }

@@ -335,10 +335,58 @@ tick() {
                     player.gameState.onGround = true;
                 }
 
-                // Check attacks during active frame (RESTORED rect-based detection)
-                if (player.strikeActive && player.attackSequence > 0) {
-                    this.checkAttackHits(player);
+        // Check attacks during active frame (RESTORED rect-based detection)
+        if (player.strikeActive && player.attackSequence > 0) {
+          this.checkAttackHits(player);
+        }
+        
+        // SUPERPOSED AFTERIMAGE: Resolve afterimage attacks for Dihui Star
+        // Afterimages mimic the real Dihui's attack state with 0.5s/1.0s/1.5s delay
+        // They deal damage, raise combo, use poise/crit, but cannot be hit / no on-hit effects / no collision
+        if (player.characterKey === 'DIHUI' && !player.gameState.isDefeated) {
+          const dihuiLogic = require('./characterLogic/dihui');
+          const dihuiConfig = this.engine.getCharacterConfig('DIHUI');
+          if (dihuiLogic && dihuiConfig && dihuiLogic.resolveAfterimageAttacks) {
+            const enemies = Object.values(this.players)
+              .filter(p => p.clientId !== player.clientId && !p.gameState.isDefeated)
+              .map(p => p.gameState);
+            
+            const afterimageHitEvents = dihuiLogic.resolveAfterimageAttacks(
+              player.gameState,
+              dihuiConfig,
+              enemies,
+              this.engine
+            );
+            
+            // Broadcast afterimage hit events
+            afterimageHitEvents.forEach(ev => {
+              this.broadcast({
+                type: 'AFTERIMAGE_HIT',
+                attackerId: player.clientId,
+                targetId: ev.targetId,
+                afterimageIndex: ev.afterimageIndex,
+                damage: ev.damage,
+                knockback: ev.knockback,
+                isCrit: ev.isCrit,
+                hp: ev.defenderHp,
+                defeated: ev.defeated
+              });
+              
+              // Check for defeat
+              if (ev.defeated) {
+                const targetPlayer = Object.values(this.players).find(p => p.gameState.id === ev.targetId);
+                if (targetPlayer) {
+                  targetPlayer.gameState.isDefeated = true;
+                  this.broadcast({
+                    type: 'FIGHTER_DEFEATED',
+                    fighterId: targetPlayer.clientId,
+                    defeatedBy: player.clientId
+                  });
                 }
+              }
+            });
+          }
+        }
             }
         });
 

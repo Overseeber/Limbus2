@@ -92,6 +92,11 @@ class Fighter {
     this.spriteShakeIntensity = 0;       // Intensity of sprite shake effect
     this.isUltimateSpriteShake = false;  // Flag for ultimate attack shake effect
     
+    // SUPERPOSED AFTERIMAGE - trailing afterimage history
+    // Stores position/facing/sprite snapshots for delayed rendering
+    this.afterimageHistory = [];          // History buffer for afterimage rendering
+    this.afterimageSlashHistory = [];     // History of slash spawn events for afterimage slashes
+    
     // DEFEAT STATE PROPERTIES
     this.isDefeated = false;             // Flag for defeated state
     
@@ -2092,6 +2097,9 @@ class Fighter {
       }
     }
 
+    // Record afterimage history for Dihui Star (Superposed Afterimage passive)
+    this.updateAfterimageHistory(dt);
+
     // Update sprite based on current state
     this.updateSprite(dt);
   }
@@ -3100,7 +3108,13 @@ addCombo(attacker) {
   }
 
   draw() {
+    // Update sprite FIRST so currentSprite is correct for this frame
     this.updateSprite();
+    
+    // Record afterimage history AFTER sprite update to capture the correct currentSprite
+    // This runs every frame regardless of whether update() is called (server-authoritative mode)
+    this.updateAfterimageHistory(0.016);
+    
     push();
     translate(this.pos.x + this.spriteShakeX, this.pos.y + this.spriteShakeY);
     
@@ -3188,6 +3202,11 @@ addCombo(attacker) {
       ellipse(0, -10, 12, 12);
     }
     pop();
+    
+    // Draw afterimages for Dihui Star (Superposed Afterimage passive)
+    if (this.characterKey === 'DIHUI') {
+      this.drawAfterimages();
+    }
     
     // Draw slash effects
     this.drawSlashEffects(0.016); // Assuming 60 FPS
@@ -3567,6 +3586,175 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
       }
     }
     // If new shake is weaker, don't change current intensity
+  }
+
+  //====================================================================
+  // SUPERPOSED AFTERIMAGE - CLIENT-SIDE METHODS
+  //====================================================================
+
+  /**
+   * Record current state into afterimage history buffer each frame.
+   * Stores position, facing, and current sprite for delayed rendering.
+   * Cap buffer to max needed (1.5s * 60fps + margin = ~100 samples).
+   */
+  updateAfterimageHistory(dt) {
+    if (this.characterKey !== 'DIHUI') return;
+
+    // Initialize history if missing
+    if (!this.afterimageHistory) {
+      this.afterimageHistory = [];
+    }
+
+    // Record current state
+    this.afterimageHistory.push({
+      x: this.pos.x,
+      y: this.pos.y,
+      facing: this.facing,
+      currentSprite: this.currentSprite || 'didle',
+      isAttacking: this.state === 'attack' || this.state === 'attacking',
+      state: this.state,
+      attackSequence: this.attackSequence,
+      attackPhase: this.attackPhase,
+      strikeActive: this.strikeActive,
+      timestamp: Date.now()
+    });
+
+    // Cap buffer to ~100 samples (1.5s max delay at 60fps = 90 samples + margin)
+    if (this.afterimageHistory.length > 100) {
+      this.afterimageHistory.splice(0, this.afterimageHistory.length - 100);
+    }
+  }
+
+  /**
+   * Get the historical state at a specific delay in milliseconds.
+   * Returns the closest recorded snapshot to (now - delayMs).
+   */
+  getAfterimageStateAtDelay(delayMs) {
+    if (!this.afterimageHistory || this.afterimageHistory.length === 0) return null;
+
+    const history = this.afterimageHistory;
+    const targetTime = Date.now() - delayMs;
+
+    // Binary search for closest timestamp
+    let lo = 0, hi = history.length - 1;
+    let best = 0;
+    while (lo <= hi) {
+      const mid = Math.floor((lo + hi) / 2);
+      if (history[mid].timestamp <= targetTime) {
+        best = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+
+    return history[best] || null;
+  }
+
+  /**
+   * Draw the 3 Superposed Afterimages with their respective tints and opacities.
+   * 
+   * Afterimage 1 (0.5s delay): Blue tint [0,0,255] at 70% opacity
+   * Afterimage 2 (1.0s delay): Purple tint [255,0,255] at 50% opacity  
+   * Afterimage 3 (1.5s delay): Red tint [255,0,0] at 30% opacity
+   * 
+   * Afterimages draw the same sprite as the original at the delayed position,
+   * with the same facing direction. They do NOT interact with gameplay collision.
+   */
+  drawAfterimages() {
+    if (this.characterKey !== 'DIHUI') return;
+    if (!this.afterimageHistory || this.afterimageHistory.length === 0) return;
+    if (this.isDefeated) return;
+
+    // Get the DIHUI config for afterimage colors
+    const dihuiChar = CHARACTERS['DIHUI'];
+    if (!dihuiChar || !dihuiChar.superposedAfterimage) return;
+
+    const config = dihuiChar.superposedAfterimage;
+    const colors = config.colors || [
+      [0, 0, 255, 0.7],     // Blue, 70% opacity
+      [255, 0, 255, 0.5],   // Purple, 50% opacity
+      [255, 0, 0, 0.3]      // Red, 30% opacity
+    ];
+
+    // Afterimages don't draw during ultimate
+    if (this.ultimateActive) return;
+
+    const scaleFactor = 144 / 512;
+    const hitboxBottomY = 72;
+
+    // Draw each afterimage
+    for (let i = 0; i < config.count; i++) {
+      const delayMs = (i + 1) * (config.delayPerImage * 1000); // 500, 1000, 1500
+      const histState = this.getAfterimageStateAtDelay(delayMs);
+
+      if (!histState) continue;
+
+      const color = colors[i] || [255, 255, 255, 0.5];
+      const r = color[0] || 255;
+      const g = color[1] || 255;
+      const b = color[2] || 255;
+      const alpha = (color[3] !== undefined) ? color[3] : 0.5;
+
+      // Get the sprite from historical state
+      const spriteName = histState.currentSprite || 'didle';
+      const spriteInfo = SPRITES?.[spriteName];
+      
+      if (!spriteInfo) continue; // Skip if sprite not found
+
+      push();
+      // Position at the historical position
+      translate(histState.x, histState.y);
+
+      // Apply facing direction (same as main character)
+      scale(histState.facing === 1 ? -1 : 1, 1);
+
+      // Apply tint as a color wash that preserves sprite detail.
+      // p5.js tint() is MULTIPLICATIVE: pure [0,0,255] would crush all non-blue content.
+      // Instead blend 50% tint color + 50% white to create a color wash effect:
+      // Blue  [0,0,255] → tint(128, 128, 255, alpha)  — preserves R/G detail
+      // Purple[255,0,255] → tint(255, 128, 255, alpha) — preserves G detail
+      // Red   [255,0,0] → tint(255, 128, 128, alpha) — preserves G/B detail
+      const mixFactor = 0.5;
+      const tr = Math.round(r + (255 - r) * mixFactor);
+      const tg = Math.round(g + (255 - g) * mixFactor);
+      const tb = Math.round(b + (255 - b) * mixFactor);
+      tint(tr, tg, tb, alpha * 255);
+
+      // Draw the sprite
+      drawSpriteScaled(spriteName, 0, hitboxBottomY, scaleFactor);
+
+      pop();
+
+      // Draw slash effects for afterimages from history
+      // If the afterimage was attacking with strike active, draw slash sprites
+      if (histState.isAttacking && histState.strikeActive) {
+        // Determine which slash to draw based on the attack sequence
+        let slashType = 'ds1s1';
+        if (histState.attackSequence === 1) {
+          slashType = 'ds1s1';
+        } else if (histState.attackSequence === 2) {
+          slashType = 'ds2s1';
+        } else if (histState.attackSequence === 3) {
+          slashType = 'ds3s1';
+        }
+
+        const slashSpriteInfo = SPRITES?.[slashType];
+        if (slashSpriteInfo) {
+          push();
+          // Position at historical character position, with offset for slash
+          translate(histState.x + (histState.facing === 1 ? -40 : 40), histState.y + 84);
+          // Flip based on facing (matching main slash drawing: facing=1 flips, facing=-1 doesn't)
+          if (histState.facing === 1) {
+            scale(-1, 1);
+          }
+          // Use white tint for base sprite appearance, then apply color overlay
+          tint(255, 255, 255, alpha * 255);
+          drawSpriteScaled(slashType, 0, 0, scaleFactor);
+          pop();
+        }
+      }
+    }
   }
 
   triggerTremorBurst() {

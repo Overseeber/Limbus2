@@ -3003,6 +3003,18 @@ CALLISTO: {
 
     // On hit effects
     onHitEffects: { bladetrailAfterimagePotency: 1, poiseCountGain: 1 },
+    
+    // SUPERPOSED AFTERIMAGE - Passive trailing afterimages
+    // 3 afterimages with 0.5s, 1.0s, 1.5s delays and matching tints
+    superposedAfterimage: {
+      count: 3,
+      delayPerImage: 0.5,
+      colors: [
+        [0, 0, 255, 0.7],     // Blue, 70% opacity
+        [255, 0, 255, 0.5],   // Purple, 50% opacity
+        [255, 0, 0, 0.3]      // Red, 30% opacity
+      ]
+    },
 
     // Ability definitions
     abilities: {

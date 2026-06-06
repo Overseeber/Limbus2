@@ -335,6 +335,14 @@ tick() {
                     player.gameState.onGround = true;
                 }
 
+        // Sync attack state to gameState for afterimage history recording
+        // The player wrapper owns attack state (strikeActive, attackSequence, etc.)
+        // but recordAfterimageSnapshot reads from gameState. Sync before recording.
+        player.gameState.isAttacking = player.gameState.isAttacking || (player.attackSequence > 0 && (player.attackPhase === 'startup' || player.attackPhase === 'active'));
+        player.gameState.strikeActive = player.strikeActive || false;
+        player.gameState.attackSequence = player.attackSequence || 0;
+        player.gameState.attackPhase = player.attackPhase || 'none';
+        
         // Check attacks during active frame (RESTORED rect-based detection)
         if (player.strikeActive && player.attackSequence > 0) {
           this.checkAttackHits(player);

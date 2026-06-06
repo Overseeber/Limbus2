@@ -298,6 +298,13 @@ function preload() {
       console.error('Failed to load closing time intro image:', err);
     })
   };
+
+  // Load UI vignette image
+  window.uiVignette = loadImage('data/UI/uivin.png', () => {
+    console.log('UI vignette image loaded successfully');
+  }, (err) => {
+    console.error('Failed to load UI vignette image:', err);
+  });
 }
 
 function setup() {//test
@@ -1925,10 +1932,7 @@ function draw() {
     drawSlamLandingOverlays();
     drawDamageNumbers();
     drawParticles();
-    
-    // Draw vignette effect on vertical edges
-    drawVignette();
-    
+
     // Draw overhead healthbars for non-player fighters
     drawOverheadHealthbars();
 
@@ -1980,6 +1984,11 @@ function draw() {
   } else if (battleState === BATTLE_STATES.COMBAT_OVER) {
     // Dedicated combat over screen — do not draw arena
     drawCombatOver();
+  }
+
+  // Draw UI vignette overlay only during combat (including ultimates)
+  if (battleState === BATTLE_STATES.BATTLE) {
+    drawVignette();
   }
 
   if (battleState !== BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.OPENING && battleState !== BATTLE_STATES.COMBAT_OVER && (typeof shouldHideGameplayUI !== 'function' || !shouldHideGameplayUI())) {
@@ -2436,47 +2445,14 @@ function updateClientInterpolation() {
 }
 
 function drawVignette() {
-  // Vignette width in pixels
-  const vignetteWidth = 150;
-  const bgHeight = window.bgScaledHeight || height;
-  const bgTop = (height / 2) - (bgHeight / 2);
-  const bgBottom = bgTop + bgHeight;
-  
-  // Draw left vignette
-  for (let x = 0; x < vignetteWidth; x++) {
-    const alpha = map(x, 0, vignetteWidth, 255, 0);
-    fill(0, 0, 0, alpha);
-    noStroke();
-    rect(x, 0, 1, height);
+  // Draw UI vignette image as an underlying overlay
+  if (window.uiVignette && window.uiVignette.width > 0) {
+    push();
+    imageMode(CORNER);
+    // Draw at full canvas size - no scaling needed as per user request
+    image(window.uiVignette, 0, 0, width, height);
+    pop();
   }
-  
-  // Draw right vignette
-  for (let x = 0; x < vignetteWidth; x++) {
-    const alpha = map(x, 0, vignetteWidth, 0, 255);
-    fill(0, 0, 0, alpha);
-    noStroke();
-    rect(width - vignetteWidth + x, 0, 1, height);
-  }
-
-  // Draw top vignette at the top edge of the battle background image
-  for (let y = 0; y < vignetteWidth; y++) {
-    const alpha = map(y, 0, vignetteWidth, 255, 0);
-    fill(0, 0, 0, alpha);
-    noStroke();
-    rect(0, bgTop + y, width, 1);
-  }
-
-  // Draw bottom vignette at the bottom edge of the battle background image
-  for (let y = 0; y < vignetteWidth; y++) {
-    const alpha = map(y, 0, vignetteWidth, 0, 255);
-    fill(0, 0, 0, alpha);
-    noStroke();
-    rect(0, bgBottom - vignetteWidth + y, width, 1);
-  }
-
-  fill(0);
-  rect(-500, 0, 500, height);
-  rect(width, 0, 500, height);
 }
 
 function updateBattle() {

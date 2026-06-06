@@ -1314,7 +1314,41 @@ tick() {
                     player.attackPhase = 'active';
                     player.attackFrameTimer = 0;
                     player.strikeActive = true;
+                    
+                    // TELEPORT ATTACK MECHANIC: Teleport forward towards target after windup
+                    const targetPlayer = this.findClosestEnemy(player);
+                    if (targetPlayer && !targetPlayer.gameState.isDefeated) {
+                        const targetState = targetPlayer.gameState;
+                        const teleportDistance = 100; // Short distance teleport
+                        
+                        // Auto face direction towards target
+                        state.facing = targetState.position.x > state.position.x ? 1 : -1;
+                        
+                        // Calculate teleport position towards target
+                        let teleportX = state.position.x + (state.facing * teleportDistance);
+                        
+                        // Check if teleport would land in target's hitbox
+                        const playerHitboxWidth = 50;
+                        const targetHitboxStart = targetState.position.x - (playerHitboxWidth / 2);
+                        const targetHitboxEnd = targetState.position.x + (playerHitboxWidth / 2);
+                        
+                        if (teleportX >= targetHitboxStart && teleportX <= targetHitboxEnd) {
+                            // Teleport would land in hitbox, place right in front instead
+                            teleportX = targetState.position.x - (state.facing * (playerHitboxWidth / 2 + 5));
+                        }
+                        
+                        // Clamp to arena boundaries
+                        const ARENA_WIDTH = 1400;
+                        const arenaMargin = 60;
+                        teleportX = Math.max(arenaMargin, Math.min(ARENA_WIDTH - arenaMargin, teleportX));
+                        
+                        // Apply teleport
+                        state.position.x = teleportX;
+                    }
+                    
+                    // Apply forward momentum (keep existing momentum if any)
                     const activeForward = attackDef.attackForward || attackDef.activeForward || 320;
+                    // Preserve existing momentum and add forward momentum
                     state.velocity.x = state.facing * activeForward;
                 }
             } else if (player.attackPhase === 'active') {

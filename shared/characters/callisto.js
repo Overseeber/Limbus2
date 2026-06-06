@@ -91,7 +91,7 @@ const CALLISTO_CONFIG = {
   // ATTACK SEQUENCES
   attacks: {
     light: {
-      startup: 0.06,
+      startup: 0.30,
       active: 0.12,
       recovery: 0.28,
       range: 130,
@@ -110,7 +110,7 @@ const CALLISTO_CONFIG = {
       ]
     },
     medium: {
-      startup: 0.10,
+      startup: 0.30,
       active: 0.16,
       recovery: 0.36,
       range: 160,
@@ -129,7 +129,7 @@ const CALLISTO_CONFIG = {
       ]
     },
     heavy: {
-      startup: 0.18,
+      startup: 0.30,
       active: 0.18,
       recovery: 0.45,
       range: 200,

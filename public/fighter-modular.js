@@ -1900,6 +1900,36 @@ class Fighter {
               this.attackPhase = 'active';
               this.attackFrameTimer = 0;
               this.strikeActive = true;
+              
+              // TELEPORT ATTACK MECHANIC: Teleport forward towards target after windup
+              const closestOpponent = this.getClosestOpponent();
+              if (closestOpponent && !closestOpponent.isDefeated) {
+                const teleportDistance = 100; // Short distance teleport
+                
+                // Auto face direction towards target
+                this.facing = closestOpponent.pos.x > this.pos.x ? 1 : -1;
+                
+                // Calculate teleport position towards target
+                let teleportX = this.pos.x + (this.facing * teleportDistance);
+                
+                // Check if teleport would land in target's hitbox
+                const playerHitboxWidth = 50;
+                const targetHitboxStart = closestOpponent.pos.x - (playerHitboxWidth / 2);
+                const targetHitboxEnd = closestOpponent.pos.x + (playerHitboxWidth / 2);
+                
+                if (teleportX >= targetHitboxStart && teleportX <= targetHitboxEnd) {
+                  // Teleport would land in hitbox, place right in front instead
+                  teleportX = closestOpponent.pos.x - (this.facing * (playerHitboxWidth / 2 + 5));
+                }
+                
+                // Clamp to arena boundaries
+                const arenaWidth = width;
+                const arenaMargin = 60;
+                teleportX = Math.max(arenaMargin, Math.min(arenaWidth - arenaMargin, teleportX));
+                
+                // Apply teleport
+                this.pos.x = teleportX;
+              }
             } else if (this.attackPhase === 'active' && this.attackFrameTimer >= attackDef.active) {
               this.attackPhase = 'recovery';
               this.attackFrameTimer = 0;

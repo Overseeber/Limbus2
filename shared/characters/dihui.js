@@ -56,7 +56,7 @@ const DIHUI_CONFIG = {
   // ATTACK SEQUENCES
   attacks: {
     light: {
-      startup: 0.08, active: 0.12, recovery: 0.32,
+      startup: 0.30, active: 0.12, recovery: 0.32,
       range: 200, damage: 1.0, knockback: 30, staggerDamage: 50, combo: 1,
       startupBackward: 110, attackForward: 360,
       onAttackEffects: { poiseCountGain: 3 },
@@ -66,7 +66,7 @@ const DIHUI_CONFIG = {
       }
     },
     medium: {
-      startup: 0.12, active: 0.16, recovery: 0.40,
+      startup: 0.30, active: 0.16, recovery: 0.40,
       range: 240, damage: 1.2, knockback: 50, staggerDamage: 75, combo: 2,
       startupBackward: 130, attackForward: 400,
       onAttackEffects: { poiseCountGain: 3 },
@@ -77,7 +77,7 @@ const DIHUI_CONFIG = {
       }
     },
     heavy: {
-      startup: 0.20, active: 0.20, recovery: 0.50,
+      startup: 0.30, active: 0.20, recovery: 0.50,
       range: 300, damage: 1.6, knockback: 80, staggerDamage: 120, combo: 3,
       startupBackward: 150, attackForward: 460,
       onAttackEffects: { inflictBladetrailAfterimage: true, critBonusDamage: 0.3 },

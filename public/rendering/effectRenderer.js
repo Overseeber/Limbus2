@@ -28,7 +28,7 @@ const DAMAGE_CONSTANTS = {
     CRITICAL_DAMAGE: { fill: [246, 255, 0], stroke: [200, 220, 0] },
     BURN_DAMAGE: { fill: [255, 140, 0], stroke: [200, 100, 0] },
     BLEED_DAMAGE: { fill: [255, 50, 50], stroke: [200, 0, 0] },
-    TREMOR_DAMAGE: { fill: [255, 255, 0], stroke: [200, 200, 0] },
+    TREMOR_DAMAGE: { fill: [231, 255, 143], stroke: [180, 210, 100] },
     RUPTURE_DAMAGE: { fill: [50, 255, 50], stroke: [0, 200, 0] },
     STAGGER_DAMAGE: { fill: [231, 255, 143], stroke: [180, 210, 100] },
     SINKING_DAMAGE: { fill: [77, 159, 255], stroke: [40, 100, 200] }
@@ -218,98 +218,29 @@ class DamageNumber extends FloatingIndicator {
   }
 
   drawSourceIcon(x, y, iconSize, colors) {
-    if (typeof drawStatusIcon === 'function') {
-      // Use actual sprite icons when available
-      const statusType = this.isBlocked ? 'Weapon' : (this.damageType === 'burn' ? 'Burn' :
-                          this.damageType === 'bleed' ? 'Bleed' :
-                          this.damageType === 'tremor' ? 'Tremor' :
-                          this.damageType === 'rupture' ? 'Rupture' :
-                          this.damageType === 'sinking' ? 'Sinking' :
-                          'Weapon');
-
-      drawStatusIcon(statusType, x + iconSize / 2, y + iconSize / 2, iconSize);
-      return;
-    }
-
     push();
-    // Enable stroke for icon outlines
-    strokeWeight(1.5);
-    const r = colors.fill[0];
-    const g = colors.fill[1];
-    const b = colors.fill[2];
-    fill(r, g, b, this.alpha);
-    stroke(r * 0.7, g * 0.7, b * 0.7, this.alpha);
+    imageMode(CENTER);
+    noStroke();
 
-    // Determine which icon shape to draw based on damage source
-    if (this.isBlocked) {
-      // Blocked/depowered: shield shape
-      rectMode(CENTER);
-      rect(x + iconSize / 2, y + iconSize / 2, iconSize * 0.8, iconSize * 0.9, 3);
-      // Small cross on shield
-      stroke(r, g, b, this.alpha);
-      line(x + iconSize / 2 - 3, y + iconSize / 2, x + iconSize / 2 + 3, y + iconSize / 2);
-      line(x + iconSize / 2, y + iconSize / 2 - 3, x + iconSize / 2, y + iconSize / 2 + 3);
-      rectMode(CORNER);
-    } else if (this.damageType === 'burn') {
-      // Burn: flame triangle
-      triangle(
-        x + iconSize / 2, y + 2,
-        x + 2, y + iconSize - 2,
-        x + iconSize - 2, y + iconSize - 2
-      );
-    } else if (this.damageType === 'bleed') {
-      // Bleed: droplet circle
-      ellipse(x + iconSize / 2, y + iconSize / 2, iconSize * 0.8);
-    } else if (this.damageType === 'tremor') {
-      // Tremor: diamond
-      push();
-      translate(x + iconSize / 2, y + iconSize / 2);
-      rotate(PI / 4);
-      rect(-iconSize / 3, -iconSize / 3, iconSize * 0.66, iconSize * 0.66, 1);
-      pop();
-    } else if (this.damageType === 'rupture') {
-      // Rupture: hexagon burst
-      beginShape();
-      for (let i = 0; i < 6; i++) {
-        const angle = (PI / 3) * i - PI / 6;
-        const px = x + iconSize / 2 + cos(angle) * iconSize * 0.45;
-        const py = y + iconSize / 2 + sin(angle) * iconSize * 0.45;
-        vertex(px, py);
-      }
-      endShape(CLOSE);
-    } else if (this.damageType === 'sinking') {
-      // Sinking: wave arc
-      noFill();
-      stroke(r, g, b, this.alpha);
-      strokeWeight(2);
-      arc(x + iconSize / 2, y + iconSize / 2 + 2, iconSize * 0.8, iconSize * 0.5, PI, TWO_PI);
+    // Determine which icon to draw based on damage source
+    let statusType = 'Weapon';
+    if (this.damageType === 'burn') statusType = 'Burn';
+    else if (this.damageType === 'bleed') statusType = 'Bleed';
+    else if (this.damageType === 'rupture') statusType = 'Rupture';
+    else if (this.damageType === 'tremor') statusType = 'Tremor';
+    else if (this.damageType === 'sinking') statusType = 'Sinking';
+    else if (this.isBlocked) statusType = 'Weapon';
+    else statusType = 'Weapon';
+
+    // Try to use drawStatusIcon if available
+    if (typeof drawStatusIcon === 'function') {
+      drawStatusIcon(statusType, x + iconSize / 2, y + iconSize / 2, iconSize);
     } else {
-      // Physical attack: weapon shape based on attack type
-      switch (this.attackType) {
-        case 'slam':
-          triangle(
-            x + iconSize / 2, y + 2,
-            x + 2, y + iconSize - 2,
-            x + iconSize - 2, y + iconSize - 2
-          );
-          break;
-        case 'dash':
-          ellipse(x + iconSize / 2, y + iconSize / 2, iconSize * 0.8);
-          stroke(r, g, b, this.alpha);
-          line(x + 3, y + iconSize / 2, x + iconSize - 3, y + iconSize / 2);
-          line(x + iconSize - 6, y + iconSize / 2 - 3, x + iconSize - 3, y + iconSize / 2);
-          line(x + iconSize - 6, y + iconSize / 2 + 3, x + iconSize - 3, y + iconSize / 2);
-          break;
-        case 'ultimate':
-          push();
-          translate(x + iconSize / 2, y + iconSize / 2);
-          rotate(PI / 4);
-          rect(-iconSize / 2.5, -iconSize / 2.5, iconSize * 0.8, iconSize * 0.8, 2);
-          pop();
-          break;
-        default:
-          rect(x + 1, y + 1, iconSize - 2, iconSize - 2, 2);
-      }
+      // Fallback: draw simple colored shape
+      fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
+      stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
+      strokeWeight(1);
+      rect(x, y, iconSize, iconSize, 2);
     }
 
     pop();
@@ -369,24 +300,21 @@ class StaggerDamageNumber extends FloatingIndicator {
   }
 
   drawSourceIcon(x, y, iconSize, colors) {
-    if (typeof drawStatusIcon === 'function') {
-      const statusType = this.sourceType === 'tremor' ? 'Tremor' : 'Weapon';
-      drawStatusIcon(statusType, x + iconSize / 2, y + iconSize / 2, iconSize);
-      return;
-    }
-
     push();
-    fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
-    stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
-    strokeWeight(1);
+    imageMode(CENTER);
+    noStroke();
 
-    if (this.sourceType === 'tremor') {
-      push();
-      translate(x + iconSize / 2, y + iconSize / 2);
-      rotate(PI / 4);
-      rect(-iconSize / 2, -iconSize / 2, iconSize, iconSize, 1);
-      pop();
+    // Determine which icon to draw based on stagger source
+    let statusType = this.sourceType === 'tremor' ? 'Tremor' : 'Weapon';
+
+    // Try to use drawStatusIcon if available
+    if (typeof drawStatusIcon === 'function') {
+      drawStatusIcon(statusType, x + iconSize / 2, y + iconSize / 2, iconSize);
     } else {
+      // Fallback: draw simple colored shape
+      fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
+      stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
+      strokeWeight(1);
       rect(x, y, iconSize, iconSize, 2);
     }
 

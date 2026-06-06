@@ -1441,7 +1441,11 @@ tick() {
                         fighterId: player.clientId,
                         statusType: event.statusType,
                         damage: event.damage,
-                        hp: player.gameState.hp
+                        hp: player.gameState.hp,
+                        isCrit: false,
+                        wasGuarded: false,
+                        attackType: 'normal',
+                        damageType: event.statusType.toLowerCase()
                     });
                     break;
 
@@ -1805,6 +1809,7 @@ tick() {
                 damage: result.damage,
                 isCrit: result.isCrit || false,
                 attackType: attackType || null,
+                damageType: result.damageType || 'normal',
                 attackSequence: attacker.attackSequence,
                 hp: defender.gameState.hp,
                 knockback: result.knockback,
@@ -1829,7 +1834,11 @@ tick() {
                             fighterId: defender.clientId,
                             statusType: ev.statusType,
                             damage: ev.damage,
-                            hp: defender.gameState.hp
+                            hp: defender.gameState.hp,
+                            isCrit: false,
+                            wasGuarded: false,
+                            attackType: 'normal',
+                            damageType: ev.statusType.toLowerCase()
                         });
                     }
                 });
@@ -1843,7 +1852,11 @@ tick() {
                             fighterId: attacker.clientId,
                             statusType: ev.statusType,
                             damage: ev.damage,
-                            hp: attacker.gameState.hp
+                            hp: attacker.gameState.hp,
+                            isCrit: false,
+                            wasGuarded: false,
+                            attackType: 'normal',
+                            damageType: ev.statusType.toLowerCase()
                         });
                     }
                 });
@@ -1963,6 +1976,7 @@ tick() {
             // Dash attacks hit regardless of facing.
             const dmgResult = this.engine.calculateDamage(attackData.baseDamage, state, defender.gameState);
             const ap = this.engine.applyDamage(defender.gameState, dmgResult.damage);
+            const wasGuarded = defender.gameState.isGuarding;
 
             // Call character-specific onSuccessfulHit for dash attacks
             this.engine.callOnSuccessfulHit(state, defender.gameState, dmgResult.damage);
@@ -2011,15 +2025,19 @@ tick() {
             
             results.push({
                 targetId: defender.clientId,
-                damage: result.damage,
-                defenderHp: result.defenderHp,
-                hit: result.hit,
-                defeated: result.defeated,
-                knockback: result.knockback,
+                damage: ap.damage,
+                defenderHp: defender.gameState.hp,
+                hit: true,
+                defeated: ap.defeated,
+                knockback: attackData.knockback || 0,
+                isCrit: dmgResult.isCrit || false,
+                wasGuarded: wasGuarded || false,
+                damageType: attackData.damageType || 'normal',
+                attackType: 'dash',
                 shakeType: 'dash',
-                shakeIntensity: computeHitShakeIntensity(result.damage, {
+                shakeIntensity: computeHitShakeIntensity(ap.damage, {
                     attackType: 'dash',
-                    defeated: result.defeated,
+                    defeated: ap.defeated,
                     staggered: defender.gameState.state === 'staggered'
                 })
             });
@@ -2145,7 +2163,8 @@ tick() {
                     statusEffects: [],
                     chargeAttack: false,
                     isDashAttack: false,
-                    hitArea: 'circle'
+                    hitArea: 'circle',
+                    damageType: 'normal'
                 };
                 
                 const result = this.engine.resolveAttack(
@@ -2181,6 +2200,10 @@ tick() {
                     hit: result.hit,
                     defeated: result.defeated,
                     knockback: result.knockback,
+                    isCrit: result.isCrit || false,
+                    wasGuarded: result.wasGuarded || false,
+                    damageType: result.damageType || 'normal',
+                    attackType: 'slam',
                     shakeType: 'slam',
                     shakeIntensity: computeHitShakeIntensity(result.damage, {
                         attackType: 'slam',
@@ -2438,6 +2461,7 @@ tick() {
             damage: execResult.damage || 0,
             isCrit: false,
             attackType: 'ability',
+            damageType: execResult.damageType || 'normal',
             attackSequence: null,
             hp: defender.gameState.hp,
             knockback: abilityConfig.knockback || 0,
@@ -2518,6 +2542,7 @@ tick() {
                 damage: r.damage || 0,
                 isCrit: false,
                 attackType: 'ability',
+                damageType: r.damageType || 'normal',
                 attackSequence: null,
                 hp: defender.gameState.hp,
                 knockback: r.knockback || 0,
@@ -2538,7 +2563,11 @@ tick() {
                             fighterId: defender.clientId,
                             statusType: ev.statusType,
                             damage: ev.damage,
-                            hp: defender.gameState.hp
+                            hp: defender.gameState.hp,
+                            isCrit: false,
+                            wasGuarded: false,
+                            attackType: 'normal',
+                            damageType: ev.statusType.toLowerCase()
                         });
                     }
                 });

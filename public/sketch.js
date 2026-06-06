@@ -1195,9 +1195,9 @@ function handleAbilityResult(result) {
         resultData.damage,
         target.pos.copy(),
         fighter.facing,
-        !!resultData.isBlocked,
+        !!resultData.wasGuarded,
         resultData.damageType || 'normal',
-        !!resultData.isCritical,
+        !!resultData.isCrit,
         resultData.attackType || 'normal'
       );
     }
@@ -1498,9 +1498,9 @@ function handleHitNetworkEvent(event) {
       event.damage,
       target.pos.copy(),
       facing,
-      !!event.isBlocked,
+      !!event.wasGuarded,
       event.damageType || 'normal',
-      !!event.isCritical,
+      !!event.isCrit,
       event.attackType || 'normal'
     );
   }
@@ -1531,9 +1531,9 @@ function handleSlamHitNetworkEvent(event) {
       event.damage,
       target.pos.copy(),
       facing,
-      !!event.isBlocked,
+      !!event.wasGuarded,
       event.damageType || 'normal',
-      !!event.isCritical,
+      !!event.isCrit,
       event.attackType || 'slam'
     );
   }
@@ -1569,9 +1569,9 @@ function handleDashAttackNetworkEvent(event) {
         hit.damage,
         target.pos.copy(),
         facing,
-        !!hit.isBlocked,
+        !!hit.wasGuarded,
         hit.damageType || 'normal',
-        !!hit.isCritical,
+        !!hit.isCrit,
         hit.attackType || 'normal'
       );
     }
@@ -1595,19 +1595,26 @@ function handleStatusDamageNetworkEvent(event) {
     target.hp = event.hp;
   }
 
-  let damageType = 'normal';
-  if (event.eventType === 'BURN_DAMAGE') damageType = 'burn';
-  else if (event.eventType === 'BLEED_DAMAGE' || event.eventType === 'BLEED_ATTACK_DAMAGE') damageType = 'bleed';
-  else if (event.eventType === 'RUPTURE_DAMAGE') damageType = 'rupture';
+  // Use damageType from server if provided, otherwise map from statusType
+  let damageType = event.damageType || 'normal';
+  if (!event.damageType) {
+    if (event.statusType === 'Burn') damageType = 'burn';
+    else if (event.statusType === 'Bleed') damageType = 'bleed';
+    else if (event.statusType === 'Rupture') damageType = 'rupture';
+    else if (event.statusType === 'Tremor') damageType = 'tremor';
+    else if (event.statusType === 'Sinking') damageType = 'sinking';
+  }
+
+  console.log('[STATUS_DAMAGE]', event.statusType, '-> damageType:', damageType, 'damage:', event.damage);
 
   if (event.damage && typeof spawnDamageNumber === 'function') {
     spawnDamageNumber(
       event.damage,
       target.pos.copy(),
       target.facing || 1,
-      !!event.isBlocked,
-      event.damageType || damageType,
-      !!event.isCritical,
+      !!event.wasGuarded,
+      damageType,
+      !!event.isCrit,
       event.attackType || 'normal'
     );
   }

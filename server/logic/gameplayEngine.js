@@ -613,6 +613,7 @@ class GameplayEngine {
     const ap = this.applyDamage(defender, dmgResult.damage);
     result.damage = ap.damage; result.defenderHp = defender.hp; result.defeated = ap.defeated;
     result.isCrit = dmgResult.isCrit;
+    result.damageType = attackData.damageType || 'normal';
 
     // Reset defender's combo when they get hit (getting hit breaks offensive momentum)
     this.resetCombo(defender.id);

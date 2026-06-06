@@ -257,6 +257,7 @@ const STATUS_SPRITES = {
   "Corpus Ingredient": { atlas:"status", x:7, y:1, w:1, h:1 },
   "Artwork Tibia": { atlas:"status", x:8, y:1, w:1, h:1 },
   "Ingredient Shredding Wound": { atlas:"status", x:9, y:1, w:1, h:1 },
+  IngredientShreddingWound: { atlas:"status", x:9, y:1, w:1, h:1 },
   "Acceleration Round": { atlas:"status", x:10, y:1, w:1, h:1 },
   "Acceleration Rounds": { atlas:"status", x:10, y:1, w:1, h:1 },
   "Bladetrail Afterimage": { atlas:"status", x:7, y:2, w:1, h:1 },
@@ -606,10 +607,14 @@ function statusColorLookup(type) {
     case 'Overheat': return '#ff4d4d';
     case 'Accelerating Future': return '#ffee4d';
     case 'Shin': return '#ff4dc3';
+    case "Shin (心) - Valencina": return '#ff4dc3';
     case 'Time To Hunt': return '#ff4d4d';
+    case 'Game Target': return '#ff1744';
     case 'Corpus Ingredient': return '#8a8a8a';
     case 'Artwork Tibia': return '#8a8a8a';
     case 'Ingredient Shredding Wound': return '#d94d4d';
+    case 'Acceleration Round': return '#ff9800';
+    case 'Acceleration Rounds': return '#ff9800';
     default: return '#999';
   }
 }

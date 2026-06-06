@@ -63,22 +63,49 @@ function drawUltimateBackgroundDim(dimAmount) {
 }
 
 /**
- * Draw ultimate name text behind the character at their position.
- * Rendered before fighters so it sits behind them, only during opening pose (Phase 0).
+ * Draw ultimate name image behind the character.
+ * Rendered in screen space (unaffected by camera/zoom), during intro phase (Phase 0).
  */
 function drawUltimateName(x, y, name, phase, cameraZoom) {
   if (!name || phase !== 0) return;
 
-  const size = typeof cameraZoom === 'number' ? Math.max(140, 180 / cameraZoom) : 180;
-  const strokeW = typeof cameraZoom === 'number' ? Math.max(4, 10 / cameraZoom) : 10;
+  // Map ultimate names to image keys (case-insensitive)
+  const nameToImage = {
+    'Rendspace': 'rendspace',
+    'UTTERMOST REND SPACE - STRING SEVERANCE': 'rendspace',
+    'DISPOSAL': 'disposal',
+    'Disposal': 'disposal',
+    'Closing Time': 'closing',
+    'CLOSING TIME': 'closing',
+    'Closing Time - Installation Art no. 1: Your Flesh and Bones as the Gallery\'s Seats': 'closing'
+  };
 
+  const imageKey = nameToImage[name];
+  if (!imageKey || !window.ultimateImages || !window.ultimateImages[imageKey]) {
+    // Fallback to text if image not found
+    const size = typeof cameraZoom === 'number' ? Math.max(140, 180 / cameraZoom) : 180;
+    const strokeW = typeof cameraZoom === 'number' ? Math.max(4, 10 / cameraZoom) : 10;
+
+    push();
+    textAlign(CENTER, CENTER);
+    textSize(size);
+    fill(255, 255, 255, 220);
+    stroke(0, 0, 0, 255);
+    strokeWeight(strokeW);
+    text(name.toUpperCase(), x, y);
+    pop();
+    return;
+  }
+
+  const img = window.ultimateImages[imageKey];
+  if (!img || img.width <= 0) return;
+
+  // Draw image in screen space (centered on screen, unaffected by camera/zoom)
   push();
-  textAlign(CENTER, CENTER);
-  textSize(size);
-  fill(255, 255, 255, 220);
-  stroke(0, 0, 0, 255);
-  strokeWeight(strokeW);
-  text(name.toUpperCase(), x, y);
+  imageMode(CENTER);
+  // Draw at screen center, not at fighter position
+  // Images are at full size (no scaling)
+  image(img, width / 2, height / 2);
   pop();
 }
 
@@ -195,27 +222,50 @@ function drawUltimateSkulls(skulls) {
  */
 function renderUltimate(fighter) {
   if (!fighter || !fighter.ultimateActive) return;
-  
+
   const x = fighter.pos ? fighter.pos.x : width / 2;
   const y = fighter.pos ? fighter.pos.y : height / 2;
   const phase = fighter.ultimatePhase || 0;
   const camZoom = fighter.ultimateCameraZoom || 1;
-  
-  // Draw ultimate name
-  drawUltimateName(x, y, fighter.ultimateName, phase, camZoom);
-  
-  // Draw dialogue
+
+  // Draw dialogue (world space, affected by camera)
   drawUltimateDialogue(x, y, fighter.ultimateDialogue, phase);
-  
+
   // Draw red lines (Callisto)
   if (fighter.ultimateRedLines) {
     drawUltimateRedLines(fighter.ultimateRedLines);
   }
-  
+
   // Draw skulls (Callisto ending)
   if (fighter.ultimateSkulls) {
     drawUltimateSkulls(fighter.ultimateSkulls);
   }
+}
+
+/**
+ * Draw ultimate name images in screen space (behind characters, above background)
+ * Called during draw loop with camera transform temporarily popped
+ */
+function renderUltimateNameImages() {
+  const fighters = window.allFighters || [];
+  let ultimateFighter = null;
+
+  // Check for fighters in ultimate state OR in phase 0 (intro pose)
+  fighters.forEach(f => {
+    if (f.ultimateActive || (f.ultimatePhase === 0 && f.ultimateName)) {
+      ultimateFighter = f;
+    }
+  });
+
+  if (!ultimateFighter) return;
+
+  drawUltimateName(
+    ultimateFighter.pos ? ultimateFighter.pos.x : width / 2,
+    ultimateFighter.pos ? ultimateFighter.pos.y : height / 2,
+    ultimateFighter.ultimateName,
+    ultimateFighter.ultimatePhase || 0,
+    ultimateFighter.ultimateCameraZoom || 1
+  );
 }
 
 /**
@@ -227,16 +277,16 @@ function renderUltimateUI() {
   const fighters = window.allFighters || [];
   let anyUltimateActive = false;
   let totalDamage = 0;
-  
+
   fighters.forEach(f => {
     if (f.ultimateActive) {
       anyUltimateActive = true;
       totalDamage += f.ultimateTotalDamage || 0;
     }
   });
-  
+
   if (!anyUltimateActive) return;
-  
+
   // Draw damage counter
   drawUltimateDamageCounter(totalDamage);
 }
@@ -253,5 +303,6 @@ function shouldHideGameplayUI() {
 window.applyUltimateState = applyUltimateState;
 window.renderUltimate = renderUltimate;
 window.renderUltimateUI = renderUltimateUI;
+window.renderUltimateNameImages = renderUltimateNameImages;
 window.drawUltimateBackgroundDim = drawUltimateBackgroundDim;
 window.shouldHideGameplayUI = shouldHideGameplayUI;

@@ -279,6 +279,25 @@ function preload() {
   }, (err) => {
     console.error('Failed to load stagger image:', err);
   });
+
+  // Load ultimate intro images
+  window.ultimateImages = {
+    rendspace: loadImage('data/ui/rendspaceint.png', () => {
+      console.log('Rendspace intro image loaded successfully');
+    }, (err) => {
+      console.error('Failed to load rendspace intro image:', err);
+    }),
+    disposal: loadImage('data/ui/disposalint.png', () => {
+      console.log('Disposal intro image loaded successfully');
+    }, (err) => {
+      console.error('Failed to load disposal intro image:', err);
+    }),
+    closing: loadImage('data/ui/closingint.png', () => {
+      console.log('Closing Time intro image loaded successfully');
+    }, (err) => {
+      console.error('Failed to load closing time intro image:', err);
+    })
+  };
 }
 
 function setup() {//test
@@ -1873,7 +1892,16 @@ function draw() {
       drawUltimateBackgroundDim(targetDim);
     }
 
-    // Draw ultimate render behind characters (name, dialogue, effects)
+    // Draw ultimate name images in screen space (behind characters, above background)
+    // Temporarily pop camera transform to draw in screen space
+    // Check for phase 0 (intro pose) regardless of ultimateActive state
+    if (typeof renderUltimateNameImages === 'function') {
+      endCamera();
+      renderUltimateNameImages();
+      beginCamera();
+    }
+
+    // Draw ultimate render behind characters (dialogue, effects)
     if (window.allFighters) {
       window.allFighters.forEach(fighter => {
         if (typeof renderUltimate === 'function') {
@@ -1881,7 +1909,7 @@ function draw() {
         }
       });
     }
-    
+
     // Update interpolation targets before rendering
     updateClientInterpolation();
     // Draw all fighters

@@ -1366,13 +1366,8 @@ function applyNetworkScreenShake(event) {
   }
 
   // Impact zoom: increase additive zoom when attacks deal damage with knockback
-  // Applies to ultimates, abilities, dash attacks, and slam attacks
-  const isAbility = event.attackType === 'ability';
-  const isDash = event.attackType === 'dash';
-  const isSlam = event.attackType === 'slam';
-  const shouldApplyImpactZoom = isUltimate || isAbility || isDash || isSlam;
-  
-  if (shouldApplyImpactZoom && typeof event.damage === 'number' && typeof event.knockback === 'number') {
+  // Applies to all attacks (basic, abilities, dash, slam, ultimates)
+  if (typeof event.damage === 'number' && typeof event.knockback === 'number') {
     if (event.knockback > 0 && event.damage > 0) {
       ultimateImpactZoom = Math.min(2.5, ultimateImpactZoom + (0.08 * event.damage));
     }

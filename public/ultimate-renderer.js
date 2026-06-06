@@ -101,7 +101,9 @@ function drawUltimateName(x, y, name, phase, cameraZoom) {
   if (!img || img.width <= 0) return;
 
   // Draw image in screen space (centered on screen, unaffected by camera/zoom)
+  // Reset transform to identity to draw in screen space
   push();
+  resetMatrix();
   imageMode(CENTER);
   // Draw at screen center, not at fighter position
   // Images are at full size (no scaling)

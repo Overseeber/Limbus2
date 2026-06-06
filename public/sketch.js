@@ -1893,12 +1893,9 @@ function draw() {
     }
 
     // Draw ultimate name images in screen space (behind characters, above background)
-    // Temporarily pop camera transform to draw in screen space
-    // Check for phase 0 (intro pose) regardless of ultimateActive state
+    // Draw without affecting camera transform
     if (typeof renderUltimateNameImages === 'function') {
-      endCamera();
       renderUltimateNameImages();
-      beginCamera();
     }
 
     // Draw ultimate render behind characters (dialogue, effects)
@@ -1934,9 +1931,9 @@ function draw() {
     
     // Draw overhead healthbars for non-player fighters
     drawOverheadHealthbars();
-    
+
     endCamera();
-    
+
     // Draw ultimate UI overlay (damage counter, etc.)
     if (typeof renderUltimateUI === 'function') {
       renderUltimateUI();

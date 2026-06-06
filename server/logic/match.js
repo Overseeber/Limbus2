@@ -1158,8 +1158,13 @@ tick() {
         }
 
         // APPLY VELOCITY - Update position
-        state.position.x += state.velocity.x * dt;
-        state.position.y += state.velocity.y * dt;
+        // Skip position update if teleport happened this tick to prevent override
+        if (!player.teleportThisTick) {
+            state.position.x += state.velocity.x * dt;
+            state.position.y += state.velocity.y * dt;
+        }
+        // Clear the flag after this tick
+        player.teleportThisTick = false;
 
         // CHECK FOR SLAM LANDING
         if (player.isSlamAttacking && state.position.y >= 600) {
@@ -1319,7 +1324,7 @@ tick() {
                     const targetPlayer = this.findClosestEnemy(player);
                     if (targetPlayer && !targetPlayer.gameState.isDefeated) {
                         const targetState = targetPlayer.gameState;
-                        const teleportDistance = 100; // Short distance teleport
+                        const teleportDistance = 200; // Increased teleport distance for visibility
                         
                         // Auto face direction towards target
                         state.facing = targetState.position.x > state.position.x ? 1 : -1;
@@ -1332,7 +1337,17 @@ tick() {
                         const targetHitboxStart = targetState.position.x - (playerHitboxWidth / 2);
                         const targetHitboxEnd = targetState.position.x + (playerHitboxWidth / 2);
                         
-                        if (teleportX >= targetHitboxStart && teleportX <= targetHitboxEnd) {
+                        // Check if teleport would go behind the target
+                        const teleportGoesBehind = (state.facing === 1 && teleportX > targetState.position.x) ||
+                                                  (state.facing === -1 && teleportX < targetState.position.x);
+                        
+                        if (teleportGoesBehind) {
+                            // Teleport goes behind target - place just behind target
+                            teleportX = targetState.position.x + (state.facing * (playerHitboxWidth / 2 + 5));
+                            
+                            // After teleporting behind, face the target (opposite direction)
+                            state.facing = -state.facing;
+                        } else if (teleportX >= targetHitboxStart && teleportX <= targetHitboxEnd) {
                             // Teleport would land in hitbox, place right in front instead
                             teleportX = targetState.position.x - (state.facing * (playerHitboxWidth / 2 + 5));
                         }
@@ -1344,6 +1359,9 @@ tick() {
                         
                         // Apply teleport
                         state.position.x = teleportX;
+                        
+                        // Set flag to prevent physics from overriding teleport this tick
+                        player.teleportThisTick = true;
                     }
                     
                     // Apply forward momentum (keep existing momentum if any)

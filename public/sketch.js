@@ -272,6 +272,13 @@ function preload() {
   }, (err) => {
     console.error('Failed to load shadow image:', err);
   });
+
+  // Load stagger overlay image
+  window.staggerImg = loadImage('data/particles/stagger.png', () => {
+    console.log('Stagger image loaded successfully');
+  }, (err) => {
+    console.error('Failed to load stagger image:', err);
+  });
 }
 
 function setup() {//test

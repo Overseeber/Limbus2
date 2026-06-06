@@ -3336,6 +3336,25 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
       pop();
     }
 
+    // Draw stagger overlay image when staggered
+    if (this.state === 'staggered' && window.staggerImg && window.staggerImg.width > 0) {
+      push();
+      imageMode(CENTER);
+      // Draw stagger.png over the character
+      // Scale it to match character sprite size (144px target height)
+      const targetHeight = 144;
+      const staggerScale = targetHeight / window.staggerImg.height;
+      const staggerY = this.pos.y - 20;
+      image(
+        window.staggerImg,
+        this.pos.x,
+        staggerY,
+        window.staggerImg.width * staggerScale,
+        window.staggerImg.height * staggerScale
+      );
+      pop();
+    }
+
     // Draw stagger phase timer
     if (this.state === 'staggered' && this.staggerTimer > 0) {
       push();

@@ -3671,5 +3671,3 @@ function windowResized() {
   resizeCanvas(ARENA_WIDTH, ARENA_HEIGHT);
 }
 
-console.log("SKETCH SOCKET EXISTS:", typeof socket !== "undefined");
-console.log("SKETCH SOCKET ID:", socket?.id);

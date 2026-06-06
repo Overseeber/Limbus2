@@ -264,6 +264,115 @@ const STATUS_SPRITES = {
   "Dihui Star's Blade": { atlas:"status", x:8, y:2, w:1, h:1 }
 };
 const STATUS_CELL = 64;
+const BATTLE_UI_CELL = 64;
+
+// ==========================
+// 🔥 BATTLE UI SPRITE DATABASE
+// ==========================
+const BATTLE_UI_SPRITES = {
+  // Top UI
+  fallbackult:     { atlas:"battleui", x:0, y:1, w:8, h:2 },
+  fallbackability: { atlas:"battleui", x:8, y:1, w:2, h:2 },
+  fallbacktitle:   { atlas:"battleui", x:1, y:3, w:6, h:1 },
+  fallbackskill:   { atlas:"battleui", x:0, y:2, w:8, h:2 },
+  fallbackenemy:   { atlas:"battleui", x:1, y:4, w:5, h:2 },
+
+  // Roman numerals
+  romanui:         { atlas:"battleui", x:1, y:5, w:6, h:2 },
+
+  // Results
+  win:             { atlas:"battleui", x:12, y:0, w:6, h:6 },
+  lose:            { atlas:"battleui", x:20, y:0, w:6, h:6 },
+  start:           { atlas:"battleui", x:12, y:6, w:12, h:4 },
+
+  // Rend / Disposal / Closing ultimate ui, character specific
+  rendui:          { atlas:"battleui", x:0, y:10, w:9, h:2 },
+  renddeactiveui:  { atlas:"battleui", x:10, y:8, w:9, h:2 },
+  disposalui:      { atlas:"battleui", x:0, y:12, w:9, h:2 },
+  disposaldeactiveui: { atlas:"battleui", x:10, y:12, w:9, h:2 },
+  closingui:       { atlas:"battleui", x:0, y:14, w:9, h:2 },
+  closingdeactiveui: { atlas:"battleui", x:10, y:14, w:9, h:2 },
+
+  // Affinity icons / ability ui, character specific
+  dability:        { atlas:"battleui", x:20, y:10, w:2, h:2 },
+  doff:            { atlas:"battleui", x:22, y:10, w:2, h:2 },
+  vability:        { atlas:"battleui", x:20, y:12, w:2, h:2 },
+  voff:            { atlas:"battleui", x:22, y:12, w:2, h:2 },
+  cability:        { atlas:"battleui", x:20, y:14, w:2, h:2 },
+  coff:            { atlas:"battleui", x:22, y:14, w:2, h:2 },
+
+  // Finger / ring / shield
+  pinky:           { atlas:"battleui", x:0, y:16, w:3, h:3 },
+  ring:            { atlas:"battleui", x:3, y:16, w:3, h:3 },
+  thumb:           { atlas:"battleui", x:6, y:16, w:3, h:3 },
+  pinkoff:         { atlas:"battleui", x:10, y:16, w:3, h:3 },
+  ringoff:         { atlas:"battleui", x:13, y:16, w:3, h:3 },
+  thumboff:        { atlas:"battleui", x:16, y:16, w:3, h:3 },
+
+  // Enemy bars
+  dihuienemy:      { atlas:"battleui", x:2, y:19, w:7, h:2 },
+  dihuienemyded:   { atlas:"battleui", x:12, y:19, w:7, h:2 },
+  valenemy:        { atlas:"battleui", x:2, y:21, w:7, h:2 },
+  valenemyded:     { atlas:"battleui", x:12, y:21, w:7, h:2 },
+  calenemy:        { atlas:"battleui", x:2, y:23, w:7, h:2 },
+  calenemyded:     { atlas:"battleui", x:12, y:23, w:7, h:2 }
+};
+
+// Cache for battle UI sprite calculations
+const BATTLE_UI_CACHE = new Map();
+
+// Pre-calculate battle UI sprite data
+function precacheBattleUISpriteData() {
+  for (const [name, sprite] of Object.entries(BATTLE_UI_SPRITES)) {
+    const sx = sprite.x * BATTLE_UI_CELL;
+    const sy = sprite.y * BATTLE_UI_CELL;
+    const sw = sprite.w * BATTLE_UI_CELL;
+    const sh = sprite.h * BATTLE_UI_CELL;
+
+    BATTLE_UI_CACHE.set(name, {
+      sprite, sx, sy, sw, sh,
+      img: null
+    });
+  }
+}
+
+/**
+ * Draw a sprite from the battle UI atlas.
+ * Battle UI atlas uses 64x64 cells (BATTLE_UI_CELL).
+ * Sprites are drawn centered on (x, y) with optional target dimensions.
+ */
+function drawBattleUISprite(name, x, y, targetW, targetH) {
+  const cached = BATTLE_UI_CACHE.get(name);
+  if (!cached) {
+    console.error("Missing cached battle UI sprite:", name);
+    return;
+  }
+
+  let img = cached.img || atlases[cached.sprite.atlas];
+  if (!img || img.width <= 0 || img.height <= 0) {
+    console.warn("Battle UI atlas not loaded yet for sprite:", name);
+    return;
+  }
+
+  cached.img = img;
+
+  const drawW = targetW || cached.sw;
+  const drawH = targetH || cached.sh;
+
+  push();
+  noStroke();
+  imageMode(CORNER);
+  image(
+    img,
+    x - drawW / 2,
+    y - drawH / 2,
+    drawW, drawH,
+    cached.sx, cached.sy,
+    cached.sw, cached.sh
+  );
+  imageMode(CENTER);
+  pop();
+}
 
 // ==========================
 // 🔥 PRE-SCALED SPRITE LOADING
@@ -299,7 +408,8 @@ function loadSpriteAtlases() {
 
   atlases.dslash = loadImage("data/dihui/Dslash.png");
 
-  
+  // ===== Battle UI =====
+  atlases.battleui = loadImage("data/UI/battleui.png");
 
   // Pre-scale all atlas images to common sizes asynchronously
   const preScaleAtlases = async () => {
@@ -347,6 +457,7 @@ function loadSpriteAtlases() {
   setTimeout(() => {
     precacheSpriteData();
     precacheStatusSpriteData();
+    precacheBattleUISpriteData();
   }, 100);
 }
 

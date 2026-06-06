@@ -1,3 +1,10 @@
+// ==========================
+// 🔥 BATTLE UI - ATLAS REWORK
+// Uses sprites from public/data/UI/battleui.png
+// Cell size: 64x64 (BATTLE_UI_CELL)
+// Arena: 1200x720
+// ==========================
+
 function drawReadyScreen() {
   push();
   fill(255);
@@ -16,10 +23,7 @@ function drawSummary() {
   textAlign(CENTER, CENTER);
   textSize(36);
   text(summaryText, width / 2, height / 2 - 80);
-
-  // If ending sequence transitioned to summary, show combat over menu
   if (typeof showCombatOverMenu !== 'undefined' && showCombatOverMenu) {
-    // Draw result panel
     const panelW = 520;
     const panelH = 220;
     const panelX = (width - panelW) / 2;
@@ -29,16 +33,12 @@ function drawSummary() {
     stroke(255, 60);
     rect(panelX, panelY, panelW, panelH, 12);
     pop();
-
-    // Draw buttons: Return to Character Select, Restart Duel
     const btnW = 220;
     const btnH = 48;
     const gap = 24;
     const leftX = panelX + (panelW / 2) - btnW - (gap / 2);
     const rightX = panelX + (panelW / 2) + (gap / 2);
     const btnY = panelY + panelH - 80;
-
-    // Draw left button
     push();
     fill(40, 110, 200);
     noStroke();
@@ -48,8 +48,6 @@ function drawSummary() {
     textAlign(CENTER, CENTER);
     text('Return to Character Select', leftX + btnW / 2, btnY + btnH / 2);
     pop();
-
-    // Draw right button
     push();
     fill(60, 180, 90);
     noStroke();
@@ -59,12 +57,9 @@ function drawSummary() {
     textAlign(CENTER, CENTER);
     text('Restart Duel', rightX + btnW / 2, btnY + btnH / 2);
     pop();
-
-    // Draw small time/info text
     textSize(14);
     fill(200);
     text(`Time: ${battleTimer.toFixed(1)}s`, width / 2, panelY + 40);
-
   } else {
     textSize(18);
     text('Press ENTER to restart the duel.', width / 2, height / 2 + 0);
@@ -73,87 +68,154 @@ function drawSummary() {
   pop();
 }
 
+// ==========================
+// 🎯 MAIN HUD
+// ==========================
 function drawHud() {
   drawBattleTimer();
   drawPlayerHud();
-  
-  // Draw multi-player HUDs for all non-player-controlled fighters
   if (window.allFighters && window.allFighters.length >= 2) {
     drawMultiPlayerHuds();
   }
-  
-  // Draw pause menu button
   drawPauseMenuButton();
 }
 
+// ==========================
+// 👤 PLAYER HUD (bottom-left)
+// ==========================
 function drawPlayerHud() {
   const controlledFighter = getPlayerControlledFighter();
   if (!controlledFighter) return;
-  
-  const panelX = 16;
-  const panelY = height - 148;
-  const panelWidth = 240;
-  const panelHeight = 132;
-  const comboSize = 16 + min(18, controlledFighter.combo * 1.5);
-  const comboRatio = constrain(controlledFighter.comboTimer / controlledFighter.comboTimeout, 0, 1);
+  const fighter = controlledFighter;
 
+  // --- Positions ---
+  const titleX = 12;                       // left edge
+  const titleY = height - 196;             // top of player hud stack
+  const titleW = 384;                      // fallbacktitle = 6 cells
+  const titleH = 64;                       // 1 cell
+  const barW = titleW;
+  const barStartY = titleY + titleH + 4;   // HP bar starts below title
+
+  // === Title bar (fallbacktitle) ===
+  drawBattleUISprite('fallbacktitle', titleX + titleW/2, titleY + titleH/2, titleW, titleH);
+
+  // === Text overlay on title ===
   push();
-  fill(20, 180);
-  stroke(255, 20);
-  rect(panelX, panelY, panelWidth, panelHeight, 10);
   noStroke();
-  fill(255);
-  textAlign(LEFT, TOP);
-  textSize(comboSize);
-  text(`Combo: ${controlledFighter.combo}`, panelX + 12, panelY + 12);
-  textSize(12);
-  fill('#222');
-  rect(panelX + 12, panelY + 12 + comboSize + 8, panelWidth - 24, 10, 5);
-  fill('#ffcc33');
-  rect(panelX + 12, panelY + 12 + comboSize + 8, (panelWidth - 24) * comboRatio, 10, 5);
+  const safeHp = (fighter.hp !== null && fighter.hp !== undefined) ? fighter.hp : 0;
+  const safeMaxHp = (fighter.maxHp !== null && fighter.maxHp !== undefined) ? fighter.maxHp : 1;
+  const hpPercent = safeHp / safeMaxHp;
 
   fill(255);
-  textSize(14);
-  const safeHp = (controlledFighter.hp !== null && controlledFighter.hp !== undefined) ? controlledFighter.hp : 0;
-  const safeMaxHp = (controlledFighter.maxHp !== null && controlledFighter.maxHp !== undefined) ? controlledFighter.maxHp : 1;
-  text(`Name: ${controlledFighter.name}`, panelX + 12, panelY + 52);
-  text(`HP: ${safeHp.toFixed(0)} / ${safeMaxHp}`, panelX + 12, panelY + 72);
-  text(`State: ${controlledFighter.state}`, panelX + 12, panelY + 92);
+  textAlign(LEFT, CENTER);
+  textSize(13);
+  text(fighter.name, titleX + 14, titleY + 18);
 
-  const hpBarX = panelX + 12;
-  const hpBarY = panelY + 110;
-  const hpWidth = panelWidth - 24;
-  fill('#222');
-  rect(hpBarX, hpBarY, hpWidth, 8, 4);
-  fill('#42d492');
-  rect(hpBarX, hpBarY, hpWidth * (safeHp / safeMaxHp), 8, 4);
-  
-  // Stagger Bar
-  fill('#222');
-  rect(hpBarX, hpBarY + 14, hpWidth, 6, 3);
-  const staggerPercent = constrain(controlledFighter.stagger / controlledFighter.staggerThreshold, 0, 1);
+  textAlign(RIGHT, CENTER);
+  text(`${safeHp.toFixed(0)} / ${safeMaxHp}`, titleX + titleW - 14, titleY + 18);
+
+  textAlign(LEFT, CENTER);
+  textSize(10);
+  fill(200);
+  text(`State: ${fighter.state}`, titleX + 14, titleY + 38);
+  text(`Combo: ${fighter.combo}`, titleX + 14, titleY + 54);
+  pop();
+
+  // === HP Bar ===
+  push();
+  noStroke();
+  fill(20, 20, 20, 180);
+  rect(titleX, barStartY, barW, 8, 4);
+  if (hpPercent > 0.6) fill(66, 212, 146);
+  else if (hpPercent > 0.3) fill(255, 204, 51);
+  else fill(217, 77, 77);
+  rect(titleX, barStartY, barW * hpPercent, 8, 4);
+  pop();
+
+  // === Stagger Bar ===
+  const staggerY = barStartY + 12;
+  const staggerPercent = constrain(fighter.stagger / fighter.staggerThreshold, 0, 1);
+  push();
+  noStroke();
+  fill(20, 20, 20, 180);
+  rect(titleX, staggerY, barW, 6, 3);
   if (staggerPercent > 0) {
     fill(255, 100 + staggerPercent * 50, 50);
-    rect(hpBarX, hpBarY + 14, hpWidth * staggerPercent, 6, 3);
+    rect(titleX, staggerY, barW * staggerPercent, 6, 3);
   }
-  
-  drawDashCharges(controlledFighter, hpBarX, hpBarY + 24, hpWidth);
-  
-  // Draw Installation Art ability icon and cooldown for Callisto
-  if (controlledFighter.characterKey === 'CALLISTO') {
-    drawInstallationArtUI(controlledFighter, panelX + panelWidth + 8, panelY + panelHeight - 48);
+  pop();
+
+  // === Dash Charges (ring sprites) ===
+  const dashY = staggerY + 10;
+  drawDashChargesRing(fighter, titleX, dashY, barW);
+
+  // === Ultimate Gauge Indicator (above ability icon) ===
+  const ultX = titleX + 200;
+  const ultY = titleY - 30; // above the title bar
+  // Use closingui sprite as placeholder for all characters
+  const ultActive = fighter.ultimateActive || fighter.ultimateMeter >= 100;
+  drawBattleUISprite(ultActive ? 'closingui' : 'closingdeactiveui', ultX, ultY, 140, 32);
+
+  // Ability Icon (bottom-right of player hud area)
+  const abilityX = titleX + titleW + 16;
+  const abilityY = titleY + titleH - 32; // align with bottom of title bar area
+
+  // Background slot
+  drawBattleUISprite('fallbackability', abilityX, abilityY, 64, 64);
+
+  // Character-specific ability icon (drawn on top of slot)
+  if (fighter.characterKey === 'CALLISTO') {
+    drawBattleAbilityIcon(fighter, 'cability', 'coff', fighter.installationArtActive, fighter.installationArtCooldown, 10, abilityX, abilityY, 64);
+  } else if (fighter.characterKey === 'VALENCINA') {
+    const valActive = fighter.lastHitOpponent && fighter.lastHitOpponent.gameTimeTarget;
+    drawBattleAbilityIcon(fighter, 'vability', 'voff', valActive, fighter.timeToHuntCooldown, 15, abilityX, abilityY, 64);
+  } else if (fighter.characterKey === 'DIHUI') {
+    drawBattleAbilityIcon(fighter, 'dability', 'doff', fighter.deathedgeActive, fighter.deathedgeCooldown, 14, abilityX, abilityY, 64);
   }
-  
-  // Draw Time to Hunt ability icon and cooldown for Valencina
-  if (controlledFighter.characterKey === 'VALENCINA') {
-    drawTimeToHuntUI(controlledFighter, panelX + panelWidth + 8, panelY + panelHeight - 48);
+}
+
+// Generic ability icon drawer
+function drawBattleAbilityIcon(fighter, activeName, offName, isActive, cooldown, maxCd, x, y, size) {
+  // Draw icon based on state
+  if (isActive) {
+    drawBattleUISprite(activeName, x, y, size, size);
+  } else if (cooldown > 0) {
+    drawBattleUISprite(offName, x, y, size, size);
+  } else {
+    drawBattleUISprite(activeName, x, y, size, size);
   }
-  
-  // Draw Deathedge ability icon and cooldown for Dihui
-  if (controlledFighter.characterKey === 'DIHUI') {
-    drawDeathedgeUI(controlledFighter, panelX + panelWidth + 8, panelY + panelHeight - 48);
+
+  // Cooldown overlay
+  if (cooldown > 0) {
+    push();
+    noStroke();
+    fill(0, 150);
+    const cdH = (cooldown / maxCd) * size;
+    rectMode(CORNER);
+    rect(x - size/2, y + size/2 - cdH, size, cdH);
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(10);
+    text(cooldown.toFixed(1), x, y);
+    pop();
   }
-  
+
+  // Activation glow
+  if (isActive) {
+    push();
+    noFill();
+    stroke('#ffcc33');
+    strokeWeight(2);
+    rect(x - size/2 - 1, y - size/2 - 1, size + 2, size + 2, 4);
+    pop();
+  }
+
+  // Key hint
+  push();
+  fill(255, 200);
+  textAlign(CENTER, TOP);
+  textSize(9);
+  text('Q', x, y + size/2 + 4);
   pop();
 }
 
@@ -163,381 +225,175 @@ function getOpponentFighter() {
   return controlledFighter === player ? enemy : player;
 }
 
-function drawInstallationArtUI(fighter, x, y) {
-  const iconSize = 48;
-  const cooldown = fighter.installationArtCooldown || 0;
-  const maxCooldown = 10;
-  const isActive = fighter.installationArtActive || false;
-  
-  push();
-  
-  // Draw ability icon background
-  fill(isActive ? '#ffcc33' : '#333');
-  stroke(255, 100);
-  strokeWeight(2);
-  rect(x, y, iconSize, iconSize, 8);
-  
-  // Draw ability icon (using text as placeholder for now)
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(20);
-  text('🎨', x + iconSize/2, y + iconSize/2);
-  
-  // Draw cooldown overlay
-  if (cooldown > 0) {
-    fill(0, 150);
-    noStroke();
-    const cooldownHeight = (cooldown / maxCooldown) * iconSize;
-    rect(x, y + (iconSize - cooldownHeight), iconSize, cooldownHeight, 8);
-    
-    // Draw cooldown text
-    fill(255);
-    textAlign(CENTER, CENTER);
-    textSize(12);
-    text(cooldown.toFixed(1), x + iconSize/2, y + iconSize/2);
-  }
-  
-  // Draw activation indicator
-  if (isActive) {
-    stroke('#ffcc33');
-    strokeWeight(3);
-    noFill();
-    rect(x - 2, y - 2, iconSize + 4, iconSize + 4, 10);
-  }
-  
-  // Draw key hint
-  fill(255, 200);
-  textAlign(CENTER, TOP);
-  textSize(10);
-  text('Q', x + iconSize/2, y + iconSize + 4);
-  
-  pop();
-}
-
-function drawTimeToHuntUI(fighter, x, y) {
-  const iconSize = 48;
-  const cooldown = fighter.timeToHuntCooldown || 0;
-  const maxCooldown = 15;
-  const isActive = fighter.lastHitOpponent && fighter.lastHitOpponent.gameTimeTarget;
-  
-  push();
-  
-  // Draw ability icon background
-  fill(isActive ? '#ff6b9d' : '#333');
-  stroke(255, 100);
-  strokeWeight(2);
-  rect(x, y, iconSize, iconSize, 8);
-  
-  // Draw ability icon (using text as placeholder for now)
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(20);
-  text('⏱', x + iconSize/2, y + iconSize/2);
-  
-  // Draw cooldown overlay
-  if (cooldown > 0) {
-    fill(0, 150);
-    noStroke();
-    const cooldownHeight = (cooldown / maxCooldown) * iconSize;
-    rect(x, y + (iconSize - cooldownHeight), iconSize, cooldownHeight, 8);
-    
-    // Draw cooldown text
-    fill(255);
-    textAlign(CENTER, CENTER);
-    textSize(12);
-    text(cooldown.toFixed(1), x + iconSize/2, y + iconSize/2);
-  }
-  
-  // Draw activation indicator
-  if (isActive) {
-    stroke('#ff6b9d');
-    strokeWeight(3);
-    noFill();
-    rect(x - 2, y - 2, iconSize + 4, iconSize + 4, 10);
-  }
-  
-  // Draw key hint
-  fill(255, 200);
-  textAlign(CENTER, TOP);
-  textSize(10);
-  text('Q', x + iconSize/2, y + iconSize + 4);
-  
-  pop();
-}
-
-function drawDeathedgeUI(fighter, x, y) {
-  const iconSize = 48;
-  const cooldown = fighter.deathedgeCooldown || 0;
-  const maxCooldown = 14;
-  const isActive = fighter.deathedgeActive || false;
-  
-  push();
-  
-  // Draw ability icon background
-  fill(isActive ? '#ff4444' : '#333');
-  stroke(255, 100);
-  strokeWeight(2);
-  rect(x, y, iconSize, iconSize, 8);
-  
-  // Draw ability icon (using text as placeholder for now)
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(20);
-  text('⚔', x + iconSize/2, y + iconSize/2);
-  
-  // Draw cooldown overlay
-  if (cooldown > 0) {
-    fill(0, 150);
-    noStroke();
-    const cooldownHeight = (cooldown / maxCooldown) * iconSize;
-    rect(x, y + (iconSize - cooldownHeight), iconSize, cooldownHeight, 8);
-    
-    // Draw cooldown text
-    fill(255);
-    textAlign(CENTER, CENTER);
-    textSize(12);
-    text(cooldown.toFixed(1), x + iconSize/2, y + iconSize/2);
-  }
-  
-  // Draw activation indicator
-  if (isActive) {
-    stroke('#ff4444');
-    strokeWeight(3);
-    noFill();
-    rect(x - 2, y - 2, iconSize + 4, iconSize + 4, 10);
-  }
-  
-  // Draw key hint
-  fill(255, 200);
-  textAlign(CENTER, TOP);
-  textSize(10);
-  text('Q', x + iconSize/2, y + iconSize + 4);
-  
-  pop();
-}
-
+// ==========================
+// 👥 MULTI-PLAYER HUD PANELS (top-right)
+// ==========================
 function drawMultiPlayerHuds() {
   if (!window.allFighters) return;
-  
   const controlledFighter = getPlayerControlledFighter();
-  // Filter out the controlled/local player's fighter to show all other fighters
-  // In local CPU mode, !isPlayerControlled works. In network room mode, all fighters have
-  // isPlayerControlled=true, so we use reference comparison against the controlled fighter.
-  const otherFighters = window.allFighters.filter(f => f !== controlledFighter);
-  
-  // Draw HUD panels for other fighters in top right
-  const startX = width - 256;
-  const startY = 16;
-  const panelSpacing = 140;
-  
-  otherFighters.forEach((fighter, index) => {
-    const panelX = startX;
-    const panelY = startY + (index * panelSpacing);
-    drawFighterHudPanel(fighter, panelX, panelY, `P${fighter.playerId || index + 1}`);
+  const others = window.allFighters.filter(f => f !== controlledFighter);
+  others.forEach((fighter, i) => {
+    const x = width - 330;
+    const y = 80 + i * 140;
+    drawFighterHudPanel(fighter, x, y);
   });
 }
 
-function drawFighterHudPanel(fighter, panelX, panelY, playerLabel) {
-  const panelWidth = 240;
-  const panelHeight = 120;
-  const comboSize = 14 + min(16, fighter.combo * 1.2);
-  const comboRatio = constrain(fighter.comboTimer / fighter.comboTimeout, 0, 1);
+function drawFighterHudPanel(fighter, panelX, panelY) {
+  const isDefeated = fighter.isDefeated;
+  const charKey = fighter.characterKey;
+  const panelW = 320; // 5 cells * 64
+  const panelH = 128; // 2 cells * 64
 
+  // Pick correct enemy bar sprite
+  let sprite = 'fallbackenemy';
+  let dedSprite = 'fallbackenemy';
+  if (charKey === 'DIHUI') { sprite = 'dihuienemy'; dedSprite = 'dihuienemyded'; }
+  else if (charKey === 'VALENCINA') { sprite = 'valenemy'; dedSprite = 'valenemyded'; }
+  else if (charKey === 'CALLISTO') { sprite = 'calenemy'; dedSprite = 'calenemyded'; }
+
+  drawBattleUISprite(isDefeated ? dedSprite : sprite, panelX + panelW/2, panelY + panelH/2, panelW, panelH);
+
+  // Overlay info
   push();
-  fill(20, 180);
-  stroke(255, 20);
-  rect(panelX, panelY, panelWidth, panelHeight, 10);
   noStroke();
-  
-  // Player label and name
-  fill(255);
-  textAlign(LEFT, TOP);
+  fill(isDefeated ? '#ff6464' : '#ffffff');
+  textAlign(LEFT, CENTER);
   textSize(12);
-  text(playerLabel, panelX + 12, panelY + 8);
-  
-  // Show DEFEATED status or name
-  if (fighter.isDefeated) {
-    fill(255, 100, 100);
-    textSize(14);
-    text('DEFEATED', panelX + 50, panelY + 8);
-  } else {
-    fill(255);
-    textSize(14);
-    text(fighter.name, panelX + 50, panelY + 8);
-  }
-  
-  // Combo (only for non-defeated players)
-  if (!fighter.isDefeated) {
-    textSize(comboSize);
-    text(`Combo: ${fighter.combo}`, panelX + 12, panelY + 28);
+  const label = `P${fighter.playerId || 1}`;
+  text(label, panelX + 12, panelY + 18);
+  textSize(13);
+  text(isDefeated ? 'DEFEATED' : fighter.name, panelX + 50, panelY + 18);
+
+  if (!isDefeated) {
+    const safeHp = fighter.hp !== null && fighter.hp !== undefined ? fighter.hp : 0;
+    const safeMaxHp = fighter.maxHp || 100;
+    fill('#ffffff');
+    textSize(11);
+    text(`HP: ${safeHp.toFixed(0)} / ${safeMaxHp}`, panelX + 12, panelY + 44);
+    fill(200);
     textSize(10);
-    fill('#222');
-    rect(panelX + 12, panelY + 28 + comboSize + 4, panelWidth - 24, 8, 4);
+    text(`State: ${fighter.state || 'unknown'}`, panelX + 12, panelY + 62);
+
+    const comboRatio = constrain(fighter.comboTimer / fighter.comboTimeout, 0, 1);
     fill('#ffcc33');
-    rect(panelX + 12, panelY + 28 + comboSize + 4, (panelWidth - 24) * comboRatio, 8, 4);
+    textSize(13);
+    text(`Combo: ${fighter.combo}`, panelX + 12, panelY + 82);
+    fill('#111');
+    rect(panelX + 12, panelY + 94, panelW - 24, 6, 3);
+    fill('#ffcc33');
+    rect(panelX + 12, panelY + 94, (panelW - 24) * comboRatio, 6, 3);
   }
 
-  // Stats
-  fill(255);
-  textSize(12);
-  if (fighter.isDefeated) {
-    text('HP: 0 / ' + fighter.maxHp, panelX + 12, panelY + 52);
-    text('State: DEFEATED', panelX + 12, panelY + 68);
-  } else {
-    const safeHp = fighter.hp !== null && fighter.hp !== undefined ? fighter.hp : 0;
-    const safeMaxHp = fighter.maxHp || fighter.maxHp === 0 ? fighter.maxHp : 100;
-    text(`HP: ${safeHp.toFixed(0)} / ${safeMaxHp}`, panelX + 12, panelY + 52);
-    text(`State: ${fighter.state || 'unknown'}`, panelX + 12, panelY + 68);
-  }
-  
-  // Health bar
   const hpBarX = panelX + 12;
-  const hpBarY = panelY + 86;
-  const hpWidth = panelWidth - 24;
+  const hpBarY = panelY + panelH - 18;
+  const hpBarW = panelW - 24;
   fill('#222');
-  rect(hpBarX, hpBarY, hpWidth, 6, 3);
-  
-  if (fighter.isDefeated) {
-    fill(100, 50, 50); // Dark red for defeated
-  } else {
-    fill('#42d492');
-  }
-  rect(hpBarX, hpBarY, hpWidth * (fighter.isDefeated ? 0 : fighter.hp / fighter.maxHp), 6, 3);
-  
-  // Stagger bar (only for non-defeated players)
-  if (!fighter.isDefeated) {
+  rect(hpBarX, hpBarY, hpBarW, 6, 3);
+  fill(isDefeated ? '#663333' : '#42d492');
+  rect(hpBarX, hpBarY, hpBarW * (isDefeated ? 0 : fighter.hp / fighter.maxHp), 6, 3);
+
+  if (!isDefeated) {
     fill('#222');
-    rect(hpBarX, hpBarY + 10, hpWidth, 4, 2);
+    rect(hpBarX, hpBarY + 10, hpBarW, 4, 2);
     const staggerPercent = constrain(fighter.stagger / fighter.staggerThreshold, 0, 1);
     if (staggerPercent > 0) {
       fill(255, 100 + staggerPercent * 50, 50);
-      rect(hpBarX, hpBarY + 10, hpWidth * staggerPercent, 4, 2);
+      rect(hpBarX, hpBarY + 10, hpBarW * staggerPercent, 4, 2);
     }
   }
-  
   pop();
 }
 
+// ==========================
+// 💡 OVERHEAD HEALTHBARS
+// ==========================
 function drawOverheadHealthbars() {
   if (!window.allFighters) {
-    // Fallback to original function for 2-player battles
     drawOverheadHealthbar();
     return;
   }
-  
-  // Draw triangular indicator above player-controlled fighter
   const controlledFighter = getPlayerControlledFighter();
   if (controlledFighter && !controlledFighter.isDefeated) {
     drawPlayerIndicator(controlledFighter);
   }
-  
-  // Draw overhead healthbars for all non-player-controlled fighters
   window.allFighters.forEach(fighter => {
     if (fighter.isPlayerControlled) return;
-    
     push();
-    
-    // Calculate position above fighter's head
     const barWidth = 60;
     const barHeight = 4;
     const nameOffset = 15;
     const barOffset = 3;
     const controlTypeOffset = 28;
-    
-    // Get fighter's position and apply camera transforms
-    const fighterX = fighter.pos.x;
-    const fighterY = fighter.pos.y - 60;
-    
-    // Draw name with player identifier and defeated status
-    if (fighter.isDefeated) {
-      fill(255, 100, 100);
-    } else {
-      fill(255);
-    }
+    const fx = fighter.pos.x;
+    const fy = fighter.pos.y - 60;
+
+    fill(fighter.isDefeated ? '#ff6464' : '#ffffff');
     textAlign(CENTER, CENTER);
     textSize(10);
     stroke(0, 0, 0, 150);
     strokeWeight(2);
-    
-    let displayName;
-    if (fighter.isDefeated) {
-      displayName = fighter.playerId ? `P${fighter.playerId}: DEFEATED` : 'DEFEATED';
-    } else {
-      displayName = fighter.playerId ? `P${fighter.playerId}: ${fighter.name}` : fighter.name;
-    }
-    text(displayName, fighterX, fighterY - nameOffset);
-    
-    // Draw control type (AI or Player)
+    let name = fighter.isDefeated ? 'DEFEATED' : (fighter.playerId ? `P${fighter.playerId}: ${fighter.name}` : fighter.name);
+    text(name, fx, fy - nameOffset);
+
     if (!fighter.isDefeated) {
-      const controlType = fighter.isAI ? 'AI' : (fighter.clientId || 'player');
-      if (fighter.isAI) {
-        fill(255, 150, 100);
-      } else {
-        fill(100, 200, 255);
-      }
+      fill(fighter.isAI ? '#ff9664' : '#64c8ff');
       textSize(8);
-      text(controlType, fighterX, fighterY - controlTypeOffset);
+      text(fighter.isAI ? 'AI' : 'player', fx, fy - controlTypeOffset);
     }
-    
-    // Draw healthbar background
+
     noStroke();
     fill(0, 0, 0, 150);
-    rect(fighterX - barWidth/2, fighterY - barOffset, barWidth, barHeight, 2);
-    
-    // Draw healthbar fill
+    rect(fx - barWidth/2, fy - barOffset, barWidth, barHeight, 2);
     if (fighter.isDefeated) {
-      fill(100, 50, 50); // Dark red for defeated
+      fill(100, 50, 50);
     } else {
-      const healthPercent = fighter.hp / fighter.maxHp;
-      if (healthPercent > 0.6) {
-        fill(66, 212, 146);
-      } else if (healthPercent > 0.3) {
-        fill(255, 204, 51);
-      } else {
-        fill(217, 77, 77);
-      }
-      rect(fighterX - barWidth/2, fighterY - barOffset, barWidth * healthPercent, barHeight, 2);
+      const hp = fighter.hp / fighter.maxHp;
+      fill(hp > 0.6 ? '#42d492' : hp > 0.3 ? '#ffcc33' : '#d94d4d');
+      rect(fx - barWidth/2, fy - barOffset, barWidth * hp, barHeight, 2);
     }
-    
     pop();
   });
 }
 
 function drawPlayerIndicator(fighter) {
   push();
-  
-  const indicatorSize = 20;
-  const indicatorY = fighter.pos.y - 90;
-  const indicatorX = fighter.pos.x;
-  
-  // Draw triangular indicator pointing down
   fill(100, 255, 100);
   stroke(0, 0, 0, 200);
   strokeWeight(2);
-  
+  const s = 20;
   triangle(
-    indicatorX - indicatorSize/2, indicatorY - indicatorSize/2,
-    indicatorX + indicatorSize/2, indicatorY - indicatorSize/2,
-    indicatorX, indicatorY + indicatorSize/2
+    fighter.pos.x - s/2, fighter.pos.y - 90 - s/2,
+    fighter.pos.x + s/2, fighter.pos.y - 90 - s/2,
+    fighter.pos.x, fighter.pos.y - 90 + s/2
   );
-  
   pop();
 }
 
-
-function drawDashCharges(fighter, x, y, width) {
+// ==========================
+// ⚡ DASH CHARGES (ring sprites)
+// ==========================
+function drawDashChargesRing(fighter, x, y, width) {
   const count = fighter.dashCharges;
   const total = 3;
-  const size = (width - (total - 1) * 4) / total;
+  // Each charge segment: 3 cells * 64 = 192 native, displayed at ~24x24
+  const segSize = min(24, (width - (total - 1) * 8) / total);
+  push();
+  noStroke();
   for (let i = 0; i < total; i++) {
-    fill(i < count ? '#4da6ff' : '#2f3f5f');
-    rect(x + i * (size + 4), y, size, 6, 3);
+    const cx = x + i * (segSize + 8) + segSize/2;
+    if (i < count) {
+      drawBattleUISprite('ring', cx, y + segSize/2, segSize, segSize);
+    } else {
+      drawBattleUISprite('ringoff', cx, y + segSize/2, segSize, segSize);
+    }
   }
+  pop();
 }
 
+// ==========================
+// 📋 STATUS PANEL
+// ==========================
 function drawStatusPanel(fighter, x, y) {
   push();
   fill(20, 160);
@@ -553,19 +409,16 @@ function drawStatusPanel(fighter, x, y) {
   text(`HP: ${safeHp.toFixed(0)} / ${safeMaxHp}`, x + 12, y + 28);
   text(`Combo: ${fighter.combo}`, x + 12, y + 46);
   text(`State: ${fighter.state}`, x + 12, y + 64);
-
   const barWidth = 196;
   fill('#222');
   rect(x + 12, y + 86, barWidth, 14, 6);
   fill('#42d492');
   rect(x + 12, y + 86, barWidth * (safeHp / safeMaxHp), 14, 6);
-
   const comboRatio = constrain(fighter.comboTimer / fighter.comboTimeout, 0, 1);
   fill('#222');
   rect(x + 12, y + 104, barWidth, 10, 5);
   fill('#ffcc33');
   rect(x + 12, y + 104, barWidth * comboRatio, 10, 5);
-
   drawStatusRows(fighter, x + 12, y + 124);
   pop();
 }
@@ -579,17 +432,11 @@ function drawStatusRows(fighter, x, y) {
     const col = index % 7;
     const px = x + col * 30;
     const py = y + row * rowHeight;
-    
-    // Draw potency on the left, closer to icon
     fill(255);
     textSize(8);
     textAlign(LEFT, CENTER);
     text(status.potency, px + 2, py + 9);
-    
-    // Draw status icon from atlas (50% bigger = 21px)
     drawStatusIcon(status.type, px + 15, py + 9, 21);
-    
-    // Draw status count on the right, closer to icon
     fill(255);
     textSize(8);
     textAlign(RIGHT, CENTER);
@@ -597,79 +444,76 @@ function drawStatusRows(fighter, x, y) {
   }
 }
 
-
+// ==========================
+// ☰ PAUSE MENU BUTTON
+// ==========================
 function drawPauseMenuButton() {
-  const buttonSize = 40;
-  const buttonX = width - buttonSize - 16;
-  const buttonY = 16;
-  
+  const s = 40;
+  const bx = width - s - 12;
+  const by = 12;
   push();
   fill(50, 50, 50, 200);
   stroke(255, 100);
   strokeWeight(2);
-  rect(buttonX, buttonY, buttonSize, buttonSize, 8);
-  
-  // Draw three horizontal lines (menu icon)
+  rect(bx, by, s, s, 8);
   stroke(255);
   strokeWeight(3);
-  const lineSpacing = 8;
-  const lineY = buttonY + buttonSize / 2;
-  line(buttonX + 10, lineY - lineSpacing, buttonX + buttonSize - 10, lineY - lineSpacing);
-  line(buttonX + 10, lineY, buttonX + buttonSize - 10, lineY);
-  line(buttonX + 10, lineY + lineSpacing, buttonX + buttonSize - 10, lineY + lineSpacing);
-  
+  const sp = 8;
+  const ly = by + s/2;
+  line(bx + 10, ly - sp, bx + s - 10, ly - sp);
+  line(bx + 10, ly, bx + s - 10, ly);
+  line(bx + 10, ly + sp, bx + s - 10, ly + sp);
   pop();
 }
 
+// ==========================
+// ⏱ BATTLE TIMER (romanui)
+// ==========================
 function drawBattleTimer() {
   if (typeof battleState === 'undefined' || battleState !== 'battle') return;
+  // romanui is 6x2 = 384x128 native, display at ~256x64
+  push();
+  drawBattleUISprite('romanui', width / 2, 28, 240, 64);
+  pop();
+
   push();
   resetMatrix();
-  textAlign(CENTER, TOP);
-  textSize(28);
-  stroke(0, 180);
-  strokeWeight(3);
+  textAlign(CENTER, CENTER);
+  textSize(20);
+  noStroke();
   fill(255);
   const display = (typeof battleTimer !== 'undefined') ? battleTimer.toFixed(1) : '0.0';
-  text(`${display}s`, width / 2, 12);
+  text(`${display}s`, width / 2, 28);
   pop();
 }
 
+// ==========================
+// 📋 PAUSE MENU
+// ==========================
 function drawPauseMenu() {
   const menuWidth = 300;
   const menuHeight = 200;
   const menuX = (width - menuWidth) / 2;
   const menuY = (height - menuHeight) / 2;
-  
   push();
-  // Semi-transparent background overlay
   fill(0, 0, 0, 180);
   noStroke();
   rect(0, 0, width, height);
-  
-  // Menu panel
   fill(30, 30, 30, 240);
   stroke(255, 100);
   strokeWeight(2);
   rect(menuX, menuY, menuWidth, menuHeight, 12);
-  
-  // Menu title
   fill(255);
   noStroke();
   textAlign(CENTER, TOP);
   textSize(24);
   text('PAUSED', width / 2, menuY + 20);
-  
-  // Menu options
   const options = ['SETTINGS', 'FORFEIT MATCH'];
   const optionHeight = 50;
   const optionStartY = menuY + 60;
-  
   options.forEach((option, index) => {
     const optionY = optionStartY + (index * optionHeight);
     const isSelected = index === pauseMenuOption;
-    
-    // Option background
     if (isSelected) {
       fill(60, 60, 80, 200);
       stroke(100, 150, 255);
@@ -679,8 +523,6 @@ function drawPauseMenu() {
     }
     strokeWeight(1);
     rect(menuX + 20, optionY, menuWidth - 40, 40, 8);
-    
-    // Option text
     if (isSelected) {
       fill(100, 150, 255);
     } else {
@@ -691,12 +533,9 @@ function drawPauseMenu() {
     textSize(16);
     text(option, width / 2, optionY + 20);
   });
-  
-  // Instructions
   fill(150);
   textSize(12);
   text('Use UP/DOWN to select, ENTER to confirm, ESC to close', width / 2, menuY + menuHeight - 20);
-  
   pop();
 }
 
@@ -705,45 +544,36 @@ function drawSettingsPanel() {
   const panelHeight = 320;
   const panelX = (width - panelWidth) / 2;
   const panelY = (height - panelHeight) / 2;
-
   push();
-  // Background overlay
   fill(0, 0, 0, 200);
   noStroke();
   rect(0, 0, width, height);
-
-  // Panel
   fill(28, 28, 28, 240);
   stroke(255, 100);
   strokeWeight(2);
   rect(panelX, panelY, panelWidth, panelHeight, 12);
-
-  // Title
   noStroke();
   fill(255);
   textAlign(CENTER, TOP);
   textSize(26);
   text('SETTINGS (Placeholder)', width / 2, panelY + 18);
-
-  // Placeholder content
   fill(200);
   textSize(14);
   textAlign(LEFT, TOP);
   text('- Audio: (placeholder)', panelX + 24, panelY + 64);
   text('- Controls: (placeholder)', panelX + 24, panelY + 88);
   text('- Graphics: (placeholder)', panelX + 24, panelY + 112);
-
-  // Back hint
   fill(180);
   textSize(12);
   textAlign(CENTER, TOP);
   text('Click anywhere or press ESC to go back', width / 2, panelY + panelHeight - 28);
-
   pop();
 }
 
+// ==========================
+// 🏆 COMBAT OVER / RESULT SCREEN
+// ==========================
 function drawCombatOver() {
-  // Fullscreen combat over screen (separate from SUMMARY)
   push();
   for (let i = 0; i < height; i += 8) {
     const t = i / height;
@@ -751,7 +581,6 @@ function drawCombatOver() {
     noStroke();
     rect(0, i, width, 8);
   }
-
   push();
   noFill();
   stroke(255, 24);
@@ -760,16 +589,20 @@ function drawCombatOver() {
   rect(width / 2, height / 2, width * 0.92, height * 0.86, 44);
   pop();
 
+  // Win/Lose sprite (6x6 = 384x384 native, display at 60% = ~230x230)
+  const isWin = combatOverOutcome && combatOverOutcome.toLowerCase().includes('win');
+  drawBattleUISprite(isWin ? 'win' : 'lose', width / 2, 150, 230, 230);
+
   textAlign(CENTER, CENTER);
-  textSize(64);
+  textSize(48);
+  noStroke();
   fill(248, 200, 92);
-  text(combatOverOutcome || 'COMBAT OVER', width / 2, 120);
+  text(combatOverOutcome || 'COMBAT OVER', width / 2, 310);
 
-  textSize(26);
+  textSize(22);
   fill(220);
-  text(combatOverLine || summaryText || 'Combat has ended.', width / 2, 180);
+  text(combatOverLine || summaryText || 'Combat has ended.', width / 2, 350);
 
-  // Large center panel with options
   const panelW = 620;
   const panelH = 340;
   const panelX = (width - panelW) / 2;
@@ -780,7 +613,6 @@ function drawCombatOver() {
   strokeWeight(1.5);
   rect(panelX, panelY, panelW, panelH, 18);
   pop();
-
   push();
   noFill();
   stroke(255, 16);
@@ -790,12 +622,10 @@ function drawCombatOver() {
   }
   pop();
 
-  // Button
   const btnW = 300;
   const btnH = 56;
   const btnX = panelX + (panelW - btnW) / 2;
   const btnY = panelY + panelH - 100;
-
   combatOverButtons = [];
   const returnBtn = new UIButton(btnX, btnY, btnW, btnH, () => {
     resetLobbyReadyState();
@@ -813,13 +643,10 @@ function drawCombatOver() {
     radius: 12
   });
   combatOverButtons.push(returnBtn);
-
-  // Small footer info
   push();
   fill(180);
   textSize(14);
   text(`Time: ${battleTimer.toFixed(1)}s`, width / 2, panelY + 36);
   pop();
-
   pop();
 }

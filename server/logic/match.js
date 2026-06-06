@@ -1321,47 +1321,56 @@ tick() {
                     player.strikeActive = true;
                     
                     // TELEPORT ATTACK MECHANIC: Teleport forward towards target after windup
-                    const targetPlayer = this.findClosestEnemy(player);
-                    if (targetPlayer && !targetPlayer.gameState.isDefeated) {
-                        const targetState = targetPlayer.gameState;
-                        const teleportDistance = 200; // Increased teleport distance for visibility
-                        
-                        // Auto face direction towards target
-                        state.facing = targetState.position.x > state.position.x ? 1 : -1;
-                        
-                        // Calculate teleport position towards target
-                        let teleportX = state.position.x + (state.facing * teleportDistance);
-                        
-                        // Check if teleport would land in target's hitbox
-                        const playerHitboxWidth = 50;
-                        const targetHitboxStart = targetState.position.x - (playerHitboxWidth / 2);
-                        const targetHitboxEnd = targetState.position.x + (playerHitboxWidth / 2);
-                        
-                        // Check if teleport would go behind the target
-                        const teleportGoesBehind = (state.facing === 1 && teleportX > targetState.position.x) ||
-                                                  (state.facing === -1 && teleportX < targetState.position.x);
-                        
-                        if (teleportGoesBehind) {
-                            // Teleport goes behind target - place just behind target
-                            teleportX = targetState.position.x + (state.facing * (playerHitboxWidth / 2 + 5));
+                    // Only apply to basic attacks, not slam attacks
+                    if (!player.isSlamAttacking) {
+                        const targetPlayer = this.findClosestEnemy(player);
+                        if (targetPlayer && !targetPlayer.gameState.isDefeated) {
+                            const targetState = targetPlayer.gameState;
+                            const teleportDistance = 200; // Increased teleport distance for visibility
                             
-                            // After teleporting behind, face the target (opposite direction)
-                            state.facing = -state.facing;
-                        } else if (teleportX >= targetHitboxStart && teleportX <= targetHitboxEnd) {
-                            // Teleport would land in hitbox, place right in front instead
-                            teleportX = targetState.position.x - (state.facing * (playerHitboxWidth / 2 + 5));
+                            // Auto face direction towards target
+                            state.facing = targetState.position.x > state.position.x ? 1 : -1;
+                            
+                            // Calculate teleport position towards target
+                            let teleportX = state.position.x + (state.facing * teleportDistance);
+                            
+                            // Check if teleport would land in target's hitbox
+                            const playerHitboxWidth = 50;
+                            const targetHitboxStart = targetState.position.x - (playerHitboxWidth / 2);
+                            const targetHitboxEnd = targetState.position.x + (playerHitboxWidth / 2);
+                            
+                            // Check if teleport would go behind the target
+                            const teleportGoesBehind = (state.facing === 1 && teleportX > targetState.position.x) ||
+                                                      (state.facing === -1 && teleportX < targetState.position.x);
+                            
+                            // Check if teleport would hit arena boundary
+                            const ARENA_WIDTH = 1400;
+                            const arenaMargin = 60;
+                            const hitsArenaBoundary = teleportX < arenaMargin || teleportX > ARENA_WIDTH - arenaMargin;
+                            
+                            if (hitsArenaBoundary) {
+                                // Teleport would hit arena boundary - place in front of target instead
+                                teleportX = targetState.position.x - (state.facing * (playerHitboxWidth / 2 + 5));
+                            } else if (teleportGoesBehind) {
+                                // Teleport goes behind target - place just behind target
+                                teleportX = targetState.position.x + (state.facing * (playerHitboxWidth / 2 + 5));
+                                
+                                // After teleporting behind, face the target (opposite direction)
+                                state.facing = -state.facing;
+                            } else if (teleportX >= targetHitboxStart && teleportX <= targetHitboxEnd) {
+                                // Teleport would land in hitbox, place right in front instead
+                                teleportX = targetState.position.x - (state.facing * (playerHitboxWidth / 2 + 5));
+                            }
+                            
+                            // Clamp to arena boundaries (fallback safety)
+                            teleportX = Math.max(arenaMargin, Math.min(ARENA_WIDTH - arenaMargin, teleportX));
+                            
+                            // Apply teleport
+                            state.position.x = teleportX;
+                            
+                            // Set flag to prevent physics from overriding teleport this tick
+                            player.teleportThisTick = true;
                         }
-                        
-                        // Clamp to arena boundaries
-                        const ARENA_WIDTH = 1400;
-                        const arenaMargin = 60;
-                        teleportX = Math.max(arenaMargin, Math.min(ARENA_WIDTH - arenaMargin, teleportX));
-                        
-                        // Apply teleport
-                        state.position.x = teleportX;
-                        
-                        // Set flag to prevent physics from overriding teleport this tick
-                        player.teleportThisTick = true;
                     }
                     
                     // Apply forward momentum (keep existing momentum if any)

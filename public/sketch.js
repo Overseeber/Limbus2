@@ -1365,8 +1365,14 @@ function applyNetworkScreenShake(event) {
     addScreenShake(intensity, isUltimate);
   }
 
-  // Ultimate impact zoom: increase additive zoom when ultimate deals damage with knockback
-  if (isUltimate && typeof event.damage === 'number' && typeof event.knockback === 'number') {
+  // Impact zoom: increase additive zoom when attacks deal damage with knockback
+  // Applies to ultimates, abilities, dash attacks, and slam attacks
+  const isAbility = event.attackType === 'ability';
+  const isDash = event.attackType === 'dash';
+  const isSlam = event.attackType === 'slam';
+  const shouldApplyImpactZoom = isUltimate || isAbility || isDash || isSlam;
+  
+  if (shouldApplyImpactZoom && typeof event.damage === 'number' && typeof event.knockback === 'number') {
     if (event.knockback > 0 && event.damage > 0) {
       ultimateImpactZoom = Math.min(2.5, ultimateImpactZoom + (0.08 * event.damage));
     }
@@ -1609,9 +1615,7 @@ function handleDashAttackNetworkEvent(event) {
       );
     }
 
-    if (typeof addScreenShake === 'function' && typeof hit.damage === 'number') {
-      addScreenShake(hit.damage);
-    }
+    applyNetworkScreenShake(hit);
 
     if (hit.defeated && !target.isDefeated) {
       target.isDefeated = true;
@@ -1867,7 +1871,7 @@ function draw() {
     ultimateImpactZoom = Math.max(0, ultimateImpactZoom - 0.08);
 
     const displayCameraZoomBase = combatZoom.active ? cameraZoom / combatZoom.currentZoom : cameraZoom;
-    const displayCameraZoom = ultimateActive ? (displayCameraZoomBase + ultimateImpactZoom) : displayCameraZoomBase;
+    const displayCameraZoom = displayCameraZoomBase + ultimateImpactZoom;
 
     if (typeof clampCameraToVisibility === 'function') {
       clampCameraToVisibility(displayCameraZoom);

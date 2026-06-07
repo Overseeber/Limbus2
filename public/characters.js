@@ -4,6 +4,58 @@
 let atlases = {};
 const CELL = 256;
 
+// Per-atlas metadata overrides (cell size, origin offset)
+const atlasMeta = {
+  particles: {
+    cell: 198,
+    originX: 34,
+    originY: 34
+  }
+};
+
+// ==========================
+// 🔥 PARTICLE SPRITE DATABASE
+// ==========================
+const PARTICLE_SPRITES = {
+  heavyimpact: { atlas:"particles", x:0, y:0, w:5, h:2 },
+  slash:       { atlas:"particles", x:0, y:2, w:5, h:2 },
+
+  spark1:      { atlas:"particles", x:0, y:4, w:1, h:1 },
+  spark2:      { atlas:"particles", x:1, y:4, w:1, h:1 },
+  spark3:      { atlas:"particles", x:2, y:4, w:1, h:1 },
+  spark4:      { atlas:"particles", x:3, y:4, w:1, h:1 },
+
+  evadedash:   { atlas:"particles", x:0, y:5, w:4, h:2 },
+  dashburst:   { atlas:"particles", x:1, y:7, w:2, h:2 },
+
+  swav1:       { atlas:"particles", x:5, y:0, w:1, h:1 },
+  swav2:       { atlas:"particles", x:6, y:0, w:1, h:1 },
+  swav3:       { atlas:"particles", x:7, y:0, w:1, h:1 },
+
+  cspark1:     { atlas:"particles", x:5, y:1, w:1, h:1 },
+  cspark2:     { atlas:"particles", x:6, y:1, w:1, h:1 },
+  cspark3:     { atlas:"particles", x:7, y:1, w:1, h:1 },
+
+  flash1:      { atlas:"particles", x:5, y:2, w:1, h:1 },
+  flash2:      { atlas:"particles", x:6, y:2, w:1, h:1 },
+  flash3:      { atlas:"particles", x:7, y:2, w:1, h:1 },
+
+  cl1:         { atlas:"particles", x:8, y:0, w:1, h:1 },
+  cl2:         { atlas:"particles", x:9, y:0, w:1, h:1 },
+  cl3:         { atlas:"particles", x:8, y:1, w:1, h:1 },
+  cl4:         { atlas:"particles", x:9, y:1, w:1, h:1 },
+
+  shin1:       { atlas:"particles", x:5, y:3, w:2, h:2 },
+  shin2:       { atlas:"particles", x:7, y:3, w:2, h:2 },
+
+  tibia:       { atlas:"particles", x:5, y:5, w:4, h:4 },
+
+  rock1:       { atlas:"particles", x:1, y:8, w:1, h:1 },
+  rock2:       { atlas:"particles", x:2, y:8, w:1, h:1 },
+  rock3:       { atlas:"particles", x:3, y:8, w:1, h:1 },
+  rock4:       { atlas:"particles", x:4, y:8, w:1, h:1 },
+};
+
 // ==========================
 // 🔥 SPRITE DATABASE
 // ==========================
@@ -411,6 +463,9 @@ function loadSpriteAtlases() {
   // ===== Battle UI =====
   atlases.battleui = loadImage("data/UI/battleui.png");
 
+  // ===== Particles =====
+  atlases.particles = loadImage("data/particles/particles.png");
+
   // Pre-scale all atlas images to common sizes asynchronously
   const preScaleAtlases = async () => {
     for (const [atlasName, img] of Object.entries(atlases)) {
@@ -458,6 +513,7 @@ function loadSpriteAtlases() {
     precacheSpriteData();
     precacheStatusSpriteData();
     precacheBattleUISpriteData();
+    precacheParticleSpriteData();
   }, 100);
 }
 
@@ -470,6 +526,64 @@ const SPRITE_CACHE = new Map();
 
 // Cache for status sprite calculations
 const STATUS_SPRITE_CACHE = new Map();
+
+// Cache for particle sprite calculations
+const PARTICLE_SPRITE_CACHE = new Map();
+
+// Pre-calculate particle sprite data using per-atlas origin offset
+function precacheParticleSpriteData() {
+  for (const [name, sprite] of Object.entries(PARTICLE_SPRITES)) {
+    const meta = atlasMeta[sprite.atlas] || {};
+    const cell = meta.cell || CELL;
+    const sx = (meta.originX || 0) + sprite.x * cell;
+    const sy = (meta.originY || 0) + sprite.y * cell;
+    const sw = sprite.w * cell;
+    const sh = sprite.h * cell;
+
+    PARTICLE_SPRITE_CACHE.set(name, {
+      sprite, sx, sy, sw, sh,
+      img: null
+    });
+  }
+}
+
+/**
+ * Draw a particle sprite from the particles atlas.
+ * The particles atlas uses a 198x198 cell size with a (34,34) origin offset.
+ * Sprites are drawn centered on (x, y).
+ */
+function drawParticleSprite(name, x, y, targetW, targetH) {
+  const cached = PARTICLE_SPRITE_CACHE.get(name);
+  if (!cached) {
+    console.error("Missing cached particle sprite:", name);
+    return;
+  }
+
+  let img = cached.img || atlases[cached.sprite.atlas];
+  if (!img || img.width <= 0 || img.height <= 0) {
+    console.warn("Particle atlas not loaded yet for sprite:", name);
+    return;
+  }
+
+  cached.img = img;
+
+  const drawW = targetW || cached.sw;
+  const drawH = targetH || cached.sh;
+
+  push();
+  noStroke();
+  imageMode(CORNER);
+  image(
+    img,
+    x - drawW / 2,
+    y - drawH / 2,
+    drawW, drawH,
+    cached.sx, cached.sy,
+    cached.sw, cached.sh
+  );
+  imageMode(CENTER);
+  pop();
+}
 
 // Pre-resized sprite cache for common scales
 const RESIZED_SPRITE_CACHE = new Map();

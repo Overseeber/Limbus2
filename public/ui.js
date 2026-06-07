@@ -93,34 +93,11 @@ function drawPlayerHud() {
   const titleY = height - 156;             // top of player hud stack
   const titleW = 64*4.5;                      // fallbacktitle = 6 cells
   const titleH = 64;                       // 1 cell
-  const barW = titleW;
+  const barW = titleW-32;
   const barStartY = titleY + titleH - 45;   // HP bar starts below title
- 
-  // === Text overlay on title ===
-  push();
-  noStroke();
-  const safeHp = (fighter.hp !== null && fighter.hp !== undefined) ? fighter.hp : 0;
+   const safeHp = (fighter.hp !== null && fighter.hp !== undefined) ? fighter.hp : 0;
   const safeMaxHp = (fighter.maxHp !== null && fighter.maxHp !== undefined) ? fighter.maxHp : 1;
   const hpPercent = safeHp / safeMaxHp;
-
-  fill(255);
-  textAlign(LEFT, CENTER);
-  textSize(13);
- // text(fighter.name, titleX + 14, titleY + 18);
-
-  textAlign(RIGHT, CENTER);
-  text(`${safeHp.toFixed(0)} / ${safeMaxHp}`, titleX + titleW - 14, titleY + 18);
-
-  textAlign(LEFT, CENTER);
-  textSize(10);
-  fill(200);
-  text(`State: ${fighter.state}`, titleX + 14, titleY + 38);
-  fill(255);
-  text('Combo', titleX + 14, titleY - 14);
-  text('X', titleX + 15, titleY - 30);
-  textSize(20 + `${fighter.combo}`.length * 2); // Dynamically increase combo number size based on digit count
-  text(`${fighter.combo}`, titleX + 30, titleY - 30);
-  pop();
 
   // === HP Bar ===
   push();
@@ -130,7 +107,7 @@ function drawPlayerHud() {
   if (hpPercent > 0.6) fill(66, 212, 146);
   else if (hpPercent > 0.3) fill(255, 204, 51);
   else fill(217, 77, 77);
-  rect(titleX, barStartY, barW * hpPercent, 8, 4);
+  rect(titleX+15, barStartY, barW * hpPercent, 4);
   pop();
 
   // === Stagger Bar ===
@@ -150,6 +127,27 @@ function drawPlayerHud() {
   const dashY = staggerY + 10;
   drawDashChargesRing(fighter, titleX, dashY, barW);
 
+  // === Text overlay on title ===
+  push();
+  noStroke();
+  fill(255);
+  textAlign(LEFT, CENTER);
+  textSize(30);
+ // text(fighter.name, titleX + 14, titleY + 18);
+
+  textAlign(RIGHT, CENTER);
+  text(`${safeHp.toFixed(0)}`, titleX + titleW - 14, titleY + 9);
+
+  textAlign(LEFT, CENTER);
+  textSize(10);
+  fill(200);
+  text(`State: ${fighter.state}`, titleX + 14, titleY + 38);
+  fill(255);
+  text('Combo', titleX + 14, titleY - 7);
+  text('X', titleX + 15, titleY - 20);
+  textSize(20 + `${fighter.combo}`.length * 2); // Dynamically increase combo number size based on digit count
+  text(`${fighter.combo}`, titleX + 30, titleY - 20);
+  pop();
 
  //ult ui
 const ultActive = fighter.ultimateActive || fighter.ultimateMeter >= 100;
@@ -167,7 +165,6 @@ const ultActive = fighter.ultimateActive || fighter.ultimateMeter >= 100;
     ultDeactiveSprite = 'closingdeactiveui';
   }
 
-  drawBattleUISprite(ultActive ? ultSprite : ultDeactiveSprite, titleX + titleW/2, titleY + titleH/2, titleW, titleH);
 
   // Ability Icon (bottom-right of player hud area)
   const abilityX = titleX + titleW + 16;
@@ -185,6 +182,8 @@ const ultActive = fighter.ultimateActive || fighter.ultimateMeter >= 100;
   } else if (fighter.characterKey === 'DIHUI') {
     drawBattleAbilityIcon(fighter, 'dability', 'doff', fighter.deathedgeActive, fighter.deathedgeCooldown, 14, abilityX, abilityY, 64);
   }
+  
+  drawBattleUISprite(ultActive ? ultSprite : ultDeactiveSprite, titleX + titleW/2, titleY + titleH/2, titleW, titleH);
 }
 
 // Generic ability icon drawer
@@ -470,7 +469,7 @@ function drawPauseMenuButton() {
   fill(50, 50, 50, 200);
   stroke(255, 100);
   strokeWeight(2);
-  rect(bx, by, s, s, 8);
+  rect(bx, by, s, s);
   stroke(255);
   strokeWeight(3);
   const sp = 8;
@@ -486,10 +485,7 @@ function drawPauseMenuButton() {
 // ==========================
 function drawBattleTimer() {
   if (typeof battleState === 'undefined' || battleState !== 'battle') return;
-  // romanui is 6x2 = 384x128 native, display at ~256x64
-  push();
-  drawBattleUISprite('romanui', width / 2, 28, 240, 64);
-  pop();
+
 
   push();
   resetMatrix();

@@ -103,15 +103,13 @@ class Match {
             gameState.isEvading = false; // evade state
             gameState.evadeTimer = 0;    // evade duration timer
             
-            // Set starting position
+            // Set starting position - place players near arena edges
             const index = config.index || 0;
-            const spacing = 300;
-            const centerX = 700;
-            const totalWidth = (playerConfigs.length - 1) * spacing;
-            const startX = centerX - totalWidth / 2;
+            const ARENA_WIDTH = 1400;
+            const edgeMargin = 150; // Distance from arena edge
             
             gameState.position = {
-                x: startX + (index * spacing),
+                x: index === 0 ? edgeMargin : ARENA_WIDTH - edgeMargin,
                 y: 600
             };
             gameState.facing = index === 0 ? 1 : -1;
@@ -306,20 +304,22 @@ tick() {
                 this.updateAbilityAnimations(player, dt);
 
                 // Now process input with edge detection (after state updates)
-                // Skip AI input during opening phase
-                if (player.ai && !isOpeningPhase) {
-                    this.simulateAIInput(player);
-                } else if (player.ai && isOpeningPhase) {
-                    // Clear AI input during opening to let animations play
+                // Skip ALL input during opening phase to prevent attacking at start
+                if (isOpeningPhase) {
+                    // Clear all input during opening phase
                     player.input = { 
                         left: false, right: false, up: false, down: false,
                         attack: false, guard: false, dash: false, slam: false,
                         attackPressed: false, attackReleased: false, evade: false,
                         abilityQ: false, abilityX: false
                     };
+                } else {
+                    // Process input normally after opening phase
+                    if (player.ai) {
+                        this.simulateAIInput(player);
+                    }
+                    this.processInput(player, dt);
                 }
-
-                this.processInput(player, dt);
 
                 // Update physics (includes attack phase timer)
                 this.updatePhysics(player, dt);

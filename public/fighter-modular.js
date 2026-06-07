@@ -3117,7 +3117,10 @@ addCombo(attacker) {
     // Record afterimage history AFTER sprite update to capture the correct currentSprite
     // This runs every frame regardless of whether update() is called (server-authoritative mode)
     this.updateAfterimageHistory(0.016);
-    
+     // Draw afterimages for Dihui Star (Superposed Afterimage passive)
+    if (this.characterKey === 'DIHUI') {
+      this.drawAfterimages();
+    }
     push();
     translate(this.pos.x + this.spriteShakeX, this.pos.y + this.spriteShakeY);
     
@@ -3206,10 +3209,7 @@ addCombo(attacker) {
     }
     pop();
     
-    // Draw afterimages for Dihui Star (Superposed Afterimage passive)
-    if (this.characterKey === 'DIHUI') {
-      this.drawAfterimages();
-    }
+   
     
     // Draw slash effects
     this.drawSlashEffects(0.016); // Assuming 60 FPS
@@ -3741,8 +3741,8 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
       const tr = Math.round(r + (255 - r) * mixFactor);
       const tg = Math.round(g + (255 - g) * mixFactor);
       const tb = Math.round(b + (255 - b) * mixFactor);
-      tint(tr, tg, tb, alpha * 255);
-
+     // tint(tr, tg, tb, alpha * 255);
+     tint(r, 0, b, alpha * 255);
       // Draw the sprite
       drawSpriteScaled(spriteName, 0, hitboxBottomY, scaleFactor);
 
@@ -3752,6 +3752,7 @@ rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
       // If the afterimage was attacking with strike active, draw slash sprites
       if (histState.isAttacking && histState.strikeActive) {
         // Determine which slash to draw based on the attack sequence
+     //slash should not be effected by afterimag tint
         let slashType = 'ds1s1';
         if (histState.attackSequence === 1) {
           slashType = 'ds1s1';

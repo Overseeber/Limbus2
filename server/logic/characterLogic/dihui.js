@@ -514,7 +514,7 @@ function executeDeathedge(state, abilityConfig, targetState, config) {
 
   // Additional damage: +2% per Bladetrail Afterimage on target
   const baCount = getStatusCount(targetState, 'Bladetrail Afterimage');
-  const additionalDamagePercent = baCount * (abilityConfig.damagePerAfterimage || 0.02);
+  const additionalDamagePercent = baCount * (abilityConfig.damagePerAfterimage || 0.05);
   const totalMultiplier = damageMultiplier + additionalDamagePercent;
 
   let calculatedDamage = Math.floor(totalMultiplier * (state.baseDamage || 5));
@@ -523,7 +523,7 @@ function executeDeathedge(state, abilityConfig, targetState, config) {
   const bladeStatus = getStatus(state, "Dihui Star's Blade");
   const bladeDamageBonus = bladeStatus ? bladeStatus.count * (config.dihuiBlade.critDamagePerStack || 0.01) : 0;
   if (bladeDamageBonus > 0) {
-    calculatedDamage = Math.floor(calculatedDamage * (1 + bladeDamageBonus));
+    calculatedDamage = Math.floor((calculatedDamage * (1 + bladeDamageBonus))*2);
   }
 
   // Apply damage

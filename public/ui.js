@@ -89,16 +89,13 @@ function drawPlayerHud() {
   const fighter = controlledFighter;
 
   // --- Positions ---
-  const titleX = 12;                       // left edge
-  const titleY = height - 196;             // top of player hud stack
-  const titleW = 384;                      // fallbacktitle = 6 cells
+  const titleX = 120;                       // left edge
+  const titleY = height - 156;             // top of player hud stack
+  const titleW = 64*4.5;                      // fallbacktitle = 6 cells
   const titleH = 64;                       // 1 cell
   const barW = titleW;
-  const barStartY = titleY + titleH + 4;   // HP bar starts below title
-
-  // === Title bar (fallbacktitle) ===
-  drawBattleUISprite('fallbacktitle', titleX + titleW/2, titleY + titleH/2, titleW, titleH);
-
+  const barStartY = titleY + titleH - 45;   // HP bar starts below title
+ 
   // === Text overlay on title ===
   push();
   noStroke();
@@ -109,7 +106,7 @@ function drawPlayerHud() {
   fill(255);
   textAlign(LEFT, CENTER);
   textSize(13);
-  text(fighter.name, titleX + 14, titleY + 18);
+ // text(fighter.name, titleX + 14, titleY + 18);
 
   textAlign(RIGHT, CENTER);
   text(`${safeHp.toFixed(0)} / ${safeMaxHp}`, titleX + titleW - 14, titleY + 18);
@@ -118,7 +115,11 @@ function drawPlayerHud() {
   textSize(10);
   fill(200);
   text(`State: ${fighter.state}`, titleX + 14, titleY + 38);
-  text(`Combo: ${fighter.combo}`, titleX + 14, titleY + 54);
+  fill(255);
+  text('Combo', titleX + 14, titleY - 14);
+  text('X', titleX + 15, titleY - 30);
+  textSize(20 + `${fighter.combo}`.length * 2); // Dynamically increase combo number size based on digit count
+  text(`${fighter.combo}`, titleX + 30, titleY - 30);
   pop();
 
   // === HP Bar ===
@@ -133,7 +134,7 @@ function drawPlayerHud() {
   pop();
 
   // === Stagger Bar ===
-  const staggerY = barStartY + 12;
+  const staggerY = barStartY + 120;
   const staggerPercent = constrain(fighter.stagger / fighter.staggerThreshold, 0, 1);
   push();
   noStroke();
@@ -149,11 +150,9 @@ function drawPlayerHud() {
   const dashY = staggerY + 10;
   drawDashChargesRing(fighter, titleX, dashY, barW);
 
-  // === Ultimate Gauge Indicator (above ability icon) ===
-  const ultX = titleX + 200;
-  const ultY = titleY - 30; // above the title bar
-  // Character-specific ultimate UI sprites
-  const ultActive = fighter.ultimateActive || fighter.ultimateMeter >= 100;
+
+ //ult ui
+const ultActive = fighter.ultimateActive || fighter.ultimateMeter >= 100;
   let ultSprite = 'closingui';
   let ultDeactiveSprite = 'closingdeactiveui';
   
@@ -167,8 +166,8 @@ function drawPlayerHud() {
     ultSprite = 'closingui';
     ultDeactiveSprite = 'closingdeactiveui';
   }
-  
-  drawBattleUISprite(ultActive ? ultSprite : ultDeactiveSprite, ultX, ultY, 140, 32);
+
+  drawBattleUISprite(ultActive ? ultSprite : ultDeactiveSprite, titleX + titleW/2, titleY + titleH/2, titleW, titleH);
 
   // Ability Icon (bottom-right of player hud area)
   const abilityX = titleX + titleW + 16;
@@ -256,8 +255,8 @@ function drawMultiPlayerHuds() {
 function drawFighterHudPanel(fighter, panelX, panelY) {
   const isDefeated = fighter.isDefeated;
   const charKey = fighter.characterKey;
-  const panelW = 320; // 5 cells * 64
-  const panelH = 128; // 2 cells * 64
+  const panelW = 64*7/2; // 7/2 cells * 64
+  const panelH = 64; // 1 cells * 64
 
   // Pick correct enemy bar sprite
   let sprite = 'fallbackenemy';
@@ -385,21 +384,23 @@ function drawPlayerIndicator(fighter) {
 }
 
 // ==========================
-// ⚡ DASH CHARGES (ring sprites)
+// ⚡ DASH CHARGES use normal rects, have the rects slowly fill up as dash charges regen
 // ==========================
 function drawDashChargesRing(fighter, x, y, width) {
   const count = fighter.dashCharges;
   const total = 3;
   // Each charge segment: 3 cells * 64 = 192 native, displayed at ~24x24
-  const segSize = min(24, (width - (total - 1) * 8) / total);
+  const segSize = 64;
   push();
   noStroke();
   for (let i = 0; i < total; i++) {
     const cx = x + i * (segSize + 8) + segSize/2;
     if (i < count) {
-      drawBattleUISprite('ring', cx, y + segSize/2, segSize, segSize);
+      fill(100, 255, 100);
+      rect(cx, y + segSize/2, segSize, segSize/4);
     } else {
-      drawBattleUISprite('ringoff', cx, y + segSize/2, segSize, segSize);
+      fill(100);
+      rect(cx, y + segSize/2, segSize, segSize/4);
     }
   }
   pop();

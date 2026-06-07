@@ -343,6 +343,17 @@ tick() {
         player.gameState.attackSequence = player.attackSequence || 0;
         player.gameState.attackPhase = player.attackPhase || 'none';
         
+        // Record afterimage history snapshot for Dihui (after syncing attack state)
+        // This must happen AFTER attack state is synced from player wrapper to gameState
+        if (player.characterKey === 'DIHUI') {
+          const dihuiLogic = require('./characterLogic/dihui');
+          const dihuiConfig = this.engine.getCharacterConfig('DIHUI');
+          if (dihuiLogic && dihuiConfig) {
+            dihuiLogic.initAfterimageHistory(player.gameState);
+            dihuiLogic.recordAfterimageSnapshot(player.gameState, dt, dihuiConfig);
+          }
+        }
+        
         // Check attacks during active frame (RESTORED rect-based detection)
         if (player.strikeActive && player.attackSequence > 0) {
           this.checkAttackHits(player);

@@ -319,6 +319,14 @@ function resolveAfterimageAttacks(state, config, enemies, engineRef) {
   const afterimageConfig = config.superposedAfterimage;
   if (!afterimageConfig) return events;
   
+  // Track per-afterimage the PREVIOUS strikeActive state.
+  // We fire only on the RISING EDGE of strikeActive (false→true transition).
+  // Afterimages that are in the same "active" state across multiple ticks
+  // will only hit once when the strike first becomes active.
+  if (!state._afterimagePrevStrikes) {
+    state._afterimagePrevStrikes = [false, false, false];
+  }
+  
   const scConfig = afterimageConfig.colors; // color config (just for reference)
   
   // Check each afterimage
@@ -328,8 +336,19 @@ function resolveAfterimageAttacks(state, config, enemies, engineRef) {
     
     if (!histState) continue;
     
-    // Only resolve attacks if the afterimage was in an attacking state with strike active
-    if (!histState.strikeActive || !histState.isAttacking) continue;
+    // Get the current strike-active state from this afterimage's historical view
+    const currentStrike = histState.strikeActive && histState.isAttacking;
+    const prevStrike = state._afterimagePrevStrikes[i];
+    
+    // Update the tracked previous state for next tick
+    state._afterimagePrevStrikes[i] = currentStrike;
+    
+    // Only fire on the RISING EDGE: false → true transition
+    if (!currentStrike || prevStrike) {
+      continue;
+    }
+    
+    // If prevStrike was false and currentStrike is true, we fire ONCE
     
     // The afterimage attacks using the delayed position and facing
     const atkPos = { x: histState.x, y: histState.y };
@@ -448,10 +467,6 @@ function updateSystems(state, dt, config) {
 
   // Update shield system
   events.push(...updateShieldSystem(state, dt, config));
-  
-  // Record afterimage history snapshot
-  initAfterimageHistory(state);
-  recordAfterimageSnapshot(state, dt, config);
 
   // Consume excess Poise Potency (>20) to inflict Bladetrail Afterimage
   const poise = getStatus(state, 'Poise');

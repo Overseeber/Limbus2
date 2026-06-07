@@ -1429,6 +1429,9 @@ function handleNetworkEvent(event) {
     case 'DEATHEDGE_DLINE_SPAWN':
       handleDeathedgeDlineSpawnEvent(event);
       break;
+    case 'AFTERIMAGE_HIT':
+      handleAfterimageHitEvent(event);
+      break;
     case 'MATCH_END':
       // Server signaled match end — start ending sequence
       startEndingSequence(event.winnerId, event.winnerCharacter, {
@@ -1572,6 +1575,34 @@ function handleSlamHitNetworkEvent(event) {
     );
   }
   applyNetworkScreenShake(event);
+
+  if (event.defeated && !target.isDefeated) {
+    target.isDefeated = true;
+    target.hp = target.hp || 0;
+  }
+}
+
+function handleAfterimageHitEvent(event) {
+  const target = window.allFighters.find(f => f.clientId === event.targetId);
+  const attacker = window.allFighters.find(f => f.clientId === event.attackerId);
+  if (!target) return;
+
+  if (event.hp !== undefined) {
+    target.hp = event.hp;
+  }
+
+  const facing = attacker ? attacker.facing : 1;
+  if (event.damage && typeof spawnDamageNumber === 'function') {
+    spawnDamageNumber(
+      event.damage,
+      target.pos.copy(),
+      facing,
+      false,
+      'normal',
+      !!event.isCrit,
+      'normal'
+    );
+  }
 
   if (event.defeated && !target.isDefeated) {
     target.isDefeated = true;

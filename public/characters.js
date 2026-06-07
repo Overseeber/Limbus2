@@ -270,36 +270,36 @@ const BATTLE_UI_CELL = 64;
 // 🔥 BATTLE UI SPRITE DATABASE
 // ==========================
 const BATTLE_UI_SPRITES = {
-  // Top UI
-  fallbackult:     { atlas:"battleui", x:0, y:1, w:8, h:2 },
-  fallbackability: { atlas:"battleui", x:8, y:1, w:2, h:2 },
-  fallbacktitle:   { atlas:"battleui", x:1, y:3, w:6, h:1 },
-  fallbackskill:   { atlas:"battleui", x:0, y:2, w:8, h:2 },
-  fallbackenemy:   { atlas:"battleui", x:1, y:4, w:5, h:2 },
+ // Top UI
+  fallbackult:     { atlas:"battleui", x:0, y:5, w:8, h:2 },
+  fallbackability: { atlas:"battleui", x:8, y:5, w:2, h:2 },
+  fallbacktitle:   { atlas:"battleui", x:1, y:7, w:6, h:1 },
+  fallbackskill:   { atlas:"battleui", x:0, y:6, w:8, h:2 },
+  fallbackenemy:   { atlas:"battleui", x:1, y:8, w:5, h:2 },
 
   // Roman numerals
-  romanui:         { atlas:"battleui", x:1, y:5, w:6, h:2 },
+  romanui:         { atlas:"battleui", x:1, y:9, w:6, h:2 },
 
   // Results
-  win:             { atlas:"battleui", x:12, y:0, w:6, h:6 },
-  lose:            { atlas:"battleui", x:20, y:0, w:6, h:6 },
-  start:           { atlas:"battleui", x:12, y:6, w:12, h:4 },
+  win:             { atlas:"battleui", x:12, y:4, w:6, h:6 },
+  lose:            { atlas:"battleui", x:20, y:4, w:6, h:6 },
+  start:           { atlas:"battleui", x:12, y:10, w:14, h:4 },
 
   // Rend / Disposal / Closing ultimate ui, character specific
-  rendui:          { atlas:"battleui", x:0, y:10, w:9, h:2 },
-  renddeactiveui:  { atlas:"battleui", x:10, y:8, w:9, h:2 },
-  disposalui:      { atlas:"battleui", x:0, y:12, w:9, h:2 },
-  disposaldeactiveui: { atlas:"battleui", x:10, y:12, w:9, h:2 },
-  closingui:       { atlas:"battleui", x:0, y:14, w:9, h:2 },
-  closingdeactiveui: { atlas:"battleui", x:10, y:14, w:9, h:2 },
+  rendui:          { atlas:"battleui", x:0, y:14, w:9, h:2 },
+  renddeactiveui:  { atlas:"battleui", x:10, y:14, w:9, h:2 },
+  disposalui:      { atlas:"battleui", x:0, y:16, w:9, h:2 },
+  disposaldeactiveui: { atlas:"battleui", x:10, y:16, w:9, h:2 },
+  closingui:       { atlas:"battleui", x:0, y:18, w:9, h:2 },
+  closingdeactiveui: { atlas:"battleui", x:10, y:18, w:9, h:2 },
 
   // Affinity icons / ability ui, character specific
-  dability:        { atlas:"battleui", x:20, y:10, w:2, h:2 },
-  doff:            { atlas:"battleui", x:22, y:10, w:2, h:2 },
-  vability:        { atlas:"battleui", x:20, y:12, w:2, h:2 },
-  voff:            { atlas:"battleui", x:22, y:12, w:2, h:2 },
-  cability:        { atlas:"battleui", x:20, y:14, w:2, h:2 },
-  coff:            { atlas:"battleui", x:22, y:14, w:2, h:2 },
+  dability:        { atlas:"battleui", x:20, y:14, w:2, h:2 },
+  doff:            { atlas:"battleui", x:22, y:14, w:2, h:2 },
+  vability:        { atlas:"battleui", x:20, y:16, w:2, h:2 },
+  voff:            { atlas:"battleui", x:22, y:16, w:2, h:2 },
+  cability:        { atlas:"battleui", x:20, y:18, w:2, h:2 },
+  coff:            { atlas:"battleui", x:22, y:18, w:2, h:2 },
 
   // Finger / ring / shield
   pinky:           { atlas:"battleui", x:0, y:16, w:3, h:3 },
@@ -310,12 +310,12 @@ const BATTLE_UI_SPRITES = {
   thumboff:        { atlas:"battleui", x:16, y:16, w:3, h:3 },
 
   // Enemy bars
-  dihuienemy:      { atlas:"battleui", x:2, y:19, w:7, h:2 },
-  dihuienemyded:   { atlas:"battleui", x:12, y:19, w:7, h:2 },
-  valenemy:        { atlas:"battleui", x:2, y:21, w:7, h:2 },
-  valenemyded:     { atlas:"battleui", x:12, y:21, w:7, h:2 },
-  calenemy:        { atlas:"battleui", x:2, y:23, w:7, h:2 },
-  calenemyded:     { atlas:"battleui", x:12, y:23, w:7, h:2 }
+  dihuienemy:      { atlas:"battleui", x:2, y:23, w:7, h:2 },
+  dihuienemyded:   { atlas:"battleui", x:12, y:23, w:7, h:2 },
+  valenemy:        { atlas:"battleui", x:2, y:25, w:7, h:2 },
+  valenemyded:     { atlas:"battleui", x:12, y:25, w:7, h:2 },
+  calenemy:        { atlas:"battleui", x:2, y:27, w:7, h:2 },
+  calenemyded:     { atlas:"battleui", x:12, y:27, w:7, h:2 }
 };
 
 // Cache for battle UI sprite calculations

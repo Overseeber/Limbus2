@@ -152,9 +152,23 @@ function drawPlayerHud() {
   // === Ultimate Gauge Indicator (above ability icon) ===
   const ultX = titleX + 200;
   const ultY = titleY - 30; // above the title bar
-  // Use closingui sprite as placeholder for all characters
+  // Character-specific ultimate UI sprites
   const ultActive = fighter.ultimateActive || fighter.ultimateMeter >= 100;
-  drawBattleUISprite(ultActive ? 'closingui' : 'closingdeactiveui', ultX, ultY, 140, 32);
+  let ultSprite = 'closingui';
+  let ultDeactiveSprite = 'closingdeactiveui';
+  
+  if (fighter.characterKey === 'DIHUI') {
+    ultSprite = 'rendui';
+    ultDeactiveSprite = 'renddeactiveui';
+  } else if (fighter.characterKey === 'VALENCINA') {
+    ultSprite = 'disposalui';
+    ultDeactiveSprite = 'disposaldeactiveui';
+  } else if (fighter.characterKey === 'CALLISTO') {
+    ultSprite = 'closingui';
+    ultDeactiveSprite = 'closingdeactiveui';
+  }
+  
+  drawBattleUISprite(ultActive ? ultSprite : ultDeactiveSprite, ultX, ultY, 140, 32);
 
   // Ability Icon (bottom-right of player hud area)
   const abilityX = titleX + titleW + 16;

@@ -2206,16 +2206,12 @@ function drawOpeningSequence() {
     pop();
   }
   
-  // Draw "combat start" text
+  // Draw "combat start" sprite
   if (openingSequenceTimer > introDelay + fadeDuration && openingTextAlpha > 0) {
     push();
     resetMatrix();
-    textAlign(CENTER, CENTER);
-    textSize(80);
-    fill(255, 255, 255, openingTextAlpha);
-    stroke(0, 0, 0, openingTextAlpha);
-    strokeWeight(4);
-    text('COMBAT START', width / 2, height / 2);
+    // start sprite is 12x4 = 768x256 native, display at ~600x200
+    drawBattleUISprite('start', width / 2, height / 2, 600, 200);
     pop();
   }
 }

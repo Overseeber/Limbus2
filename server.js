@@ -469,11 +469,6 @@ socket.on('toggleReady', () => {
     });
 });
 
-// Old game loop removed - Match class handles its own ticking
-// Room list broadcast
-setInterval(() => {
-    broadcastRoomList();
-}, 2000);
 
 
 

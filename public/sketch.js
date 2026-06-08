@@ -131,7 +131,12 @@ let pauseSettingsOpen = false; // Settings placeholder open
 
 // Room-based character select state
 let availableRooms = [];
+let _lastRoomsJSON = null;
 let myRoomState = null;
+let _lastNetworkEvent = {};
+// Perf/debugging toggles
+const DEBUG_PERF = false; // set true temporarily when needed
+let _lastPerfLog = 0;
 let myRoomId = null;
 let localSlotSelections = [];
 let roomCharacterSelectSlot = -1;
@@ -340,9 +345,38 @@ function setup() {//test
     Network.on('connect', () => {
       console.log('[Network] Connected to server');
     });
-    Network.on('roomsList', (rooms) => { availableRooms = rooms || []; console.log('roomsList', availableRooms); });
-    Network.on('roomState', (state) => { myRoomState = state; myRoomId = state.id; localSlotSelections = (state.slots || []).map(s => s.character || null); console.log('roomState', state); });
-    Network.on('joinedRoom', (roomId) => { myRoomId = roomId; console.log('joinedRoom', roomId); });
+    Network.on('roomsList', (rooms) => {
+      // Avoid expensive per-message logging and redundant UI churn.
+      // Only apply the update when the room list actually changes.
+      try {
+        const json = JSON.stringify(rooms || []);
+        if (json !== _lastRoomsJSON) {
+          _lastRoomsJSON = json;
+          availableRooms = rooms || [];
+          console.log('roomsList updated, count=', availableRooms.length);
+        } else {
+          // Keep reference stable when identical to avoid unnecessary work
+          availableRooms = availableRooms || [];
+        }
+      } catch (e) {
+        // Fallback: apply without diff if serialization fails
+        availableRooms = rooms || [];
+        console.log('roomsList (fallback) count=', availableRooms.length);
+      }
+    });
+    Network.on('roomState', (state) => {
+      myRoomState = state;
+      myRoomId = state.id;
+      localSlotSelections = (state.slots || []).map(s => s.character || null);
+      // Minimal logging to avoid main-thread stalls on low-power servers
+      if (DEBUG_UI) console.log('roomState', state);
+      _lastNetworkEvent.roomState = Date.now();
+    });
+    Network.on('joinedRoom', (roomId) => {
+      myRoomId = roomId;
+      if (DEBUG_UI) console.log('joinedRoom', roomId);
+      _lastNetworkEvent.joinedRoom = Date.now();
+    });
     Network.on('battleStart', (data) => {
       console.log('battleStart received', data);
       if (data && data.slots) {
@@ -356,8 +390,8 @@ function setup() {//test
       handleNetworkEvent(event);
     });
     Network.on('snapshot', snapshot => {
-    applySnapshot(snapshot);
-    console.log('snapshot received', snapshot);
+      applySnapshot(snapshot);
+      _lastNetworkEvent.snapshot = Date.now();
     });
   }
 }
@@ -1830,6 +1864,36 @@ function drawAttackHitbox(fighter) {
 }
 
 function draw() {
+  // Perf diagnostics: sample center pixel when enabled to detect gray-frame toggles
+  if (DEBUG_PERF) {
+    try {
+      const cx = Math.floor(width / 2);
+      const cy = Math.floor(height / 2);
+      const col = get(cx, cy); // [r,g,b,a]
+      const isGray = col && Math.abs(col[0] - col[1]) < 4 && Math.abs(col[1] - col[2]) < 4 && col[0] > 30 && col[0] < 220;
+      if (typeof _prevCenterGray === 'undefined') _prevCenterGray = isGray;
+      if (isGray !== _prevCenterGray) {
+        _prevCenterGray = isGray;
+        const now = Date.now();
+        // Log a concise snapshot of runtime state to help pinpoint the toggler
+        console.log(`[PERF] centerGray=${isGray} frame=${frameCount} t=${now}`,
+                    'battleState=', battleState,
+                    'gameMode=', gameMode,
+                    'mainMenuActive=', mainMenuActive,
+                    'availableRooms=', (availableRooms || []).length,
+                    'myRoomState=', myRoomState ? true : false,
+                    'lastNetEvents=', {
+                      roomsList: _lastRoomsJSON ? (JSON.parse(_lastRoomsJSON).length || 0) : 0,
+                      lastRoomState: _lastNetworkEvent.roomState || null,
+                      lastSnapshot: _lastNetworkEvent.snapshot || null,
+                      lastJoined: _lastNetworkEvent.joinedRoom || null
+                    }
+        );
+      }
+    } catch (e) {
+      console.warn('PERF diagnostic failed', e);
+    }
+  }
   // If the main menu is active, render it (takes priority over everything)
   if (mainMenuActive) {
     drawMainMenu();

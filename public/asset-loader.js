@@ -115,9 +115,9 @@ const ASSET_LOADER = {
     assets.push('data/particles/particles.png');
     
     // Ultimate intro images
-    assets.push('data/ui/rendspaceint.png');
-    assets.push('data/ui/disposalint.png');
-    assets.push('data/ui/closingint.png');
+    assets.push('data/UI/rendspaceint.png');
+    assets.push('data/UI/disposalint.png');
+    assets.push('data/UI/closingint.png');
     
     // UI assets
     assets.push('data/UI/uivin.png');
@@ -193,13 +193,13 @@ const ASSET_LOADER = {
     
     // Load ultimate intro images
     window.ultimateImages = window.ultimateImages || {};
-    window.ultimateImages.rendspace = loadImage('data/ui/rendspaceint.png', () => {
+    window.ultimateImages.rendspace = loadImage('data/UI/rendspaceint.png', () => {
       this._onMenuAssetLoaded();
     }, (err) => console.error('Failed to load rendspace intro image:', err));
-    window.ultimateImages.disposal = loadImage('data/ui/disposalint.png', () => {
+    window.ultimateImages.disposal = loadImage('data/UI/disposalint.png', () => {
       this._onMenuAssetLoaded();
     }, (err) => console.error('Failed to load disposal intro image:', err));
-    window.ultimateImages.closing = loadImage('data/ui/closingint.png', () => {
+    window.ultimateImages.closing = loadImage('data/UI/closingint.png', () => {
       this._onMenuAssetLoaded();
     }, (err) => console.error('Failed to load closing time intro image:', err));
     
@@ -289,7 +289,7 @@ const ASSET_LOADER = {
         window.PRE_SCALED_ATLASES = {};
       }
       const preScaleAtlases = async () => {
-        const COMMON_SCALES = [0.8, 1.0, 1.2, 1.5, 2.0];
+        const COMMON_SCALES = [1.0]; // Reduced scales to avoid heavy pre-scaling on low-power devices
         for (const [atlasName, img] of Object.entries(atlases)) {
           if (img && img.width > 0) {
             for (const scale of COMMON_SCALES) {

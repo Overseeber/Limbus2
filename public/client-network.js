@@ -11,7 +11,7 @@ window.Network = {
     if (typeof io !== 'undefined') {
       // Try each server address in order until one connects
       const serverAddresses = [
-        'http://10.21.70.172:3000',  // school Pi
+        'http://10.21.69.212:3000',  // school Pi
         'http://192.168.50.60:3000',  // home Pi
         'http://localhost:3000'       // local testing
       ];
@@ -99,7 +99,6 @@ window.Network = {
       this._emit('attackResult', result);
     });
     socket.on('snapshot', (snapshot) => {
-      console.log('SNAPSHOT RECEIVED');
       this._emit('snapshot', snapshot);
     });
     socket.on('disconnect', (reason) => {
@@ -174,6 +173,10 @@ window.Network = {
   on(name, fn) {
     this.eventHandlers[name] = this.eventHandlers[name] || [];
     this.eventHandlers[name].push(fn);
+    // Diagnostic: warn if many handlers are registered for the same event
+    if (this.eventHandlers[name].length > 5) {
+      console.warn('[Network] many handlers registered for', name, this.eventHandlers[name].length);
+    }
   },
 
   _emit(name, payload) {

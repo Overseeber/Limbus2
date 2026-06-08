@@ -1793,75 +1793,6 @@ function drawSlamLandingOverlays() {
   });
 }
 
-/**
- * RESTORED: Draw debug hitbox for active attack using rect-based detection
- * Draws the actual rect hitbox like the original game's debug overlay
- */
-function drawAttackHitbox(fighter) {
-  if (!fighter || !fighter.pos) return;
-
-  // Get the character config to look up actual attack range for display
-  const charKey = fighter.characterKey || (fighter.constructor && fighter.constructor.name);
-  const charConfig = (typeof CHARACTERS !== 'undefined' && CHARACTERS[charKey]) || 
-                     (window.CHARACTERS && window.CHARACTERS[charKey]) || null;
-  
-  // Determine attack range from the current attack sequence
-  let attackRange = 120; // fallback
-  if (fighter.attackSequence > 0 && charConfig && charConfig.attacks) {
-    const attackKey = fighter.attackSequence === 1 ? 'light' :
-                      fighter.attackSequence === 2 ? 'medium' : 'heavy';
-    const attackDef = charConfig.attacks[attackKey];
-    if (attackDef && attackDef.range) {
-      attackRange = attackDef.range;
-    }
-  }
-  
-  // RESTORED: Calculate attack box using same formula as server (calcAttackBox)
-  const facing = fighter.facing || 1;
-  const atkBox = {
-    x: fighter.pos.x + facing * (attackRange / 2),
-    y: fighter.pos.y - 28,
-    w: attackRange,
-    h: 70
-  };
-  
-  // Draw the actual rect hitbox
-  const boxX = atkBox.x - atkBox.w / 2;
-  const boxY = atkBox.y;
-  const boxW = atkBox.w;
-  const boxH = atkBox.h;
-  
-  push();
-  // Attack hitbox - red when strike is active, yellow during startup/recovery
-  const hitboxColor = fighter.strikeActive ? color(255, 50, 50, 120) : color(255, 255, 50, 80);
-  fill(hitboxColor);
-  stroke(fighter.strikeActive ? color(255, 0, 0) : color(255, 255, 0));
-  strokeWeight(2);
-  rect(boxX, boxY, boxW, boxH);
-  
-  // Draw attack indicator label with actual range info
-  const attackLabel = fighter.strikeActive ? 'HITBOX ACTIVE' : 
-                      fighter.attackPhase === 'startup' ? 'STARTUP' :
-                      fighter.attackPhase === 'recovery' ? 'RECOVERY' : 'ATTACK';
-  fill(255);
-  textSize(10);
-  textAlign(LEFT, BOTTOM);
-  text(`${attackLabel} Seq:${fighter.attackSequence} Rng:${attackRange} Ph:${fighter.attackPhase}`, boxX, boxY - 5);
-  
-  // Draw range line from fighter center to edge of hitbox
-  stroke(255, 200, 0, 100);
-  strokeWeight(1);
-  line(fighter.pos.x, fighter.pos.y - 30, fighter.pos.x + facing * attackRange, fighter.pos.y - 30);
-  pop();
-  
-  // Draw player hitbox for reference (green outline)
-  push();
-  noFill();
-  stroke(0, 255, 0, 100);
-  strokeWeight(1);
-  rect(fighter.pos.x - 25, fighter.pos.y - 36, 50, 72);
-  pop();
-}
 
 function draw() {
   // Perf diagnostics: sample center pixel when enabled to detect gray-frame toggles
@@ -2030,10 +1961,6 @@ function draw() {
         fighter.draw();
         fighter.drawOverlays && fighter.drawOverlays();
 
-        // Draw attack hitboxes during active attacks or when the fighter is currently striking
-        if (fighter.attackSequence > 0 && fighter.attackPhase && fighter.attackPhase !== 'none') {
-          drawAttackHitbox(fighter);
-        }
       });
     }
     
@@ -2044,8 +1971,12 @@ function draw() {
     // Draw overhead healthbars for non-player fighters
     drawOverheadHealthbars();
 
+    // Draw debug overlay — world-space elements (hitboxes, labels, stagger bars)
+    drawDebugUI();
     endCamera();
-
+    
+    // Draw debug FPS — screen-space overlay (after camera)
+    drawDebugFPS();
     // Draw ultimate UI overlay (damage counter, etc.)
     if (typeof renderUltimateUI === 'function') {
       renderUltimateUI();
@@ -2253,19 +2184,10 @@ function drawOpeningSequence() {
   
   // Update interpolation targets before rendering
   updateClientInterpolation();
-  // Draw all fighters
-  if (window.allFighters) {
-    window.allFighters.forEach(fighter => fighter.draw());
-    
-    // Draw attack debug hitboxes
-    if (DEBUG) {
-      window.allFighters.forEach(fighter => {
-        if (fighter.strikeActive && fighter.attackSequence > 0) {
-          drawAttackHitbox(fighter);
-        }
-      });
+    // Draw all fighters
+    if (window.allFighters) {
+      window.allFighters.forEach(fighter => fighter.draw());
     }
-  }
   
   endCamera();
   
@@ -2524,11 +2446,6 @@ function drawArena() {
     image(window.bgView, viewOffsetX, viewOffsetY, bgWidth, bgHeight);
   }
 
-  if (DEBUG) {
-    fill(255);
-    textSize(12);
-    text(`FPS: ${nf(frameRate(), 2, 1)}`, 12, 18);
-  }
 }
 
 // Update client-side interpolation for smooth visuals between server snapshots

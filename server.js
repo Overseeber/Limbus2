@@ -327,7 +327,7 @@ socket.on('toggleReady', () => {
             });
         }
     });
-
+//cpu battles are ai assisted for testing purposes
     socket.on('startCpuBattle', (data) => {
         const roomId = `cpu-${socket.id}`;
         let room = roomList[roomId];

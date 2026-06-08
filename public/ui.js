@@ -197,20 +197,20 @@ function drawBattleAbilityIcon(fighter, activeName, offName, isActive, cooldown,
     drawBattleUISprite(activeName, x, y, size, size);
   }
 
-  // Cooldown overlay
-  if (cooldown > 0) {
-    push();
-    noStroke();
-    fill(0, 150);
-    const cdH = (cooldown / maxCd) * size;
-    rectMode(CORNER);
-    rect(x - size/2, y + size/2 - cdH, size, cdH);
-    fill(255);
-    textAlign(CENTER, CENTER);
-    textSize(10);
-    text(cooldown.toFixed(1), x, y);
-    pop();
-  }
+  // // Cooldown overlay
+  // if (cooldown > 0) {
+  //   push();
+  //   noStroke();
+  //   fill(0, 150);
+  //   const cdH = (cooldown / maxCd) * size;
+  //   rectMode(CORNER);
+  //   rect(x - size/2, y + size/2 - cdH, size, cdH);
+  //   fill(255);
+  //   textAlign(CENTER, CENTER);
+  //   textSize(10);
+  //   text(cooldown.toFixed(1), x, y);
+  //   pop();
+  // }
 
   // Activation glow
   if (isActive) {
@@ -482,7 +482,7 @@ function drawPauseMenuButton() {
 }
 
 // ==========================
-// ⏱ BATTLE TIMER (romanui)
+// ⏱ BATTLE TIMER 
 // ==========================
 function drawBattleTimer() {
   if (typeof battleState === 'undefined' || battleState !== 'battle') return;
@@ -568,13 +568,50 @@ function drawSettingsPanel() {
   fill(255);
   textAlign(CENTER, TOP);
   textSize(26);
-  text('SETTINGS (Placeholder)', width / 2, panelY + 18);
+  text('SETTINGS', width / 2, panelY + 18);
   fill(200);
   textSize(14);
   textAlign(LEFT, TOP);
   text('- Audio: (placeholder)', panelX + 24, panelY + 64);
   text('- Controls: (placeholder)', panelX + 24, panelY + 88);
-  text('- Graphics: (placeholder)', panelX + 24, panelY + 112);
+  
+  // Graphics: Debug toggle button
+  const gfxX = panelX + 24;
+  const gfxY = panelY + 112;
+  text('- Graphics:', gfxX, gfxY);
+  
+  const btnX = gfxX + 110;
+  const btnY = gfxY - 4;
+  const btnW = 180;
+  const btnH = 28;
+  
+  push();
+  if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled) {
+    fill(60, 180, 60);
+    stroke(100, 255, 100);
+  } else {
+    fill(60, 60, 60);
+    stroke(100, 100, 100);
+  }
+  strokeWeight(2);
+  rect(btnX, btnY, btnW, btnH, 6);
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(13);
+  const label = (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled) 
+    ? 'DEBUG: ON (click to toggle)' 
+    : 'DEBUG: OFF (click to toggle)';
+  text(label, btnX + btnW / 2, btnY + btnH / 2);
+  pop();
+  
+  // Check if button was clicked
+  if (mouseIsPressed && mouseX > btnX && mouseX < btnX + btnW && mouseY > btnY && mouseY < btnY + btnH) {
+    if (typeof setDebugGraphics === 'function') {
+      setDebugGraphics();
+    }
+  }
+  
   fill(180);
   textSize(12);
   textAlign(CENTER, TOP);
@@ -601,10 +638,7 @@ function drawCombatOver() {
   rect(width / 2, height / 2, width * 0.92, height * 0.86, 44);
   pop();
 
-  // Win/Lose sprite (6x6 = 384x384 native, display at 60% = ~230x230)
-  const isWin = combatOverOutcome && combatOverOutcome.toLowerCase().includes('win');
-  drawBattleUISprite(isWin ? 'win' : 'lose', width / 2, 150, 230, 230);
-
+  
   textSize(22);
   textAlign(CENTER, CENTER);
   fill(220);

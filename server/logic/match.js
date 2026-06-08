@@ -238,7 +238,7 @@ tick() {
             this.matchStartTime = Date.now();
         }
         const timeSinceStart = (Date.now() - this.matchStartTime) / 1000;
-        const isOpeningPhase = timeSinceStart < 2.5;
+        const isOpeningPhase = timeSinceStart < 4.0;
 
         // Update each player's authoritative state
         Object.values(this.players).forEach(player => {
@@ -277,6 +277,20 @@ tick() {
                     return;
                 }
                 
+                // CRITICAL: During opening phase, zero out velocity and clear ALL input
+                // BEFORE GameplayEngine processes it, to prevent ANY movement or directional changes
+                // regardless of player or CPU input.
+                if (isOpeningPhase) {
+                    player.gameState.velocity.x = 0;
+                    player.gameState.velocity.y = 0;
+                    player.input = { 
+                        left: false, right: false, up: false, down: false,
+                        attack: false, guard: false, dash: false, slam: false,
+                        attackPressed: false, attackReleased: false, evade: false,
+                        abilityQ: false, abilityX: false
+                    };
+                }
+                
         // Update gameplay state through GameplayEngine FIRST
         // This allows hit/stagger state to exit on input before input processing
         const config = {
@@ -308,15 +322,7 @@ tick() {
 
                 // Now process input with edge detection (after state updates)
                 // Skip ALL input during opening phase to prevent attacking at start
-                if (isOpeningPhase) {
-                    // Clear all input during opening phase (no movement, no actions)
-                    player.input = { 
-                        left: false, right: false, up: false, down: false,
-                        attack: false, guard: false, dash: false, slam: false,
-                        attackPressed: false, attackReleased: false, evade: false,
-                        abilityQ: false, abilityX: false
-                    };
-                } else {
+                if (!isOpeningPhase) {
                     // Process input normally after opening phase
                     if (player.ai) {
                         this.simulateAIInput(player);
@@ -553,7 +559,7 @@ tick() {
         const guardEdge = input.guard && !prevInput.guard;
         const canGuard = state.state !== 'hit' && 
                         (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
-                        state.hitstunTimer <= 0 && state.blockstunTimer <= 0 && state.whiffRecoveryTimer <= 0;
+                        state.hitstunTimer <= 0 && state.blockstunTimer <= 0;
         if (guardEdge && !state.isAttacking && canGuard) {
             // AUTO-FACE toward closest enemy when guard is FIRST pressed (edge-triggered)
             // This prevents continuous re-facing every tick while holding guard
@@ -693,7 +699,8 @@ tick() {
         // and the fighter is airborne. This prevents down-only inputs from
         // accidentally starting a slam on the server.
         const canSlam = state.state !== 'hit' && 
-                       (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
+                       (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
+                       state.whiffRecoveryTimer <= 0;
         if (input.slam && !input.up && !state.onGround && !state.isAttacking && canSlam && !player.isSlamAttacking) {
             this.startSlamAttack(player);
         }
@@ -1209,6 +1216,8 @@ tick() {
             player.slamHoldVisual = true;
             player.slamLandingHitbox = null;
             player.attackTimer = 1.0; // Slam cooldown
+            // Slams have a 3-second recovery timer (action lockout) on landing
+            state.whiffRecoveryTimer = 3;
             this.resolveSlamLanding(player);
             return;
         }
@@ -1433,12 +1442,20 @@ tick() {
     endAttack(player) {
         const state = player.gameState;
 
+        // Third attack of basic rotation: always applies a 3-second recovery timer
+        if (player.attackSequence === 3) {
+            state.whiffRecoveryTimer = 3;
+        }
+
         // Miss detection: if this attack didn't hit anyone, reset combo AND apply whiff recovery
         const cs = this.engine.combatState[state.id];
         if (cs && !cs.lastAttackHit) {
             this.engine.resetCombo(state.id);
             // Apply whiff recovery penalty: extended lockout after missed attack (0.3s)
-            state.whiffRecoveryTimer = 1.3;
+            // Only set if not already set to a higher value by the third-attack rule above
+            if (state.whiffRecoveryTimer < 1.3) {
+                state.whiffRecoveryTimer = 1.3;
+            }
         }
         // Clear the per-attack hit flag for next attack
         if (cs) cs.lastAttackHit = false;

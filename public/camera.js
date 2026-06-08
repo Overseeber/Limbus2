@@ -44,6 +44,9 @@ function updateCamera(dt) {
       cameraTargetX = ultimateFighter.pos.x;
       cameraTargetY = ultimateFighter.pos.y;
     }
+    
+    // SPRING MOMENTUM is disabled during ultimates (handled in the main block below)
+    // Position will use direct lerp instead of spring physics
   } else {
     const positions = fighters.map(f => f.pos).filter(p => p && typeof p.x === 'number' && typeof p.y === 'number');
     if (positions.length === 0) return;
@@ -62,41 +65,56 @@ function updateCamera(dt) {
     cameraTargetY = (top + bottom) / 2 - 60;
   }
 
-  // Scale XY motion intensity based on how far the camera is from the target.
-  const deltaX = cameraTargetX - cameraX;
-  const deltaY = cameraTargetY - cameraY;
-  const deltaDist = Math.hypot(deltaX, deltaY);
-  const positionStrength = constrain(deltaDist / 350, 0, 1);
-
-  // Softer spring and stronger damping to reduce bounce and make the camera settle faster.
-  const positionStiffness = lerp(16, 48, positionStrength);
-  const positionDamping = lerp(3.2, 1.2, positionStrength);
-
-  const accelX = deltaX * positionStiffness - cameraVX * positionDamping;
-  const accelY = deltaY * positionStiffness - cameraVY * positionDamping;
-
-  cameraVX += accelX * snapDt * 1.05;
-  cameraVY += accelY * snapDt * 1.05;
-
-  cameraX += cameraVX * snapDt;
-  cameraY += cameraVY * snapDt;
-
-  const newDeltaX = cameraTargetX - cameraX;
-  const newDeltaY = cameraTargetY - cameraY;
-  const overshootX = Math.sign(deltaX) !== Math.sign(newDeltaX) && Math.abs(newDeltaX) < 40;
-  const overshootY = Math.sign(deltaY) !== Math.sign(newDeltaY) && Math.abs(newDeltaY) < 40;
-
-  if (overshootX) {
-    cameraX = cameraTargetX;
+  // Check if any ultimate is active with momentum disabled
+  const anyUltimateNoMomentum = fighters.some(f => f.ultimateActive && f.ultimateNoMomentum);
+  
+  if (anyUltimateNoMomentum) {
+    // DISABLE CAMERA SPRING MOMENTUM during ultimates.
+    // Directly lerp camera position toward target (no spring physics = no overshoot bounce)
+    // Zoom still transitions smoothly.
+    const posLerpSpeed = 0.12;
+    cameraX = lerp(cameraX, cameraTargetX, posLerpSpeed);
+    cameraY = lerp(cameraY, cameraTargetY, posLerpSpeed);
+    // Reset spring velocity to prevent residual momentum
     cameraVX = 0;
-  }
-  if (overshootY) {
-    cameraY = cameraTargetY;
     cameraVY = 0;
-  }
+  } else {
+    // Scale XY motion intensity based on how far the camera is from the target.
+    const deltaX = cameraTargetX - cameraX;
+    const deltaY = cameraTargetY - cameraY;
+    const deltaDist = Math.hypot(deltaX, deltaY);
+    const positionStrength = constrain(deltaDist / 350, 0, 1);
 
-  if (Math.abs(deltaX) < 4 && Math.abs(cameraVX) < 20) cameraVX = 0;
-  if (Math.abs(deltaY) < 4 && Math.abs(cameraVY) < 20) cameraVY = 0;
+    // Softer spring and stronger damping to reduce bounce and make the camera settle faster.
+    const positionStiffness = lerp(16, 48, positionStrength);
+    const positionDamping = lerp(3.2, 1.2, positionStrength);
+
+    const accelX = deltaX * positionStiffness - cameraVX * positionDamping;
+    const accelY = deltaY * positionStiffness - cameraVY * positionDamping;
+
+    cameraVX += accelX * snapDt * 1.05;
+    cameraVY += accelY * snapDt * 1.05;
+
+    cameraX += cameraVX * snapDt;
+    cameraY += cameraVY * snapDt;
+
+    const newDeltaX = cameraTargetX - cameraX;
+    const newDeltaY = cameraTargetY - cameraY;
+    const overshootX = Math.sign(deltaX) !== Math.sign(newDeltaX) && Math.abs(newDeltaX) < 40;
+    const overshootY = Math.sign(deltaY) !== Math.sign(newDeltaY) && Math.abs(newDeltaY) < 40;
+
+    if (overshootX) {
+      cameraX = cameraTargetX;
+      cameraVX = 0;
+    }
+    if (overshootY) {
+      cameraY = cameraTargetY;
+      cameraVY = 0;
+    }
+
+    if (Math.abs(deltaX) < 4 && Math.abs(cameraVX) < 20) cameraVX = 0;
+    if (Math.abs(deltaY) < 4 && Math.abs(cameraVY) < 20) cameraVY = 0;
+  }
 
   // Zoom remains smooth without spring inertia.
   const zoomSpeed = 0.14;

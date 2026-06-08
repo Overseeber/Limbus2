@@ -90,7 +90,8 @@ const DIHUI_CONFIG = {
   },
   
   // ON HIT EFFECTS - Every successful hit inflicts these
-  onHitEffects: { bladetrailAfterimagePotency: 1, poiseCountGain: 1 },
+  // Poise behavior changed: now gives Poise Potency instead of Poise Count
+  onHitEffects: { bladetrailAfterimagePotency: 1, poisePotencyGain: 1 },
   
   abilities: {
     deathedge: {
@@ -99,15 +100,21 @@ const DIHUI_CONFIG = {
       range: 999, // Range calculated dynamically from cast to teleport position
       baseDamage: 2.0, // +100% damage (base is 1.0, so 2.0 = +100%)
       knockback: 100,
-      damagePerAfterimage: 0.02, // +2% per Bladetrail Afterimage on target
       target: 'furthest', // Target furthest enemy
+      // Windup: 0.1s per frame, ds1f1 is final frame after hold
       windupFrames: ['draw1', 'draw2', 'draw3', 'draw4', 'draw5', 'draw6'],
-      windupHoldDuration: 1.0, // Hold for 1 second after draw6
+      windupFrameDuration: 0.1, // 0.1 seconds per frame
+      windupHoldDuration: 0.3, // Hold 0.3 seconds after draw6 before ds1f1
       windupFinalSprite: 'ds1f1',
+      // Post-teleport: 0.1s per frame, ds2f2 hold 0.2s
       postTeleportFrames: ['djoust3', 'djoust4', 'ds2f2'],
-      postTeleportHoldDuration: 1.0, // Hold for 1 second after ds2f2
+      postTeleportFrameDuration: 0.1, // 0.1 seconds per frame
+      postTeleportHoldDuration: 0.2, // Hold 0.2 seconds after ds2f2
+      // Attack: dhalt1 (with dline), then dhalt2 hold 0.3s
       attackFrames: ['dhalt1', 'dhalt2'],
-      attackHoldDuration: 1.0, // Hold for 1 second after dhalt2
+      attackFrameDuration: 0.1, // 0.1 seconds per frame
+      attackHoldDuration: 0.3, // Hold 0.3 seconds after dhalt2
+      // Dline spawning
       dlinePerTenAfterimages: 1, // Spawn 1 dline per 10 bladetrail afterimages (rounded down) +1
       teleportBehind: true, // Teleport behind enemy
       teleportFrontIfAtEdge: true // If enemy has back to edge, teleport in front instead
@@ -120,7 +127,13 @@ const DIHUI_CONFIG = {
     max: 99,
     startingValue: 0,
     damageBonusPerStack: 0.01,  // +1% damage per stack
-    dbaPerTenStacks: 1          // 1 dba sprite per 10 stacks
+    // Visual: For every 10 stacks, draw one [dba] at center of opponent's position
+    // +- random(50) in both axis, random rotation
+    // Attached to owner of status, does not rotate after spawning
+    // When this status gets consumed, remove this image
+    dbaPerTenStacks: 1,         // 1 dba sprite per 10 stacks
+    dbaSpawnRangeX: 50,         // +-50 random offset X
+    dbaSpawnRangeY: 50          // +-50 random offset Y
   },
   
   superposedAfterimage: {

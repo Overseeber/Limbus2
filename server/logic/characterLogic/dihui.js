@@ -47,7 +47,7 @@ function removeStatus(fighter, type) {
 /**
  * Called when Dihui Star successfully hits a target.
  * - Inflict 1 [Bladetrail Afterimage] on target
- * - Gain 1 [Poise Count]
+ * - Gain 1 [Poise Potency] (NOT Poise Count - changed per spec)
  */
 function onSuccessfulHit(state, targetState, damage, config) {
   const effects = { statusesApplied: [] };
@@ -63,8 +63,8 @@ function onSuccessfulHit(state, targetState, damage, config) {
   const ba = ensureStatus(targetState, 'Bladetrail Afterimage', 1, 0);
   effects.statusesApplied.push('Bladetrail Afterimage');
 
-  // Gain 1 Poise Count
-  ensureStatus(state, 'Poise', 1, 0);
+  // Gain 1 Poise Potency (not count - changed per spec: "on hit: gain 1 poise potency")
+  ensureStatus(state, 'Poise', 0, 1);
   effects.poiseGained = true;
 
   // Track total Bladetrail Afterimage inflicted for [Dihui Star's Blade]
@@ -488,52 +488,94 @@ function updateSystems(state, dt, config) {
 //====================================================================
 // DEATHEDGE - ABILITY
 //====================================================================
-function executeDeathedge(state, abilityConfig, targetState, config) {
-  // If no target provided, find furthest enemy from combat state
-  if (!targetState) {
-    // This function is called by gameplayEngine which has access to combat state
-    // For now, we'll return success with no damage if no target is provided
-    // The client handles the visual effects and targeting
-    return { 
-      success: true, 
-      abilityId: 'deathedge',
-      ability: 'deathedge',
+/**
+ * NEW IMPLEMENTATION per spec:
+ * Range = from cast position to teleported position (horizontal only, ignore vertical)
+ * Attack: [dhalt1 with [dline] >dhalt2 (hold 0.3s)]
+ *   - Spawn 1 dline for every 10 [Bladetrail Afterimage] (rounded down) + 1 in the aoe
+ *   - Inflict 1 [Bladetrail Afterimage] for every 5% missing hp on target
+ *   - Consume up to 10 [Bladetrail Afterimage] and deal [Bladetrail Afterimage consumed] % of target max hp
+ * 
+ * This function is called from match.js _resolveDeathedgeExecution
+ * with state, abilityConfig, targetState, config, and an extra 'options' param
+ * that contains: castPosition, teleportPosition, baCountPreConsume
+ */
+function executeDeathedge(state, abilityConfig, targetState, config, options) {
+  if (!targetState || targetState.isDefeated) {
+    return { success: false, reason: 'No valid target' };
+  }
+
+  // --- Get Bladetrail Afterimage count on target before consumption ---
+  const baCount = options?.baCountPreConsume ?? getStatusCount(targetState, 'Bladetrail Afterimage');
+  
+  // --- Consume up to 10 Bladetrail Afterimage ---
+  const baToConsume = Math.min(baCount, 10);
+  
+  // Remove consumed Bladetrail Afterimage from target
+  if (baToConsume > 0) {
+    const baStatus = getStatus(targetState, 'Bladetrail Afterimage');
+    if (baStatus) {
+      baStatus.count = Math.max(0, (baStatus.count || 0) - baToConsume);
+      if (baStatus.count <= 0) {
+        removeStatus(targetState, 'Bladetrail Afterimage');
+      }
+    }
+  }
+  
+  const baAfterConsume = getStatusCount(targetState, 'Bladetrail Afterimage');
+
+  // --- Calculate range: horizontal distance between cast position and teleported position ---
+  const castPos = options?.castPosition || state.position;
+  const teleportPos = options?.teleportPosition || state.position;
+  const attackRange = Math.abs(teleportPos.x - castPos.x);
+  
+  // Check if target is in range (horizontal only, ignore vertical)
+  const targetInRange = Math.abs(targetState.position.x - teleportPos.x) <= attackRange;
+
+  if (!targetInRange) {
+    return {
+      success: true,
       hit: false,
-      damage: 0,
+      reason: 'Target out of range',
+      abilityId: 'deathedge',
+      baConsumed: baToConsume,
       cooldown: abilityConfig.cooldown || 14
     };
   }
 
-  if (targetState.isDefeated) {
-    return { success: false, reason: 'No valid target' };
+  // --- Inflict 1 [Bladetrail Afterimage] for every 5% missing hp on target ---
+  const targetMissingHpPercent = 1 - (targetState.hp / targetState.maxHp);
+  const baToInflict = Math.floor(targetMissingHpPercent / 0.05); // 1 per 5% missing hp
+  if (baToInflict > 0) {
+    ensureStatus(targetState, 'Bladetrail Afterimage', baToInflict, 0);
   }
 
-  // Base damage: +100%
+  // --- Deal damage: [Bladetrail Afterimage consumed] % of target max hp ---
+  const consumedPercentDamage = Math.floor(targetState.maxHp * (baToConsume / 100));
+  
+  // --- Base damage: +100% ---
   const baseDamage = abilityConfig.baseDamage || 2.0;
-  const damageMultiplier = baseDamage;
-
-  // Additional damage: +2% per Bladetrail Afterimage on target
-  const baCount = getStatusCount(targetState, 'Bladetrail Afterimage');
-  const additionalDamagePercent = baCount * (abilityConfig.damagePerAfterimage || 0.05);
-  const totalMultiplier = damageMultiplier + additionalDamagePercent;
-
-  let calculatedDamage = Math.floor(totalMultiplier * (state.baseDamage || 5));
-
+  let calculatedDamage = Math.floor(baseDamage * (state.baseDamage || 5));
+  
+  // Add consumed % of target max hp damage
+  calculatedDamage += consumedPercentDamage;
+  
   // Apply blade status damage bonus
   const bladeStatus = getStatus(state, "Dihui Star's Blade");
   const bladeDamageBonus = bladeStatus ? bladeStatus.count * (config.dihuiBlade.critDamagePerStack || 0.01) : 0;
   if (bladeDamageBonus > 0) {
-    calculatedDamage = Math.floor((calculatedDamage * (1 + bladeDamageBonus))*2);
+    calculatedDamage = Math.floor(calculatedDamage * (1 + bladeDamageBonus));
   }
 
   // Apply damage
   targetState.hp = Math.max(0, targetState.hp - calculatedDamage);
 
-  // Apply on-hit effects (inflict Bladetrail Afterimage, gain Poise)
+  // Apply on-hit effects (inflict Bladetrail Afterimage from onSuccessfulHit, gain Poise Potency)
   const hitEffects = onSuccessfulHit(state, targetState, calculatedDamage, config);
 
-  // Spawn dline instances: (BladetrailAfterimage / 10 rounded down) + 1
-  const dlineCount = Math.floor(baCount / 10) + 1;
+  // --- Dline spawning calculations ---
+  // Spawn 1 dline for every 10 [Bladetrail Afterimage] (rounded down) + 1
+  const dlineCount = Math.floor(baAfterConsume / 10) + 1;
 
   return {
     success: true,
@@ -543,6 +585,9 @@ function executeDeathedge(state, abilityConfig, targetState, config) {
     damage: calculatedDamage,
     targetHp: targetState.hp,
     dlineCount: dlineCount,
+    baConsumed: baToConsume,
+    baInflicted: baToInflict,
+    baAfterConsume: baAfterConsume,
     targetId: targetState.id,
     defeated: targetState.hp <= 0,
     statusesApplied: hitEffects?.statusesApplied || [],

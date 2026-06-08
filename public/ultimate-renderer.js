@@ -23,6 +23,8 @@ function applyUltimateState(fighter, state) {
   fighter.ultimateBackgroundDim = state.ultimateBackgroundDim || 0;
   fighter.ultimateName = state.ultimateName || '';
   fighter.ultimateDialogue = state.ultimateDialogue || '';
+  // Disable camera momentum during ultimates (camera snaps directly)
+  fighter.ultimateNoMomentum = !!state.ultimateNoMomentum;
   
   // Visual effects data
   if (state.ultimateRedLines) {

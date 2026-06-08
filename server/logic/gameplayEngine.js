@@ -539,8 +539,8 @@ class GameplayEngine {
     return { success: true };
   }
 
-  executeCharacterAbility(state, name, ac, targetState, config) {
-    try { const logic = require(`./characterLogic/${state.characterKey.toLowerCase()}`); const h = logic[name]; if (h) return h.call(this, state, ac, targetState, config); } catch(e) {}
+  executeCharacterAbility(state, name, ac, targetState, config, options) {
+    try { const logic = require(`./characterLogic/${state.characterKey.toLowerCase()}`); const h = logic[name]; if (h) return h.call(this, state, ac, targetState, config, options); } catch(e) {}
     return { success: false, reason: 'No handler' };
   }
 

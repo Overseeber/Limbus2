@@ -944,25 +944,26 @@ tick() {
      */
     updateAbilityAnimations(player, dt) {
         // Update Deathedge animation timer (Dihui Star)
-        // Animation has 3 phases:
-        //   Phase 0: Windup (6 frames × 0.2 + 1.0s hold)
-        //   Phase 1: Post-teleport (3 frames × 0.2 + 1.0s hold)
-        //   Phase 2: Attack (2 frames × 0.2 + 1.0s hold)
+        // Animation has 3 phases (updated timings per spec):
+        //   Phase 0: Windup (6 frames × 0.1s + 0.3s hold draw6, then ds1f1 sprite)
+        //   Phase 1: Post-teleport (3 frames × 0.1s + 0.2s hold ds2f2)
+        //   Phase 2: Attack (2 frames × 0.1s + 0.3s hold dhalt2)
         if (player.deathedgeActive) {
             player.deathedgeTimer -= dt;
             if (player.deathedgePhase === 0) {
                 const config = this.engine.getCharacterConfig(player.gameState.characterKey);
                 const abilityConfig = config?.abilities?.deathedge;
                 const windupFrameCount = (abilityConfig?.windupFrames?.length || 6);
-                const windupDuration = (windupFrameCount * 0.2) + (abilityConfig?.windupHoldDuration || 1.0);
+                const frameDuration = abilityConfig?.windupFrameDuration || 0.1;
+                const windupTotalTime = (windupFrameCount * frameDuration) + (abilityConfig?.windupHoldDuration || 0.3);
                 
-                // Increment frameIndex every 0.2 seconds
-                const frameTime = Math.floor(-player.deathedgeTimer / 0.2);
+                // Increment frameIndex every frameDuration seconds
+                const frameTime = Math.floor(-player.deathedgeTimer / frameDuration);
                 if (frameTime > player.deathedgeFrameIndex && frameTime < windupFrameCount) {
                     player.deathedgeFrameIndex = frameTime;
                 }
                 
-                if (player.deathedgeTimer <= -windupDuration) {
+                if (player.deathedgeTimer <= -windupTotalTime) {
                     // PERFORM TELEPORT at end of windup (after draw6→ds1f1)
                     // Teleport behind the furthest enemy (same calculation as activation)
                     if (player.deathedgeTargetId && !player.deathedgeTeleportPosition) {
@@ -973,13 +974,19 @@ tick() {
                             const teleportOffset = 150;
                             let teleportX;
                             
+                            // UPDATED TELEPORT LOGIC: Use enemy's back edge
+                            // Check if enemy's back is to the edge of arena
                             if (enemyState.facing === 1) {
+                                // Enemy facing right → back is to the left
                                 teleportX = enemyState.position.x - teleportOffset;
+                                // If enemy's back is at the edge, teleport in front instead
                                 if (teleportX < arenaMargin) {
                                     teleportX = enemyState.position.x + teleportOffset;
                                 }
                             } else {
+                                // Enemy facing left → back is to the right
                                 teleportX = enemyState.position.x + teleportOffset;
+                                // If enemy's back is at the edge, teleport in front instead
                                 if (teleportX > ARENA_WIDTH - arenaMargin) {
                                     teleportX = enemyState.position.x - teleportOffset;
                                 }
@@ -1002,15 +1009,16 @@ tick() {
                 const config = this.engine.getCharacterConfig(player.gameState.characterKey);
                 const abilityConfig = config?.abilities?.deathedge;
                 const postTeleportFrameCount = (abilityConfig?.postTeleportFrames?.length || 3);
-                const postTeleportDuration = (postTeleportFrameCount * 0.2) + (abilityConfig?.postTeleportHoldDuration || 1.0);
+                const postFrameDuration = abilityConfig?.postTeleportFrameDuration || 0.1;
+                const postTeleportTotalTime = (postTeleportFrameCount * postFrameDuration) + (abilityConfig?.postTeleportHoldDuration || 0.2);
                 
-                // Increment frameIndex every 0.2 seconds
-                const frameTime = Math.floor(-player.deathedgeTimer / 0.2);
+                // Increment frameIndex every frameDuration seconds
+                const frameTime = Math.floor(-player.deathedgeTimer / postFrameDuration);
                 if (frameTime > player.deathedgeFrameIndex && frameTime < postTeleportFrameCount) {
                     player.deathedgeFrameIndex = frameTime;
                 }
                 
-                if (player.deathedgeTimer <= -postTeleportDuration) {
+                if (player.deathedgeTimer <= -postTeleportTotalTime) {
                     player.deathedgePhase = 2;
                     player.deathedgeFrameIndex = 0;
                     player.deathedgeTimer = 0;
@@ -1019,19 +1027,21 @@ tick() {
                 const config = this.engine.getCharacterConfig(player.gameState.characterKey);
                 const abilityConfig = config?.abilities?.deathedge;
                 const attackFrameCount = (abilityConfig?.attackFrames?.length || 2);
-                const attackDuration = (attackFrameCount * 0.2) + (abilityConfig?.attackHoldDuration || 1.0);
+                const attackFrameDuration = abilityConfig?.attackFrameDuration || 0.1;
+                const attackTotalTime = (attackFrameCount * attackFrameDuration) + (abilityConfig?.attackHoldDuration || 0.3);
                 
-                // Increment frameIndex every 0.2 seconds
-                const frameTime = Math.floor(-player.deathedgeTimer / 0.2);
+                // Increment frameIndex every frameDuration seconds
+                const frameTime = Math.floor(-player.deathedgeTimer / attackFrameDuration);
                 if (frameTime > player.deathedgeFrameIndex && frameTime < attackFrameCount) {
                     player.deathedgeFrameIndex = frameTime;
                 }
                 
-                if (player.deathedgeTimer <= -attackDuration / 2 && !player.deathedgeExecuted) {
+                // Execute attack when dhalt1 finishes (after first frame)
+                if (frameTime >= 1 && !player.deathedgeExecuted) {
                     player.deathedgeExecuted = true;
                     this._resolveDeathedgeExecution(player);
                 }
-                if (player.deathedgeTimer <= -attackDuration) {
+                if (player.deathedgeTimer <= -attackTotalTime) {
                     player.deathedgeActive = false;
                     player.deathedgePhase = 0;
                     if (player.gameState.state === 'attack') {
@@ -1830,6 +1840,22 @@ tick() {
                 attacker.gameState.resources.accelerationRoundActive = false;
             }
 
+                // DIHUI STAR: Apply per-attack effects on hit
+            if (attacker.characterKey === 'DIHUI') {
+                const dihuiLogic = require('./characterLogic/dihui');
+                
+                if (attacker.attackSequence === 1) {
+                    // Attack 1: Gain 3 Poise Count
+                    dihuiLogic.applyAttack1Effects(attacker.gameState);
+                } else if (attacker.attackSequence === 2) {
+                    // Attack 2: Gain 3 Poise Count
+                    dihuiLogic.applyAttack2Effects(attacker.gameState);
+                } else if (attacker.attackSequence === 3) {
+                    // Attack 3: Inflict Bladetrail Afterimage, +30% crit damage
+                    dihuiLogic.applyAttack3Effects(attacker.gameState, defender.gameState);
+                }
+            }
+
                 // CALLISTO: Apply per-attack effects on hit
             if (attacker.characterKey === 'CALLISTO') {
                 const callistoLogic = require('./characterLogic/callisto');
@@ -2517,15 +2543,36 @@ tick() {
         const config = this.engine.getCharacterConfig(player.gameState.characterKey);
         const abilityConfig = config?.abilities?.deathedge;
         if (!abilityConfig) return;
-        const execResult = this.engine.executeCharacterAbility(player.gameState, 'deathedge', abilityConfig, defender.gameState, config);
+        
+        // Get Bladetrail Afterimage count BEFORE consumption
+        const baCount = (() => {
+            const ba = defender.gameState.statuses.find(s => s.type === 'Bladetrail Afterimage');
+            return ba ? ba.count : 0;
+        })();
+        
+        // Pass options to executeDeathedge: cast position, teleport position, BA count before consume
+        const options = {
+            castPosition: player.deathedgeCastPosition || player.gameState.position,
+            teleportPosition: player.deathedgeTeleportPosition || player.gameState.position,
+            baCountPreConsume: baCount
+        };
+        
+        // executeDeathedge now takes an options parameter as the 5th argument
+        const execResult = this.engine.executeCharacterAbility(player.gameState, 'deathedge', abilityConfig, defender.gameState, config, options);
         if (!execResult || !execResult.success) return;
         if (typeof execResult.targetHp === 'number') defender.gameState.hp = execResult.targetHp;
         if (execResult.defeated) defender.gameState.isDefeated = true;
-        defender.gameState.state = 'hit';
-        defender.gameState.hitTimer = 0.18;
+        
+        // Only set hit state if the attack actually hit
+        if (execResult.hit) {
+            defender.gameState.state = 'hit';
+            defender.gameState.hitTimer = 0.18;
+        }
+        
         let hitstopSeconds = abilityConfig.hitstop || 0.14;
         if (execResult.defeated) hitstopSeconds = Math.max(hitstopSeconds, 0.22);
         this.startHitstop(hitstopSeconds, 'ability-deathedge');
+        
         this.broadcast({
             type: 'HIT',
             attackerId: player.clientId,
@@ -2545,12 +2592,15 @@ tick() {
             shakeType: 'hit',
             shakeIntensity: computeHitShakeIntensity(execResult.damage || 0, { attackType: 'ability', defeated: !!execResult.defeated })
         });
+        
         if (execResult.dlineCount > 0) {
             this.broadcast({
                 type: 'DEATHEDGE_DLINE_SPAWN',
                 fighterId: player.clientId,
                 targetId: defender.clientId,
                 dlineCount: execResult.dlineCount,
+                baConsumed: execResult.baConsumed || 0,
+                baInflicted: execResult.baInflicted || 0,
                 targetX: defender.gameState.position.x,
                 targetY: defender.gameState.position.y
             });
@@ -2756,7 +2806,9 @@ tick() {
                 ultimateRedLines: player.ultimate ? player.ultimate.redLines || [] : [],
                 ultimateSkulls: player.ultimate ? player.ultimate.skulls || [] : [],
                 // Ultimate sprite for client animation
-                ultimateSprite: player.ultimate ? player.ultimate.currentSprite || '' : ''
+                ultimateSprite: player.ultimate ? player.ultimate.currentSprite || '' : '',
+                // Disable camera momentum during ultimates (prevents free camera drift)
+                ultimateNoMomentum: player.ultimateActive === true
             }))
         };
 

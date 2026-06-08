@@ -9,6 +9,10 @@
     <link rel="stylesheet" type="text/css" href="style.css">
 
     <script src="libraries/p5.min.js"></script>
+    <!-- Staged Asset Loading System (must load before sketch.js) -->
+    <script src="asset-loader.js"></script>
+    <!-- Main Menu Screen (must load before sketch.js) -->
+    <script src="main-menu.js"></script>
     <script>
       // Lightweight AudioWorklet polyfill: ensure `audioContext.audioWorklet.addModule`
       // exists so p5.sound won't throw when audioWorklet is unavailable.

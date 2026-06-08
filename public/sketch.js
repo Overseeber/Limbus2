@@ -253,63 +253,70 @@ let roomSlotButtons = [];
 let combatOverButtons = [];
 
 function preload() {
-  // Load sprite atlases for character sprites
-  if (typeof loadSpriteAtlases === 'function') {
-    loadSpriteAtlases();
-  } else {
-    console.warn('loadSpriteAtlases not yet loaded');
-  }
-
-  // Load background layers
-  window.bgSky = loadImage('data/batlbkg/bkgsy.png');
-  window.bgTr = loadImage('data/batlbkg/bkgtr.png');
-  window.bgFlr = loadImage('data/batlbkg/bkgflr.png');
-  window.bgView = loadImage('data/batlbkg/bkgview.png');
-
-  // Load shadow image
-  window.shadowImg = loadImage('data/particles/shade.png', () => {
-    console.log('Shadow image loaded successfully');
+  // ============================================================
+  // STAGE 1 (BOOT): Load only entry screen assets
+  // Only load assets from data/main/ and data/fonts/ directories
+  // ============================================================
+  
+  // Load main menu background images (Stage 1 - Boot)
+  mainMenuImages.mainbkg = loadImage('data/main/mainbkg.png', () => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Main menu background loaded');
   }, (err) => {
-    console.error('Failed to load shadow image:', err);
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load main menu background:', err);
   });
-
-  // Load stagger overlay image
-  window.staggerImg = loadImage('data/particles/stagger.png', () => {
-    console.log('Stagger image loaded successfully');
+  
+  mainMenuImages.mainlight = loadImage('data/main/mainlight.png', () => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Main menu light overlay loaded');
   }, (err) => {
-    console.error('Failed to load stagger image:', err);
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load main menu light:', err);
   });
-
-  // Load ultimate intro images
-  window.ultimateImages = {
-    rendspace: loadImage('data/ui/rendspaceint.png', () => {
-      console.log('Rendspace intro image loaded successfully');
-    }, (err) => {
-      console.error('Failed to load rendspace intro image:', err);
-    }),
-    disposal: loadImage('data/ui/disposalint.png', () => {
-      console.log('Disposal intro image loaded successfully');
-    }, (err) => {
-      console.error('Failed to load disposal intro image:', err);
-    }),
-    closing: loadImage('data/ui/closingint.png', () => {
-      console.log('Closing Time intro image loaded successfully');
-    }, (err) => {
-      console.error('Failed to load closing time intro image:', err);
-    })
-  };
-
-  // Load UI vignette image
-  window.uiVignette = loadImage('data/UI/uivin.png', () => {
-    console.log('UI vignette image loaded successfully');
+  
+  mainMenuImages.maintitle = loadImage('data/main/maintitle.png', () => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Main title loaded');
   }, (err) => {
-    console.error('Failed to load UI vignette image:', err);
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load main title:', err);
   });
+  
+  mainMenuImages.titlefull = loadImage('data/main/titlefull.png', () => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Full title loaded');
+  }, (err) => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load full title:', err);
+  });
+  
+  // Gameplay assets (Stage 2) are NOT loaded here anymore.
+  // They will be loaded in the background by ASSET_LOADER.startMenuAssetLoading()
+  // after the main menu becomes visible.
+  //
+  // See asset-loader.js for Stage 2 loading.
+  
+  console.log('[preload] Stage 1 boot assets enqueued');
 }
 
 function setup() {//test
   // Set canvas size to original constraints
   createCanvas(ARENA_WIDTH, ARENA_HEIGHT);
+
+  // Initialize main menu as the first screen
+  initMainMenu();
+  
+  // Start Stage 2 (background) asset loading immediately once the main menu is visible.
+  // The menu only uses Stage 1 assets, so we can start loading gameplay assets right away.
+  if (ASSET_LOADER && ASSET_LOADER.isBootReady()) {
+    ASSET_LOADER.startMenuAssetLoading();
+  } else {
+    // If boot assets aren't ready yet, set a callback
+    ASSET_LOADER.onBootComplete = () => {
+      ASSET_LOADER.startMenuAssetLoading();
+    };
+  }
 
   // Calculate scale factor to fit background images within original width while maintaining aspect ratio
   if (window.bgSky && window.bgSky.width > 0) {
@@ -329,11 +336,14 @@ function setup() {//test
 
   // Network room handlers
   if (typeof Network !== 'undefined') {
+    // Set a callback for when the network connects - main menu will update its prompt
+    Network.on('connect', () => {
+      console.log('[Network] Connected to server');
+    });
     Network.on('roomsList', (rooms) => { availableRooms = rooms || []; console.log('roomsList', availableRooms); });
     Network.on('roomState', (state) => { myRoomState = state; myRoomId = state.id; localSlotSelections = (state.slots || []).map(s => s.character || null); console.log('roomState', state); });
     Network.on('joinedRoom', (roomId) => { myRoomId = roomId; console.log('joinedRoom', roomId); });
     Network.on('battleStart', (data) => {
-      // This room's battle has started. Initialize battle from the player data.
       console.log('battleStart received', data);
       if (data && data.slots) {
         initRoomBattle(data.slots);
@@ -348,8 +358,7 @@ function setup() {//test
     Network.on('snapshot', snapshot => {
     applySnapshot(snapshot);
     console.log('snapshot received', snapshot);
-    
-});
+    });
   }
 }
 
@@ -1821,6 +1830,11 @@ function drawAttackHitbox(fighter) {
 }
 
 function draw() {
+  // If the main menu is active, render it (takes priority over everything)
+  if (mainMenuActive) {
+    drawMainMenu();
+    return;
+  }
   // If an ending sequence is active, render it instead of normal state flow
   if (endingSequenceActive) {
     drawEndingSequence();
@@ -2543,6 +2557,12 @@ function getPlayerControlledFighter() {
 }
 
 function keyPressed() {
+  // Handle main menu key press (takes priority)
+  if (mainMenuActive) {
+    handleMainMenuKeyPress();
+    return;
+  }
+
   // Handle pause menu navigation
 
   if ((pauseMenuOpen || pauseSettingsOpen) && battleState === BATTLE_STATES.BATTLE) {
@@ -2708,6 +2728,13 @@ function mousePressed() {
   console.log('MOUSE PRESSED FIRED');
   console.log('battleState', battleState);
 console.log('myRoomState', myRoomState);
+  
+  // Handle main menu click first (takes priority)
+  if (mainMenuActive) {
+    handleMainMenuClick();
+    return;
+  }
+  
   if (battleState === BATTLE_STATES.MODE_SELECT) {
     const mx = mouseX;
     const my = mouseY;

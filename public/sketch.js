@@ -2392,18 +2392,20 @@ function drawEndingSequence() {
   // Draw vignette / overlays
   drawDamageNumbers();
 
-  // Draw 'COMBAT END' text after zoom completes
+  // Draw 'COMBAT END' sprite after zoom completes
   if (endingSequenceTimer >= zoomDur) {
     const tProgress = constrain((endingSequenceTimer - zoomDur) / textDur, 0, 1);
     endingTextAlpha = lerp(0, 255, tProgress);
+    
+    // Determine if local player won (use same logic as combatOverOutcome determination)
+    const localFighter = player || (window.allFighters ? window.allFighters.find(f => f.isPlayerControlled) : null);
+    const isWin = localFighter && endingWinnerId === localFighter.clientId;
+    
     push();
     resetMatrix();
-    textAlign(CENTER, CENTER);
-    textSize(96);
-    fill(255, 255, 255, endingTextAlpha);
-    stroke(0, 0, 0, endingTextAlpha);
-    strokeWeight(6);
-    text('COMBAT END', width / 2, height / 2);
+    tint(255, endingTextAlpha);
+    drawBattleUISprite(isWin ? 'win' : 'lose', width / 2, height / 2, 300, 300);
+    noTint();
     pop();
   }
 

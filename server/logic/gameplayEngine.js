@@ -619,7 +619,14 @@ class GameplayEngine {
     this.resetCombo(defender.id);
 
     // Set hit state only if not staggered (staggered state takes priority)
-    if (defender.state !== 'staggered') { defender.state = 'hit'; defender.hitTimer = 0.18; }
+    if (defender.state !== 'staggered') {
+      defender.state = 'hit';
+      defender.hitTimer = 0.18;
+      defender.isAttacking = false;
+      defender.attackPhase = 'none';
+      defender.attackSequence = 0;
+      defender.strikeActive = false;
+    }
     
     // Apply knockback
     if (knock) { const dir = defender.position.x < attacker.position.x ? -1 : 1; const fk = this.calculateKnockback(knock, attacker); this.applyKnockback(defender, fk, dir, attacker); result.knockback = fk; }
@@ -701,6 +708,10 @@ class GameplayEngine {
       if (inputReceived) {
         state.state = 'idle';
         state.hitTimer = 0;
+        state.isAttacking = false;
+        state.attackPhase = 'none';
+        state.attackSequence = 0;
+        state.strikeActive = false;
         events.push({ type: 'STATE_CHANGE', from: 'hit', to: 'idle' });
       } else {
         // Hold hit state until the player provides input.

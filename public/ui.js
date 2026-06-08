@@ -386,21 +386,22 @@ function drawPlayerIndicator(fighter) {
 // ⚡ DASH CHARGES use normal rects, have the rects slowly fill up as dash charges regen
 // ==========================
 function drawDashChargesRing(fighter, x, y, width) {
-  const count = fighter.dashCharges;
+  const count = Math.max(0, Math.min(3, fighter.dashCharges || 0));
   const total = 3;
   // Each charge segment: 3 cells * 64 = 192 native, displayed at ~24x24
   const segSize = 64;
   push();
+  rectMode(CENTER);
   noStroke();
   for (let i = 0; i < total; i++) {
-    const cx = x + i * (segSize + 8) + segSize/2;
+    const cx = x + i * (segSize + 8) + segSize / 2;
+    const cy = y;
     if (i < count) {
       fill(100, 255, 100);
-      rect(cx, y + segSize/2, segSize, segSize/4);
     } else {
       fill(100);
-      rect(cx, y + segSize/2, segSize, segSize/4);
     }
+    rect(cx, cy, segSize, segSize / 4);
   }
   pop();
 }
@@ -604,13 +605,8 @@ function drawCombatOver() {
   const isWin = combatOverOutcome && combatOverOutcome.toLowerCase().includes('win');
   drawBattleUISprite(isWin ? 'win' : 'lose', width / 2, 150, 230, 230);
 
-  textAlign(CENTER, CENTER);
-  textSize(48);
-  noStroke();
-  fill(248, 200, 92);
-  text(combatOverOutcome || 'COMBAT OVER', width / 2, 310);
-
   textSize(22);
+  textAlign(CENTER, CENTER);
   fill(220);
   text(combatOverLine || summaryText || 'Combat has ended.', width / 2, 350);
 

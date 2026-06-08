@@ -38,6 +38,10 @@ class GameplayEngine {
       staggerRecoveryRate: config.staggerRecoveryRate || 12,  // Decay rate per second
       staggerRecoveryDelay: config.staggerRecoveryDelay || 2.0, // Recovery delay in seconds
       staggerDuration: 0,            // Total stagger duration when staggered
+      // === HITSTUN & BLOCKSTUN (action lockout) ===
+      hitstunTimer: 0,               // Cannot act during hitstun
+      blockstunTimer: 0,             // Cannot act during blockstun
+      whiffRecoveryTimer: 0,         // Extended recovery after missed attack
       // ==========================
       isDefeated: false,
       attackCooldown: 0, abilityCooldowns: {}, statuses: [],
@@ -626,6 +630,14 @@ class GameplayEngine {
       defender.attackPhase = 'none';
       defender.attackSequence = 0;
       defender.strikeActive = false;
+      // Apply hitstun: prevent action for 0.25s after hit
+      defender.hitstunTimer = 3.25;
+    }
+    
+    // Apply blockstun if guarding: prevent action for 0.15s
+    if (result.wasGuarded) {
+      attacker.blockstunTimer = 2.15;
+      attacker.state = 'hurt';
     }
     
     // Apply knockback
@@ -697,6 +709,18 @@ class GameplayEngine {
   updateFighter(state, dt, config, playerInput) {
     const events = [];
     this.updateCooldowns(state, dt);
+    
+    // === Update hitstun/blockstun timers ===
+    if (state.hitstunTimer > 0) {
+      state.hitstunTimer -= dt;
+    }
+    if (state.blockstunTimer > 0) {
+      state.blockstunTimer -= dt;
+    }
+    if (state.whiffRecoveryTimer > 0) {
+      state.whiffRecoveryTimer -= dt;
+    }
+    
     // Handle hurt/stun state: allow any player input to exit hit early.
     if (state.state === 'hit') {
       const inputReceived = playerInput && (

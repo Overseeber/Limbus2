@@ -205,12 +205,16 @@ class DamageNumber extends FloatingIndicator {
       }
     }
     
+    // Scale icon with damage text size
+    const scaledIconSize = this.size;
+    
     // Draw the source icon to the left of the damage number
-    const damageTextX = this.pos.x + (DAMAGE_CONSTANTS.ICON_SIZE / 2) + 6;
+    // Icon is centered vertically with the damage number
+    const damageTextX = this.pos.x + (scaledIconSize / 2) + 8;
     const damageTextY = this.pos.y;
-    const iconX = this.pos.x - (this.size / 2) - (DAMAGE_CONSTANTS.ICON_SIZE / 2) - 6;
-    const iconY = this.pos.y + this.size * 0.1;
-    this.drawAttackIcon(iconX, iconY, colors);
+    const iconX = this.pos.x - (scaledIconSize / 2) - 8;
+    const iconY = this.pos.y + (this.size / 2)+400;
+    this.drawAttackIcon(iconX, iconY, colors, scaledIconSize);
     
     // Draw damage number
     textSize(this.size);
@@ -250,22 +254,21 @@ class DamageNumber extends FloatingIndicator {
    * Draws a placeholder icon for the attack type
    * @param {Object} colors - Color object for the icon
    */
-  drawAttackIcon(iconX, iconY, colors) {
+  drawAttackIcon(iconX, iconY, colors, scaledSize) {
     push();
     imageMode(CENTER);
     noStroke();
 
-    const iconSize = DAMAGE_CONSTANTS.ICON_SIZE;
     if (this.damageType === 'burn') {
-      drawStatusIcon('Burn', iconX, iconY, iconSize);
+      drawStatusIcon('Burn', iconX, iconY, scaledSize);
     } else if (this.damageType === 'bleed') {
-      drawStatusIcon('Bleed', iconX, iconY, iconSize);
+      drawStatusIcon('Bleed', iconX, iconY, scaledSize);
     } else if (this.damageType === 'rupture') {
-      drawStatusIcon('Rupture', iconX, iconY, iconSize);
+      drawStatusIcon('Rupture', iconX, iconY, scaledSize);
     } else if (this.damageType === 'tremor') {
-      drawStatusIcon('Tremor', iconX, iconY, iconSize);
+      drawStatusIcon('Tremor', iconX, iconY, scaledSize);
     } else {
-      drawStatusIcon('Weapon', iconX, iconY, iconSize);
+      drawStatusIcon('Weapon', iconX, iconY, scaledSize);
     }
 
     pop();

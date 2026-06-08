@@ -100,6 +100,9 @@ class Match {
             gameState.isDashing = false;
             gameState.canDash = true;
             gameState.hitTimer = 0; // hitstun timer
+            gameState.hitstunTimer = 0;
+            gameState.blockstunTimer = 0;
+            gameState.whiffRecoveryTimer = 0;
             gameState.isEvading = false; // evade state
             gameState.evadeTimer = 0;    // evade duration timer
             
@@ -306,7 +309,7 @@ tick() {
                 // Now process input with edge detection (after state updates)
                 // Skip ALL input during opening phase to prevent attacking at start
                 if (isOpeningPhase) {
-                    // Clear all input during opening phase
+                    // Clear all input during opening phase (no movement, no actions)
                     player.input = { 
                         left: false, right: false, up: false, down: false,
                         attack: false, guard: false, dash: false, slam: false,
@@ -549,7 +552,8 @@ tick() {
         // GUARD INPUT
         const guardEdge = input.guard && !prevInput.guard;
         const canGuard = state.state !== 'hit' && 
-                        (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
+                        (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
+                        state.hitstunTimer <= 0 && state.blockstunTimer <= 0 && state.whiffRecoveryTimer <= 0;
         if (guardEdge && !state.isAttacking && canGuard) {
             // AUTO-FACE toward closest enemy when guard is FIRST pressed (edge-triggered)
             // This prevents continuous re-facing every tick while holding guard
@@ -563,7 +567,8 @@ tick() {
         // Check both state conditions AND canDash flag (Game Target sets canDash=false)
         const dashEdge = input.dash && !prevInput.dash;
         const canDash = (state.canDash !== false) && state.state !== 'hit' && state.state !== 'slam' &&
-                       (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
+                       (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
+                       state.hitstunTimer <= 0 && state.blockstunTimer <= 0 && state.whiffRecoveryTimer <= 0;
         if (dashEdge && state.dashCharges > 0 && !state.isAttacking && state.onGround && canDash) {
             const dashDir = input.right ? 1 : (input.left ? -1 : state.facing);
             const dashSpeed = ((typeof config.dashSpeed !== 'undefined' ? config.dashSpeed : 60) * 60);
@@ -612,8 +617,10 @@ tick() {
         const canAttackNow = player.attackTimer <= 0 || canChainAttack;
 
         // Allow attack if not in hit state (stagger is OK with staggerTimer <= 0)
+        // Also cannot attack during hitstun or blockstun
         const canAttack = state.state !== 'hit' && state.state !== 'slam' &&
-                         (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
+                         (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
+                         state.hitstunTimer <= 0 && state.blockstunTimer <= 0 && state.whiffRecoveryTimer <= 0;
 
         // Interrupt held combo state with any non-attack input.
         if (comboHoldActive && (
@@ -1426,10 +1433,12 @@ tick() {
     endAttack(player) {
         const state = player.gameState;
 
-        // Miss detection: if this attack didn't hit anyone, reset combo
+        // Miss detection: if this attack didn't hit anyone, reset combo AND apply whiff recovery
         const cs = this.engine.combatState[state.id];
         if (cs && !cs.lastAttackHit) {
             this.engine.resetCombo(state.id);
+            // Apply whiff recovery penalty: extended lockout after missed attack (0.3s)
+            state.whiffRecoveryTimer = 1.3;
         }
         // Clear the per-attack hit flag for next attack
         if (cs) cs.lastAttackHit = false;
@@ -2774,6 +2783,10 @@ tick() {
                 staggerTimer: player.gameState.staggerTimer || 0,
                 staggerRecoveryTimer: player.gameState.staggerRecoveryTimer || 0,
                 staggerDuration: player.gameState.staggerDuration || 0,
+                // Hitstun / Blockstun / Whiff recovery timers (action lockout)
+                hitstunTimer: player.gameState.hitstunTimer || 0,
+                blockstunTimer: player.gameState.blockstunTimer || 0,
+                whiffRecoveryTimer: player.gameState.whiffRecoveryTimer || 0,
                 // Ability cooldowns (for UI countdown timers)
                 abilityCooldowns: { ...player.gameState.abilityCooldowns } || {},
                 // Character-specific ability resources

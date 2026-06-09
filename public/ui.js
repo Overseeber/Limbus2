@@ -7,13 +7,7 @@
 
 function drawReadyScreen() {
   push();
-  fill(255);
-  textAlign(CENTER, CENTER);
-  textSize(30);
-  text('BIMBUSGAME:', width / 2, height / 2 - 80);
-  textSize(18);
-  text('WASD move, Right Click attack, Left Click defend, E evade', width / 2, height / 2 - 30);
-  text('Hold Right Click to charge heavy attack. Press ENTER to start.', width / 2, height / 2 + 0);
+
   pop();
 }
 
@@ -103,7 +97,7 @@ function drawPlayerHud() {
   push();
   noStroke();
   fill(20, 20, 20, 180);
-  rect(titleX, barStartY, barW, 8, 4);
+  rect(titleX, barStartY, barW, 4);
   if (hpPercent > 0.6) fill(66, 212, 146);
   else if (hpPercent > 0.3) fill(255, 204, 51);
   else fill(217, 77, 77);
@@ -111,21 +105,21 @@ function drawPlayerHud() {
   pop();
 
   // === Stagger Bar ===
-  const staggerY = barStartY + 120;
+  const staggerY = barStartY + 35;
   const staggerPercent = constrain(fighter.stagger / fighter.staggerThreshold, 0, 1);
   push();
   noStroke();
-  fill(20, 20, 20, 180);
-  rect(titleX, staggerY, barW, 6, 3);
+  fill(100, 180);
+  rect(titleX+30, staggerY, barW-15, 4);
   if (staggerPercent > 0) {
     fill(255, 100 + staggerPercent * 50, 50);
-    rect(titleX, staggerY, barW * staggerPercent, 6, 3);
+    rect(titleX+30, staggerY, (barW-15) * staggerPercent, 4);
   }
   pop();
 
   // === Dash Charges (ring sprites) ===
-  const dashY = staggerY + 10;
-  drawDashChargesRing(fighter, titleX, dashY, barW);
+  const dashY = staggerY + 20;
+  drawDashChargesRing(fighter, titleX+30, dashY, barW);
 
   // === Text overlay on title ===
   push();
@@ -169,6 +163,7 @@ const ultActive = !!fighter.ultimateAvailable;
   // Ability Icon (bottom-right of player hud area)
   const abilityX = titleX + titleW + 16;
   const abilityY = titleY + titleH - 32; // align with bottom of title bar area
+ 
 
   // Background slot
   drawBattleUISprite('fallbackability', abilityX, abilityY, 64, 64);
@@ -189,6 +184,15 @@ const ultActive = !!fighter.ultimateAvailable;
 // Generic ability icon drawer
 function drawBattleAbilityIcon(fighter, activeName, offName, isActive, cooldown, maxCd, x, y, size) {
   // Draw icon based on state
+  push();
+   if (isActive) {
+    tint(246, 255, 125);      // yellow glow
+  } else if (cooldown > 0) {
+    tint(50, 50, 50);         // greyed out
+  } else {
+    tint(255);                // normal
+  }
+
   if (isActive) {
     drawBattleUISprite(activeName, x, y, size, size);
   } else if (cooldown > 0) {
@@ -196,39 +200,41 @@ function drawBattleAbilityIcon(fighter, activeName, offName, isActive, cooldown,
   } else {
     drawBattleUISprite(activeName, x, y, size, size);
   }
-
-  // // Cooldown overlay
-  // if (cooldown > 0) {
-  //   push();
-  //   noStroke();
-  //   fill(0, 150);
-  //   const cdH = (cooldown / maxCd) * size;
-  //   rectMode(CORNER);
-  //   rect(x - size/2, y + size/2 - cdH, size, cdH);
-  //   fill(255);
-  //   textAlign(CENTER, CENTER);
-  //   textSize(10);
-  //   text(cooldown.toFixed(1), x, y);
-  //   pop();
-  // }
-
-  // Activation glow
-  if (isActive) {
+pop();
+  // Cooldown overlay
+  if (cooldown > 0) {
     push();
-    noFill();
-    stroke('#ffcc33');
-    strokeWeight(2);
-    rect(x - size/2 - 1, y - size/2 - 1, size + 2, size + 2, 4);
+    noStroke();
+    fill(0, 150);
+    const cdH = (cooldown / maxCd) * size;
+    rectMode(CORNER);
+   // rect(x - size/2, y + size/2 - cdH, size, cdH);
+  
+    fill(255);
+    textAlign(CENTER, CENTER);
+    textSize(10);
+    text(cooldown.toFixed(1), x, y + size/2 + 4);
     pop();
-  }
-
-  // Key hint
-  push();
+  } else {
+      push();
+     
   fill(255, 200);
   textAlign(CENTER, TOP);
   textSize(9);
   text('Q', x, y + size/2 + 4);
   pop();
+  }
+
+  // Activation glow
+  if (isActive) {
+    push();
+
+    pop();
+  
+  }
+
+  // Key hint
+  
 }
 
 function getOpponentFighter() {
@@ -281,29 +287,26 @@ function drawFighterHudPanel(fighter, panelX, panelY) {
     const safeHp = fighter.hp !== null && fighter.hp !== undefined ? fighter.hp : 0;
     const safeMaxHp = fighter.maxHp || 100;
     fill('#ffffff');
-    textSize(11);
-    text(`HP: ${safeHp.toFixed(0)} / ${safeMaxHp}`, panelX + 12, panelY + 44);
-    fill(200);
-    textSize(10);
-    text(`State: ${fighter.state || 'unknown'}`, panelX + 12, panelY + 62);
+    textSize(30);
+    text(`${safeHp.toFixed(0)}`, panelX + 12, panelY + 60);
+
 
     const comboRatio = constrain(fighter.comboTimer / fighter.comboTimeout, 0, 1);
-    fill('#ffcc33');
-    textSize(13);
-    text(`Combo: ${fighter.combo}`, panelX + 12, panelY + 82);
-    fill('#111');
-    rect(panelX + 12, panelY + 94, panelW - 24, 6, 3);
-    fill('#ffcc33');
-    rect(panelX + 12, panelY + 94, (panelW - 24) * comboRatio, 6, 3);
+textSize(10);
+     fill(255);
+  text('Combo', panelX + 14, panelY - 7);
+  text('X', panelX + 15, panelY - 20);
+  textSize(20 + `${fighter.combo}`.length * 2); // Dynamically increase combo number size based on digit count
+  text(`${fighter.combo}`, panelX + 30, panelY - 20);
   }
 
   const hpBarX = panelX + 12;
   const hpBarY = panelY + panelH - 18;
   const hpBarW = panelW - 24;
   fill('#222');
-  rect(hpBarX, hpBarY, hpBarW, 6, 3);
+  rect(hpBarX, hpBarY-10, hpBarW, 4);
   fill(isDefeated ? '#663333' : '#42d492');
-  rect(hpBarX, hpBarY, hpBarW * (isDefeated ? 0 : fighter.hp / fighter.maxHp), 6, 3);
+  rect(hpBarX, hpBarY-10, hpBarW * (isDefeated ? 0 : fighter.hp / fighter.maxHp), 4);
 
   if (!isDefeated) {
     fill('#222');
@@ -397,11 +400,11 @@ function drawDashChargesRing(fighter, x, y, width) {
     const cx = x + i * (segSize + 8) + segSize / 2;
     const cy = y;
     if (i < count) {
-      fill(100, 255, 100);
+      fill(118, 196, 232);
     } else {
       fill(100);
     }
-    rect(cx, cy, segSize, segSize / 4);
+    rect(cx, cy, segSize, segSize / 16);
   }
   pop();
 }

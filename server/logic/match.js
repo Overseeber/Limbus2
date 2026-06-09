@@ -2866,6 +2866,8 @@ tick() {
                 deathedgeTimer: player.deathedgeTimer || 0,
                 deathedgeFrameIndex: player.deathedgeFrameIndex || 0,
                 deathedgeTargetId: player.deathedgeTargetId || null,
+                // Ultimate availability based on character conditions
+                ultimateAvailable: !!(player.gameState.resources && player.gameState.resources.ultimateAvailable),
                 // Ultimate state (server-authoritative)
                 ultimateActive: !!player.ultimateActive,
                 ultimatePhase: player.ultimate ? player.ultimate.phase : 0,
@@ -3017,9 +3019,55 @@ tick() {
      * Activate ultimate - server authoritative
      * Teleports user to center, locks targets, sets up sequence
      */
+    /**
+     * Check if the player's ultimate condition is satisfied.
+     * Each character has unique unlock conditions:
+     *   Callisto: [Artwork: Tibia] >= 5 (artworkTibiaStacks >= 5)
+     *   Valencina: exiting overheat stage (no Overheat status)
+     *   Dihui: [Dihui Star's Blade] >= 50 (Blade count >= 50)
+     *   John: always available
+     */
+    canActivateUltimate(player) {
+        if (player.ultimateActive) return false;
+        if (player.gameState.isDefeated) return false;
+
+        const state = player.gameState;
+        const charKey = player.characterKey;
+
+        switch (charKey) {
+            case 'CALLISTO':
+                // Ultimate requires 5 Artwork: Tibia stacks
+                return (state.resources && state.resources.artworkTibiaStacks >= 5);
+            case 'VALENCINA':
+                // Ultimate available when NOT in Overheat (exiting overheat stage)
+                // Check Overheat status: if present and count > 0, can't ult
+                const overheatStatus = state.statuses ? state.statuses.find(s => s.type === 'Overheat') : null;
+                return !overheatStatus || overheatStatus.count <= 0;
+            case 'DIHUI':
+                // Ultimate requires [Dihui Star's Blade] >= 50
+                const bladeStatus = state.statuses ? state.statuses.find(s => s.type === "Dihui Star's Blade") : null;
+                return bladeStatus && bladeStatus.count >= 50;
+            case 'JOHN':
+                // Always available
+                return true;
+            default:
+                return true;
+        }
+    }
+
     activateUltimate(player) {
         if (player.ultimateActive) return;
         if (player.gameState.isDefeated) return;
+        
+        // Check ultimate conditions first
+        if (!this.canActivateUltimate(player)) {
+            this.broadcast({
+                type: 'ULTIMATE_FAILED',
+                fighterId: player.clientId,
+                reason: 'Conditions not met'
+            });
+            return;
+        }
         
         const state = player.gameState;
         const config = player.config;

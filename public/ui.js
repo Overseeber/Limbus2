@@ -149,8 +149,8 @@ function drawPlayerHud() {
   text(`${fighter.combo}`, titleX + 30, titleY - 20);
   pop();
 
- //ult ui
-const ultActive = fighter.ultimateActive || fighter.ultimateMeter >= 100;
+ // Ultimate UI: show active sprite when conditions are met, deactive otherwise
+const ultActive = !!fighter.ultimateAvailable;
   let ultSprite = 'closingui';
   let ultDeactiveSprite = 'closingdeactiveui';
   

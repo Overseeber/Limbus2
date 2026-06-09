@@ -486,6 +486,11 @@ function updateSystems(state, dt, config) {
   // 4. Check Shin activation
   checkShinActivation(state, config);
 
+  // 5. Update ultimate availability: available when NOT in Overheat
+  //    (Overheat count > 0 means overheated, can't ult)
+  const oh = getStatus(state, 'Overheat');
+  state.resources.ultimateAvailable = !oh || oh.count <= 0;
+
   return events;
 }
 

@@ -717,6 +717,9 @@ function processSnapshot(snapshot) {
             console.log(`⚔️ Server synced deathedgeActive: ${fighter.deathedgeActive}, Phase: ${fighter.deathedgePhase}, FrameIndex: ${fighter.deathedgeFrameIndex}`);
         }
         
+        // Apply ultimate availability from server (based on character conditions e.g. Artwork: Tibia >= 5, Blade >= 50, no Overheat)
+        fighter.ultimateAvailable = !!state.ultimateAvailable;
+
         // Apply ultimate state from server (for synced ultimate sequences)
         if (typeof applyUltimateState === 'function') {
             applyUltimateState(fighter, state);

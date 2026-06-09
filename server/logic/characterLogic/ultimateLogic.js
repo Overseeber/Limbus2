@@ -2,6 +2,11 @@
  * ULTIMATE LOGIC - Server-side authoritative ultimate implementations
  * Stateless pure functions that take game state and return updated state
  * All timing, positioning, damage, and sequencing controlled server-side
+ * 
+ * ALL DAMAGE MODIFIERS (Fragile, Protection, Sinking, Crit, etc.) are applied
+ * ADDITIVELY via engine.calculateFinalDamage(), NOT multiplicatively.
+ * 
+ * Formula: final = (rawDamage + comboFlat) × (1 + sumOfModifierFractions)
  */
 
 const ARENA_WIDTH = 1400;
@@ -103,6 +108,10 @@ function updateJohnUltimate(fighter, ult, enemies, dt) {
  * Phase 9: Attack 5 setup — center, enemy in front, cs3f2 + cs3s1, zoom 3.0
  * Phase 10: Attack 5 — 20 damage instances at 0.05s each, red lines
  * Phase 11: Final hold — cuend, 21 debris, zoom 1.0, hold 3s
+ * 
+ * CALLISTO-SPECIFIC DAMAGE: GetCallistoDamageModifier is called by the engine's
+ * getDamageModifierSum(), which is used by calculateFinalDamage() to apply
+ * additive modifiers (Artwork: Tibia, etc.).
  */
 function updateCallistoUltimate(fighter, ult, enemies, dt) {
   const targetEnemies = Array.isArray(enemies) ? enemies : [enemies];
@@ -965,7 +974,7 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
           });
         }
       
- 
+
         // Deal damage: +24 Base Damage, + Target Max HP × Bladetrail Afterimage %
         targetEnemies.forEach(e => {
           if (e && !e.isDefeated) {
@@ -1031,26 +1040,62 @@ function clampToArena(fighter) {
 function clampX(x) { return Math.max(100, Math.min(ARENA_WIDTH - 100, x)); }
 function clampY(y) { return Math.max(100, Math.min(ARENA_HEIGHT - 100, y)); }
 
-function dealUltDamage(fighter, ult, enemy, damage, isFinal, phase, applyKnockback) {
+/**
+ * Deal ultimate damage using the engine's additive damage modifier formula.
+ * 
+ * FORMULA (additive): finalDamage = (rawDamage + comboFlat) × (1 + sumOfModifierFractions)
+ * 
+ * This replaces the old multiplicative stacking that compounded Fragile × Protection ×
+ * Sinking × Crit × Staggered × etc. Each modifier now adds/subtracts its fraction
+ * from the base damage independently.
+ * 
+ * Requires an engine parameter to apply additive modifiers from status effects
+ * (Fragile, Protection, Sinking, Crit, Staggered, Charge Attack, etc.).
+ * 
+ * @param {Object} fighter - The attacking fighter state
+ * @param {Object} ult - The ultimate state object
+ * @param {Object} enemy - The defending enemy state
+ * @param {number} rawDamage - Raw damage value before modifiers
+ * @param {boolean} isFinal - Whether this is the final hit of the ultimate
+ * @param {number} phase - The ultimate phase number
+ * @param {boolean} applyKnockback - Whether to apply knockback
+ * @param {Object} [engine] - The GameplayEngine instance (required for additive damage modifiers)
+ * @returns {{ damage: number, hp: number, defeated: boolean, knockback: number }}
+ */
+function dealUltDamage(fighter, ult, enemy, rawDamage, isFinal, phase, applyKnockback, engine) {
   if (!enemy || enemy.isDefeated) return null;
   const originalStagger = enemy.stagger || 0;
   let knockbackAmount = 0;
   if (applyKnockback) knockbackAmount = isFinal ? 300 : 100;
 
-  // Apply combo-based damage for Valencina: Damage = BaseDamage + (3 × ComboCount)
-  let actualDamage = damage;
-  if (fighter.characterKey === 'VALENCINA') {
-    const comboCount = fighter.combo || 0;
-    actualDamage = Math.floor((fighter.baseDamage || 21) + (3 * comboCount));
-  } else if (fighter.characterKey === 'CALLISTO') {
-    // Apply Artwork: Tibia bonus if active
-    const artworkBonus = fighter.resources?.artworkTibiaStacks || 0;
-    if (artworkBonus > 0) {
-      actualDamage = Math.floor(damage * (1 + 0.1 * artworkBonus));
+  // Apply damage modifiers additively via the engine's calculateFinalDamage
+  // This ensures Fragile, Protection, Sinking, Crit, Charge Attack, Staggered,
+  // Callisto-specific modifiers (Artwork: Tibia, Passive 2, etc.) are all applied
+  // using the additive formula: (rawDamage + comboFlat) × (1 + modSum)
+  // 
+  // The engine can be passed as the 8th argument OR as ult.engine (set by match.js)
+  const effectiveEngine = engine || (ult && ult.engine) || null;
+  let finalDamageData;
+  if (effectiveEngine && typeof effectiveEngine.calculateFinalDamage === 'function') {
+    // Use the engine's additive formula, passing phase as attackType for character-specific logic
+    finalDamageData = effectiveEngine.calculateFinalDamage(rawDamage, fighter, enemy, phase);
+  } else {
+    // Fallback: raw damage without modifiers (for backward compatibility)
+    // Also compute base combo-based damage for Valencina/Callisto
+    let actualDamage = rawDamage;
+    if (fighter.characterKey === 'VALENCINA') {
+      const comboCount = fighter.combo || 0;
+      actualDamage = Math.floor((fighter.baseDamage || 21) + (3 * comboCount));
+    } else if (fighter.characterKey === 'CALLISTO') {
+      const artworkBonus = fighter.resources?.artworkTibiaStacks || 0;
+      if (artworkBonus > 0) {
+        actualDamage = Math.floor(rawDamage * (1 + 0.1 * artworkBonus));
+      }
     }
+    finalDamageData = { damage: Math.floor(actualDamage), isCrit: false };
   }
 
-  actualDamage = Math.floor(actualDamage);
+  const actualDamage = Math.floor(finalDamageData.damage);
   enemy.hp = Math.max(0, enemy.hp - actualDamage);
 
   if (knockbackAmount > 0 && !isFinal) {

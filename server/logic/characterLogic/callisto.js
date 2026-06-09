@@ -350,6 +350,9 @@ function calculateAttack3BonusDamage(targetState) {
  * Consumes up to 20 Corpus Ingredient.
  * At 20 consumed: +100% range, +50% damage, use cuf6 sprite + cus4 slash.
  * Per 20 spent: gain 1 Artwork: Tibia.
+ * 
+ * NOTE: Damage goes through engine.calculateFinalDamage() via the caller
+ * to apply all damage modifiers (Fragile, Protection, Crit, etc.)
  */
 function executeSlamAttack(state, abilityConfig, targetState, config) {
   if (!targetState) {
@@ -372,9 +375,13 @@ function executeSlamAttack(state, abilityConfig, targetState, config) {
     useCostumeSprite = true;
   }
 
-  // Calculate damage
-  const baseDamage = abilityConfig.baseDamage * damageMultiplier;
-  const damage = Math.floor(baseDamage * state.baseDamage);
+  // Calculate raw base damage (before additive modifiers)
+  const rawBaseDamage = Math.floor(abilityConfig.baseDamage * state.baseDamage * damageMultiplier);
+
+  // NOTE: The actual final damage with modifiers (Fragile, Protection, Crit, etc.)
+  // is computed by the caller using engine.calculateFinalDamage().
+  // This function returns the rawDamage for the caller to apply modifiers to.
+  // The rawDamage is used as-is if the caller doesn't apply modifiers.
 
   // Check hit (simplified - full hit detection done by engine)
   const hit = true; // Engine validates range/position
@@ -387,9 +394,6 @@ function executeSlamAttack(state, abilityConfig, targetState, config) {
       reason: 'Target out of range'
     };
   }
-
-  // Apply damage
-  targetState.hp = Math.max(0, targetState.hp - damage);
 
   // Apply stagger damage from ability config
   if (abilityConfig.statusEffects) {
@@ -417,15 +421,17 @@ function executeSlamAttack(state, abilityConfig, targetState, config) {
     success: true,
     ability: 'slam',
     hit: true,
-    damage: damage,
-    targetHp: targetState.hp,
+    rawDamage: rawBaseDamage,
     corpusConsumed: consumeResult.consumed,
     corpusRemaining: state.resources.corpusIngredient,
     artworkGained: consumeResult.artworkGained,
     artworkTotal: state.resources.artworkTibiaStacks,
     isMaxConsumption: isMaxConsumption,
     useCostumeSprite: useCostumeSprite,
-    defeated: targetState.hp <= 0
+    // Target HP is applied by the caller after damage modifiers
+    targetHp: 0,
+    damage: 0,
+    defeated: false
   };
 }
 
@@ -446,6 +452,8 @@ function executeSlamAttack(state, abilityConfig, targetState, config) {
  *   7. Counts as normal attack (combo/damage flow)
  *   8. Costs 10 Corpus Ingredient
  *   9. Gains 1 Artwork: Tibia
+ * 
+ * NOTE: Damage modifiers are applied by the caller using engine.calculateFinalDamage()
  */
 function executeInstallationArt(state, abilityConfig, targetStates, config) {
   this.engineRef = this.engineRef || this; // Support both call styles
@@ -476,45 +484,19 @@ function executeInstallationArt(state, abilityConfig, targetStates, config) {
   targets.forEach(targetState => {
     if (!targetState || targetState.isDefeated) return;
 
-    const baseDamage = abilityConfig.baseDamage || 1.0;
-    const damage = Math.floor(baseDamage * state.baseDamage);
+    // Raw base damage (before additive modifiers)
+    const rawBaseDamage = Math.floor(abilityConfig.baseDamage * state.baseDamage);
 
-    // Apply damage
-    targetState.hp = Math.max(0, targetState.hp - damage);
-
-    // Apply 8 Bleed
-    const bleed = getStatus(targetState, 'Bleed');
-    const bleedAmount = abilityConfig.bleedOnHit || 8;
-    if (bleed) {
-      bleed.count += bleedAmount;
-      bleed.potency += bleedAmount;
-    } else {
-      targetState.statuses.push({ type: 'Bleed', count: bleedAmount, potency: bleedAmount, timer: 0 });
-    }
-
-    // Apply Ingredient Shredding Wound
-    ensureStatus(targetState, 'IngredientShreddingWound', 1, 1);
-
-    // Apply Sinking: potency = damage dealt, 1 count
-    const sinking = getStatus(targetState, 'Sinking');
-    if (sinking) {
-      sinking.count += 1;
-      sinking.potency += damage;
-    } else {
-      targetState.statuses.push({ type: 'Sinking', count: 1, potency: damage, timer: 0 });
-    }
-
-    // Apply stagger damage = 500% of damage dealt
-    const staggerMultiplier = abilityConfig.staggerMultiplier || 5.0;
-    targetState.stagger = (targetState.stagger || 0) + Math.floor(damage * staggerMultiplier);
+    // NOTE: The final damage with all modifiers is applied by the caller
+    // using engine.calculateFinalDamage(). We return rawDamage for that purpose.
 
     results.push({
       targetId: targetState.id,
       hit: true,
-      damage: damage,
+      rawDamage: rawBaseDamage,
       targetHp: targetState.hp,
       statusesApplied: ['Bleed', 'IngredientShreddingWound', 'Sinking'],
-      staggerDamage: Math.floor(damage * staggerMultiplier),
+      staggerDamage: Math.floor(rawBaseDamage * (abilityConfig.staggerMultiplier || 5.0)),
       defeated: targetState.hp <= 0,
       // Provide world position for client VFX (if available)
       worldPos: targetState.pos || null,
@@ -652,115 +634,87 @@ function updateSystems(state, dt, config) {
 }
 
 //====================================================================
-// DAMAGE CALCULATION MODIFIERS
+// DAMAGE CALCULATION MODIFIERS - ADDITIVE FORMULA
 //====================================================================
 /**
- * Apply Callisto-specific damage modifiers.
- * Called from gameplayEngine.calculateDamage or equivalent.
+ * Get the additive damage modifier sum for Callisto-specific effects.
  * 
- * Modifiers in order:
- * 1. Base damage
- * 2. Combo damage (combo * comboDamage)
- * 3. Attack 3: +5% per negative effect on target (max 25%)
- * 4. Artwork: Tibia: +10% per stack
- * 5. PASSIVE 2: +5% per negative effect on target (max 30%)
- * 6. Damage Down: -10% per stack (on self)
- * 7. Damage Up: +10% per stack (on self)
- * 8. Ingredient Shredding Wound on target: -10% damage dealt
- * 9. Fragile on target: +10% per stack (handled in engine)
- * 10. Protection on target: -10% per stack (handled in engine)
+ * This returns a fraction (e.g. 0.3 for +30%, -0.2 for -20%) that gets
+ * added to the engine's global modifier sum.
+ * 
+ * The engine's formula is:
+ *   finalDamage = (rawBase + comboFlat) × (1 + globalModSum + thisModSum)
+ * 
+ * Modifiers (in order):
+ *   - Artwork: Tibia: +10% per stack
+ *   - Attack 3: +5% per negative effect on target (max 25%)
+ *   - PASSIVE 2: +5% per negative effect on target (max 30%)
+ *   - Damage Down on self: -10% per stack
+ *   - Damage Up on self: +10% per stack
+ * 
+ * NOTE: Fragile, Protection, Sinking, Crit are already handled by the engine's
+ * getDamageModifierSum(). This function only handles Callisto-specific modifiers.
+ * 
+ * @param {Object} attacker - The attacking fighter state
+ * @param {Object} defender - The defending fighter state
+ * @param {Object} config - Callisto's character config
+ * @param {number} [attackType] - The attack type (1, 2, 3, or undefined for abilities)
+ * @returns {number} The sum of all Callisto-specific modifier fractions
  */
-function calculateCallistoDamage(base, attacker, targetState, config, attackType) {
-  let damage = base;
-
-  // Combo damage
-  const combatState = this.combatState && this.combatState[attacker.id];
-  const comboCount = combatState ? (combatState.combo || 0) : 0;
-  damage += comboCount * (config.comboDamage || 4);
+function getCallistoDamageModifier(attacker, defender, config, attackType) {
+  let modSum = 0;
 
   // Attack 3 bonus: +5% per negative effect on target (max 25%)
   if (attackType === 3) {
-    const negativeCount = countNegativeEffects(targetState);
+    const negativeCount = countNegativeEffects(defender);
     const attack3Bonus = Math.min(negativeCount * 0.05, 0.25);
-    if (attack3Bonus > 0) {
-      damage *= (1 + attack3Bonus);
-    }
+    modSum += attack3Bonus;
   }
 
   // Artwork: Tibia: +10% per stack
   const artworkStacks = attacker.resources.artworkTibiaStacks || 0;
   if (artworkStacks > 0) {
-    damage *= (1 + artworkStacks * (config.artworkTibia.damageBonus || 0.1));
+    modSum += artworkStacks * (config.artworkTibia.damageBonus || 0.1);
   }
 
   // PASSIVE 2: +5% per negative effect on target (max 30%)
-  if (targetState) {
-    const negativeCount = countNegativeEffects(targetState);
+  if (defender) {
+    const negativeCount = countNegativeEffects(defender);
     const passive2Bonus = Math.min(negativeCount * (config.passives.exhibitionDamage.damagePerNegativeEffect || 0.05), 
                                     config.passives.exhibitionDamage.maxDamageBonus || 0.30);
-    if (passive2Bonus > 0) {
-      damage *= (1 + passive2Bonus);
-    }
+    modSum += passive2Bonus;
   }
 
   // Damage Down on self: -10% per stack
   const damageDownCount = getStatusCount(attacker, 'Damage Down');
   if (damageDownCount > 0) {
-    damage *= Math.max(0.1, 1 - damageDownCount * 0.1);
+    modSum -= damageDownCount * 0.1;
   }
 
   // Damage Up on self: +10% per stack
   const damageUpCount = getStatusCount(attacker, 'Damage Up');
   if (damageUpCount > 0) {
-    damage *= (1 + damageUpCount * 0.1);
+    modSum += damageUpCount * 0.1;
   }
 
-  // Ingredient Shredding Wound on target: -10% damage dealt (does not scale with stack)
-  if (targetState && hasStatus(targetState, 'IngredientShreddingWound')) {
-    damage *= (1 - 0.1);
-  }
+  return modSum;
+}
 
-  // Sinking on attacker: lose 1% damage dealt per potency
-  if (hasStatus(attacker, 'Sinking')) {
-    const s = getStatus(attacker, 'Sinking');
-    damage *= Math.max(0.5, 1 - 0.01 * s.potency);
-  }
-
-  // Fragile on defender: take 10% more damage per potency stack
-  if (targetState && hasStatus(targetState, 'Fragile')) {
-    const s = getStatus(targetState, 'Fragile');
-    damage *= 1 + 0.1 * s.potency;
-  }
-
-  // Protection on defender: take 10% less damage per potency stack
-  if (targetState && hasStatus(targetState, 'Protection')) {
-    const s = getStatus(targetState, 'Protection');
-    damage *= Math.max(0.1, 1 - 0.1 * s.potency);
-  }
-
-  // Sinking on defender: lose 5% damage resistance per 5 potency (take MORE damage)
-  if (targetState && hasStatus(targetState, 'Sinking')) {
-    const s = getStatus(targetState, 'Sinking');
-    damage *= 1 + 0.05 * Math.floor(s.potency / 5);
-  }
-
-  // Poise crit system: +5% crit chance per potency, on crit multiply damage x1.5
-  let isCrit = false;
-  let critChance = 0;
-  const poise = getStatus(attacker, 'Poise');
-  if (poise) critChance += 0.05 * poise.potency;
-  if (critChance > 0) {
-    const roll = Math.random();
-    isCrit = roll < critChance;
-    if (isCrit && poise) {
-      poise.count -= 1;
-      if (poise.count <= 0) removeStatus(attacker, 'Poise');
-    }
-  }
-  if (isCrit) damage *= 1.5;
-
-  // Return object matching engine's expected { damage, isCrit } format
-  return { damage: Math.floor(damage), isCrit };
+/**
+ * @deprecated Use getCallistoDamageModifier instead.
+ * Old multiplicative damage calculation - kept for reference but unused.
+ * The engine now uses getDamageModifierSum which calls getCallistoDamageModifier.
+ */
+function calculateCallistoDamage(base, attacker, targetState, config, attackType) {
+  // Just delegate to the engine's additive formula for backward compatibility
+  // This function is now deprecated - damage is computed by the engine
+  const rawBase = base * (attacker.baseDamage || 1);
+  const modFraction = getCallistoDamageModifier(attacker, targetState, config, attackType);
+  const comboCount = attacker.combo || 0;
+  const comboFlat = comboCount * (config.comboDamage || 4);
+  const damageForMods = rawBase + comboFlat;
+  let finalDamage = damageForMods * (1 + modFraction);
+  return { damage: Math.floor(finalDamage), isCrit: false };
 }
 
 /**
@@ -837,6 +791,9 @@ function onArtworkExpiration(state, config) {
  * 
  * 5-Phase ultimate with specific effects per phase.
  * On ult end: consume all Artwork: Tibia, Corpus Ingredient, reset spent corpus.
+ * 
+ * NOTE: Damage goes through engine.calculateFinalDamage() via dealUltDamage
+ * to apply all damage modifiers.
  */
 function executeUltimate(state, abilityConfig, targetStates, config) {
   const targets = Array.isArray(targetStates) ? targetStates : [targetStates];
@@ -851,63 +808,24 @@ function executeUltimate(state, abilityConfig, targetStates, config) {
   targets.forEach(targetState => {
     if (!targetState || targetState.isDefeated) return;
     
-    let damage = Math.floor((abilityConfig.baseDamage || 2.0) * (state.baseDamage || 27));
-    
-    // Apply Artwork: Tibia damage bonus
-    const artworkStacks = state.resources.artworkTibiaStacks || 0;
-    if (artworkStacks > 0) {
-      damage = Math.floor(damage * (1 + artworkStacks * 0.1));
-    }
-    
-    // Apply PASSIVE 2 damage bonus
-    const negativeCount = countNegativeEffects(targetState);
-    const passive2Bonus = Math.min(negativeCount * 0.05, 0.30);
-    if (passive2Bonus > 0) {
-      damage = Math.floor(damage * (1 + passive2Bonus));
-    }
-    
-    // Apply Damage Up on self
-    const damageUpCount = getStatusCount(state, 'Damage Up');
-    if (damageUpCount > 0) {
-      damage = Math.floor(damage * (1 + damageUpCount * 0.1));
-    }
-
-    targetState.hp = Math.max(0, targetState.hp - damage);
-    
-    // Apply ultimate status effects
-    const appliedStatuses = [];
-    if (abilityConfig.statusEffects) {
-      abilityConfig.statusEffects.forEach(statusConfig => {
-        ensureStatus(targetState, statusConfig.type, statusConfig.count || 1, statusConfig.potency || 1);
-        appliedStatuses.push(statusConfig.type);
-      });
-    }
+    // Raw base damage before modifiers (flat, not multiplied yet)
+    // dealUltDamage will call engine.calculateFinalDamage() to apply all modifiers
+    const rawDamage = Math.floor((abilityConfig.baseDamage || 2.0) * (state.baseDamage || 27));
 
     results.push({
       targetId: targetState.id,
       hit: true,
-      damage: damage,
+      rawDamage: rawDamage,
       targetHp: targetState.hp,
-      statuses: appliedStatuses,
-      defeated: targetState.hp <= 0
+      statuses: [],
+      defeated: false
     });
   });
-
-  // Consume all resources on ultimate end
-  const consumedCorpus = state.resources.corpusIngredient || 0;
-  const consumedArtwork = state.resources.artworkTibiaStacks || 0;
-  state.resources.corpusIngredient = 0;
-  state.resources.artworkTibiaStacks = 0;
-  state.resources.corpusSpentTotal = 0;
-  state.resources.slamBuffActive = false;
-  state.resources.slamBuffTimer = 0;
 
   return {
     success: true,
     ability: 'ultimate',
     artworkRequired: requiredArtwork,
-    artworkConsumed: consumedArtwork,
-    corpusConsumed: consumedCorpus,
     targetsHit: results.length,
     results: results
   };
@@ -998,7 +916,6 @@ function applyUltimatePhaseEffects(fighter, targetState, phase, config) {
 
 //====================================================================
 // EXPORTS
-//====================================================================
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = {
@@ -1022,6 +939,7 @@ if (typeof module !== 'undefined' && module.exports) {
     // Systems
     updateSystems,
     calculateCallistoDamage,
+    getCallistoDamageModifier,
     processPostAttackStackReduction,
     onArtworkExpiration,
     

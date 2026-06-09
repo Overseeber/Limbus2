@@ -38,10 +38,6 @@ class GameplayEngine {
       staggerRecoveryRate: config.staggerRecoveryRate || 12,  // Decay rate per second
       staggerRecoveryDelay: config.staggerRecoveryDelay || 2.0, // Recovery delay in seconds
       staggerDuration: 0,            // Total stagger duration when staggered
-      // === HITSTUN & BLOCKSTUN (action lockout) ===
-      hitstunTimer: 0,               // Cannot act during hitstun
-      blockstunTimer: 0,             // Cannot act during blockstun
-      whiffRecoveryTimer: 0,         // Extended recovery after missed attack
       // ==========================
       isDefeated: false,
       attackCooldown: 0, abilityCooldowns: {}, statuses: [],
@@ -96,62 +92,175 @@ class GameplayEngine {
     return { hit: this.hitOpponent(this.calcAttackBox(aPos, facing, range), dPos, cd > 0), distance: Math.hypot(aPos.x - dPos.x, 0) };
   }
 
-  calculateDamage(base, attacker, defender) {
-    let d = base * (attacker.baseDamage || 1);
+  /**
+   * Calculate the additive sum of all damage modifier fractions.
+   * 
+   * Damage formula:
+   *   damageForMods = rawBase + comboFlat
+   *   finalDamage = damageForMods × (1 + modSum)
+   * 
+   * Where modSum is the sum of all percentage modifiers AS FRACTIONS:
+   *   - Fragile  (10% per pot):  +0.1×pot
+   *   - Protection (10% per pot): -0.1×pot
+   *   - Sinking on attacker (1% per pot): -0.01×pot (max -0.5)
+   *   - Staggered (+100%): +1.0
+   *   - Charge Attack (+40%): +0.4
+   *   - Attack Counter 3 (+100%): +1.0
+   *   - Crit (+50%): +0.5
+   *   - Overheat (-20%): -0.2
+   *   - etc.
+   * 
+   * @param {number} rawBase - The raw base damage (baseMultiplier × attacker.baseDamage for normal attacks)
+   * @param {Object} attacker - The attacking fighter state
+   * @param {Object} defender - The defending fighter state
+   * @param {number} [attackType] - Optional attack type for character-specific logic (e.g. 1,2,3 for Callisto)
+   * @returns {{ damageForMods: number, modSum: number, comboFlat: number, isCrit: boolean }}
+   */
+  getDamageModifierSum(rawBase, attacker, defender, attackType) {
     const cs = this.combatState[attacker.id] || {};
-    const config = this.getCharacterConfig(attacker.characterKey);
+    const comboCount = cs.combo || 0;
     
-    // VALENCINA: Use custom formula: Damage = BaseDamage + (ComboDamage × ComboCount)
+    // Flat combo damage addition — this is base damage bonus, not a percentage
+    let comboFlat = 0;
     if (attacker.characterKey === 'VALENCINA') {
-      const comboCount = cs.combo || 0;
-      const comboDamage = 3; // From oldclientgameplay reference
-      d = (attacker.baseDamage || 21) + (comboDamage * comboCount);
+      comboFlat = comboCount * 3; // From oldclientgameplay reference
     } else {
-      d += (cs.combo || 0) * COMBO_DAMAGE_PER_STACK;
+      comboFlat = comboCount * COMBO_DAMAGE_PER_STACK;
     }
     
-    // Overheat: Valencina deals -20% damage while in Overheat
+    // The base value that all percentage modifiers scale off of
+    const damageForMods = rawBase + comboFlat;
+    
+    // Sum of all percentage modifier fractions (e.g. 0.1 for +10%, -0.2 for -20%)
+    let modSum = 0;
+    
+    // Charge attack: +40%
+    if (cs.chargeAttack) modSum += 0.4;
+    
+    // Attack counter 3: +100%
+    if (cs.attackCounter === 3) modSum += 1.0;
+    
+    // Staggered: +100%
+    if (defender.state === 'staggered') modSum += 1.0;
+    
+    // Overheat (Valencina): -20%
     if (attacker.characterKey === 'VALENCINA') {
       const overheat = this.getStatus(attacker, 'Overheat');
       if (overheat && overheat.count > 0) {
-        d *= (1 - (attacker.resources.overheatDamageReduction || 0.2));
+        modSum -= (attacker.resources?.overheatDamageReduction || 0.2);
       }
     }
     
-    if (cs.attackCounter === 3) d *= 2;
-    if (cs.chargeAttack) d *= 1.4;
-    // DOUBLE DAMAGE while staggered (authoritative server-side)
-    if (defender.state === 'staggered') d *= 2;
-    
-    // CALLISTO-SPECIFIC DAMAGE MODIFIERS (via character logic)
-    if (attacker.characterKey === 'CALLISTO' && config) {
-      try {
-        const callistoLogic = require('./characterLogic/callisto');
-        if (callistoLogic && callistoLogic.calculateCallistoDamage) {
-          return callistoLogic.calculateCallistoDamage.call(this, d, attacker, defender, config, cs.attackCounter);
-        }
-      } catch(e) {}
-      // Fallback: basic Artwork: Tibia bonus
-      if (attacker.resources.artworkTibiaStacks > 0) d *= 1 + 0.1 * attacker.resources.artworkTibiaStacks;
-    }
-
-    // Ingredient Shredding Wound on defender: -10% damage dealt (does not scale)
+    // Ingredient Shredding Wound on defender: -10%
     if (this.hasStatus(defender, 'IngredientShreddingWound')) {
-      d *= 0.9;
+      modSum -= 0.1;
     }
     
-    // Sinking on attacker: lose 1% damage dealt per potency
-    if (this.hasStatus(attacker, 'Sinking')) { const s = this.getStatus(attacker, 'Sinking'); d *= Math.max(0.5, 1 - 0.01 * s.potency); }
-    // Fragile on defender: take 10% more damage per potency stack
-    if (this.hasStatus(defender, 'Fragile')) { const s = this.getStatus(defender, 'Fragile'); d *= 1 + 0.1 * s.potency; }
-    // Protection on defender: take 10% less damage per potency stack
-    if (this.hasStatus(defender, 'Protection')) { const s = this.getStatus(defender, 'Protection'); d *= Math.max(0.1, 1 - 0.1 * s.potency); }
-    // Sinking on defender: lose 5% damage resistance per 5 potency (take MORE damage)
-    if (this.hasStatus(defender, 'Sinking')) { const s = this.getStatus(defender, 'Sinking'); d *= 1 + 0.05 * Math.floor(s.potency / 5); }
-    // Poise crit system: +5% crit chance per potency, on crit multiply damage x1.5
+    // Sinking on attacker: -1% per potency (max -50%)
+    if (this.hasStatus(attacker, 'Sinking')) {
+      const s = this.getStatus(attacker, 'Sinking');
+      modSum -= Math.min(0.5, 0.01 * s.potency);
+    }
+    
+    // Fragile on defender: +10% per potency
+    if (this.hasStatus(defender, 'Fragile')) {
+      const s = this.getStatus(defender, 'Fragile');
+      modSum += 0.1 * s.potency;
+    }
+    
+    // Protection on defender: -10% per potency (min 10% damage, so modSum can go as low as -0.9)
+    if (this.hasStatus(defender, 'Protection')) {
+      const s = this.getStatus(defender, 'Protection');
+      modSum -= Math.min(0.9, 0.1 * s.potency);
+    }
+    
+    // Sinking on defender: +5% per 5 potency (lose damage resistance)
+    if (this.hasStatus(defender, 'Sinking')) {
+      const s = this.getStatus(defender, 'Sinking');
+      modSum += 0.05 * Math.floor(s.potency / 5);
+    }
+    
+    // CALLISTO-SPECIFIC MODIFIERS
+    if (attacker.characterKey === 'CALLISTO') {
+      const config = this.getCharacterConfig(attacker.characterKey);
+      if (config) {
+        try {
+          const callistoLogic = require('./characterLogic/callisto');
+          if (callistoLogic && callistoLogic.getCallistoDamageModifier) {
+            // Returns the additive modifier sum for Callisto-specific effects
+            // (Artwork: Tibia, Passive 2, Attack 3, Damage Down/Up)
+            const charModSum = callistoLogic.getCallistoDamageModifier(attacker, defender, config, attackType || cs.attackCounter);
+            modSum += charModSum;
+          }
+        } catch(e) {
+          // Fallback: basic Artwork: Tibia bonus
+          if (attacker.resources.artworkTibiaStacks > 0) {
+            modSum += 0.1 * attacker.resources.artworkTibiaStacks;
+          }
+        }
+      } else if (attacker.resources.artworkTibiaStacks > 0) {
+        // Fallback: basic Artwork: Tibia bonus
+        modSum += 0.1 * attacker.resources.artworkTibiaStacks;
+      }
+    }
+    
+    // Poise crit system: +50% damage on crit
     const critResult = this.rollCrit(attacker);
-    if (critResult.isCrit) d *= 1.5;
-    return { damage: Math.floor(d), isCrit: critResult.isCrit };
+    if (critResult.isCrit) modSum += 0.5;
+    
+    return { damageForMods, modSum, comboFlat, isCrit: critResult.isCrit };
+  }
+
+  /**
+   * Calculate damage using additive formula for normal attacks.
+   * 
+   * Formula: final = (rawBase + comboFlat) × (1 + sumOfModifierFractions)
+   * 
+   * Where rawBase = baseMultiplier × attacker.baseDamage
+   * 
+   * @param {number} base - Base damage multiplier from attack definition
+   * @param {Object} attacker - The attacking fighter state
+   * @param {Object} defender - The defending fighter state
+   * @returns {{ damage: number, isCrit: boolean }}
+   */
+  calculateDamage(base, attacker, defender) {
+    // Raw base: attack multiplier × character's base damage stat
+    const rawBase = base * (attacker.baseDamage || 1);
+    
+    // Get all modifiers additively summed
+    const { damageForMods, modSum, isCrit } = this.getDamageModifierSum(rawBase, attacker, defender);
+    
+    // Apply the additive formula: damageForMods × (1 + modSum)
+    // This means each modifier adds/subtracts its fraction of damageForMods
+    let finalDamage = damageForMods * Math.max(0, 1 + modSum);
+    
+    return { damage: Math.floor(finalDamage), isCrit };
+  }
+
+  /**
+   * Calculate damage for ultimates and abilities using additive formula.
+   * Unlike calculateDamage(), this takes an already-computed raw damage value
+   * and does NOT multiply by attacker.baseDamage again.
+   * 
+   * Formula: final = (rawDamage + comboFlat) × (1 + sumOfModifierFractions)
+   * 
+   * This ensures ultimates and abilities are affected by the same damage modifiers
+   * (Fragile, Protection, Sinking, Crit, etc.) as normal attacks.
+   * 
+   * @param {number} rawDamage - The pre-computed damage before modifiers (e.g. from ultimate definition)
+   * @param {Object} attacker - The attacking fighter state
+   * @param {Object} defender - The defending fighter state
+   * @param {number} [attackType] - Optional attack type for character-specific logic
+   * @returns {{ damage: number, isCrit: boolean }}
+   */
+  calculateFinalDamage(rawDamage, attacker, defender, attackType) {
+    // Get all modifiers additively summed (uses rawDamage directly as the base)
+    const { damageForMods, modSum, isCrit } = this.getDamageModifierSum(rawDamage, attacker, defender, attackType);
+    
+    // Apply the additive formula
+    let finalDamage = damageForMods * Math.max(0, 1 + modSum);
+    
+    return { damage: Math.floor(finalDamage), isCrit };
   }
 
   calculateKnockback(base, attacker) { return Math.floor(Math.max(0, base) * (attacker.knockbackMultiplier || 1.0)); }
@@ -623,22 +732,7 @@ class GameplayEngine {
     this.resetCombo(defender.id);
 
     // Set hit state only if not staggered (staggered state takes priority)
-    if (defender.state !== 'staggered') {
-      defender.state = 'hit';
-      defender.hitTimer = 0.18;
-      defender.isAttacking = false;
-      defender.attackPhase = 'none';
-      defender.attackSequence = 0;
-      defender.strikeActive = false;
-      // Apply hitstun: prevent action for 0.25s after hit
-      defender.hitstunTimer = 3.25;
-    }
-    
-    // Apply blockstun if guarding: prevent action for 0.15s
-    if (result.wasGuarded) {
-      attacker.blockstunTimer = 2.15;
-      attacker.state = 'hurt';
-    }
+    if (defender.state !== 'staggered') { defender.state = 'hit'; defender.hitTimer = 0.18; }
     
     // Apply knockback
     if (knock) { const dir = defender.position.x < attacker.position.x ? -1 : 1; const fk = this.calculateKnockback(knock, attacker); this.applyKnockback(defender, fk, dir, attacker); result.knockback = fk; }
@@ -709,18 +803,6 @@ class GameplayEngine {
   updateFighter(state, dt, config, playerInput) {
     const events = [];
     this.updateCooldowns(state, dt);
-    
-    // === Update hitstun/blockstun timers ===
-    if (state.hitstunTimer > 0) {
-      state.hitstunTimer -= dt;
-    }
-    if (state.blockstunTimer > 0) {
-      state.blockstunTimer -= dt;
-    }
-    if (state.whiffRecoveryTimer > 0) {
-      state.whiffRecoveryTimer -= dt;
-    }
-    
     // Handle hurt/stun state: allow any player input to exit hit early.
     if (state.state === 'hit') {
       const inputReceived = playerInput && (
@@ -732,10 +814,6 @@ class GameplayEngine {
       if (inputReceived) {
         state.state = 'idle';
         state.hitTimer = 0;
-        state.isAttacking = false;
-        state.attackPhase = 'none';
-        state.attackSequence = 0;
-        state.strikeActive = false;
         events.push({ type: 'STATE_CHANGE', from: 'hit', to: 'idle' });
       } else {
         // Hold hit state until the player provides input.

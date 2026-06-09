@@ -2669,12 +2669,57 @@ tick() {
             const defender = this.players[r.targetId];
             if (!defender) return;
 
-            if (typeof r.targetHp === 'number') defender.gameState.hp = r.targetHp;
-            if (r.defeated) defender.gameState.isDefeated = true;
+            // Apply damage modifiers additively via the engine (Fragile, Protection, Sinking, Crit, etc.)
+            // Formula: final = (rawDamage + comboFlat) × (1 + modSum)
+            const attackerState = player.gameState;
+            const defenderState = defender.gameState;
+            
+            // Use rawDamage from the ability handler (which is abilityConfig.baseDamage * state.baseDamage)
+            // and apply additive damage modifiers through the engine
+            let finalDamage = 0;
+            let isCrit = false;
+            if (r.rawDamage && typeof r.rawDamage === 'number') {
+                const dmgResult = this.engine.calculateFinalDamage(r.rawDamage, attackerState, defenderState);
+                finalDamage = dmgResult.damage;
+                isCrit = dmgResult.isCrit;
+                
+                // Apply the final damage to the defender
+                const ap = this.engine.applyDamage(defenderState, finalDamage);
+                r.damage = ap.damage;
+                r.defenderHp = defenderState.hp;
+                r.targetHp = defenderState.hp;
+                r.defeated = ap.defeated;
+                if (ap.defeated) defenderState.isDefeated = true;
+                
+                // Increment combo on hit
+                this.engine.addCombo(attackerState.id);
+                this.engine.resetCombo(defenderState.id);
+            }
+            
+            // Apply ability status effects (Bleed, IngredientShreddingWound, Sinking)
+            if (r.statusesApplied) {
+                r.statusesApplied.forEach(statusType => {
+                    if (statusType === 'Bleed' && abilityConfig.bleedOnHit) {
+                        this.engine.applyStatus(defenderState, 'Bleed', abilityConfig.bleedOnHit, abilityConfig.bleedOnHit);
+                    } else if (statusType === 'IngredientShreddingWound') {
+                        this.engine.applyStatus(defenderState, 'IngredientShreddingWound', 1, 1);
+                    } else if (statusType === 'Sinking' && r.rawDamage) {
+                        // Sinking potency = damage dealt, 1 count
+                        this.engine.applyStatus(defenderState, 'Sinking', 1, r.rawDamage);
+                    }
+                });
+            }
+
+            // Apply stagger damage from ability config
+            if (abilityConfig.staggerMultiplier && r.rawDamage) {
+                const staggerDmg = Math.floor(r.rawDamage * (abilityConfig.staggerMultiplier || 5.0));
+                defenderState.stagger = (defenderState.stagger || 0) + staggerDmg;
+                r.staggerDamage = staggerDmg;
+            }
 
             // Put defender into 'hit' state (timing consistent with other hits)
-            defender.gameState.state = 'hit';
-            defender.gameState.hitTimer = 0.18;
+            defenderState.state = 'hit';
+            defenderState.hitTimer = 0.18;
 
             // Hitstop rules (tunable)
             let hitstopSeconds = abilityConfig.hitstop || 0.14;
@@ -2881,6 +2926,11 @@ tick() {
             if (player.ultimate.slashEvents) {
                 player.ultimate.slashEvents = [];
             }
+            
+            // Attach engine reference to ultimate for additive damage modifier calculation
+            // dealUltDamage uses ult.engine.calculateFinalDamage() to apply Fragile, Protection,
+            // Sinking, Crit, etc. with the additive formula: (rawDamage + comboFlat) × (1 + modSum)
+            player.ultimate.engine = this.engine;
             
             // Update the appropriate ultimate sequence
             const prevDamage = player.ultimate.totalDamage;

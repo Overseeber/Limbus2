@@ -720,7 +720,12 @@ class GameplayEngine {
     }
 
     let base = attackData.baseDamage || attacker.baseDamage, knock = attackData.knockback || 0;
-    if (defender.isGuarding) { base *= 0.5; knock = Math.floor(knock * 0.5); result.wasGuarded = true; }
+    const isParryWindow = defender.isGuarding && (defender.guardTimer || 0) > 0;
+    if (defender.isGuarding) {
+      base *= 0.05;
+      knock = 0;
+      result.wasGuarded = true;
+    }
 
     const dmgResult = this.calculateDamage(base, attacker, defender);
     const ap = this.applyDamage(defender, dmgResult.damage);
@@ -731,10 +736,26 @@ class GameplayEngine {
     // Reset defender's combo when they get hit (getting hit breaks offensive momentum)
     this.resetCombo(defender.id);
 
-    // Set hit state only if not staggered (staggered state takes priority)
-    if (defender.state !== 'staggered') { defender.state = 'hit'; defender.hitTimer = 0.18; }
+    // Set hurt state only if not staggered (staggered state takes priority)
+    if (defender.state !== 'staggered') {
+      if (!result.wasGuarded) {
+        // Normal hit: enter hurt state
+        defender.state = 'hurt';
+        defender.hitTimer = 0.18;
+      } else if (isParryWindow) {
+        // Parry window hit: blockstun + knockback away
+        defender.state = 'hurt';
+        defender.hitTimer = 0.18;
+        defender.blockstunTimer = Math.max(defender.blockstunTimer || 0, 3.0);
+        defender.isGuarding = false;
+        defender.guardTimer = 0;
+        const dir = defender.position.x < attacker.position.x ? -1 : 1;
+        defender.velocity.x = dir * 120;
+      }
+      // If guarded but NOT in parry window: no state change (stays in idle/guard)
+    }
     
-    // Apply knockback
+    // Apply knockback (0 if guarding)
     if (knock) { const dir = defender.position.x < attacker.position.x ? -1 : 1; const fk = this.calculateKnockback(knock, attacker); this.applyKnockback(defender, fk, dir, attacker); result.knockback = fk; }
     
     // STAGGER SYSTEM: Buildup is based on ACTUAL DAMAGE TAKEN * 1.2 (original game)
@@ -803,11 +824,19 @@ class GameplayEngine {
   updateFighter(state, dt, config, playerInput) {
     const events = [];
     this.updateCooldowns(state, dt);
-    // Handle hurt/stun state: allow any player input to exit hit early.
-    // Auto-exit when hitTimer expires (prevents softlock where a fighter
-    // is permanently stuck in 'hit' state when both fighters are active
-    // and trading hits — hitTimer decrements but had no timer-based exit).
-    if (state.state === 'hit') {
+    // Handle blockstun state first so it overrides normal hurt behavior.
+    if (state.blockstunTimer > 0) {
+      state.blockstunTimer = Math.max(0, state.blockstunTimer - dt);
+      state.state = 'hurt';
+      state.hitTimer = 0;
+      if (state.blockstunTimer <= 0) {
+        state.blockstunTimer = 0;
+        if (state.state === 'hurt') {
+          state.state = 'idle';
+          events.push({ type: 'STATE_CHANGE', from: 'hurt', to: 'idle' });
+        }
+      }
+    } else if (state.state === 'hurt') {
       state.hitTimer = Math.max(0, (state.hitTimer || 0) - dt);
       const inputReceived = playerInput && (
         playerInput.left || playerInput.right || playerInput.up || playerInput.down ||
@@ -818,7 +847,7 @@ class GameplayEngine {
       if (state.hitTimer <= 0 || inputReceived) {
         state.state = 'idle';
         state.hitTimer = 0;
-        events.push({ type: 'STATE_CHANGE', from: 'hit', to: 'idle' });
+        events.push({ type: 'STATE_CHANGE', from: 'hurt', to: 'idle' });
       }
     }
     // Update stagger state machine (handles all three phases)

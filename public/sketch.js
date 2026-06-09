@@ -476,6 +476,7 @@ function processSnapshot(snapshot) {
         fighter.isGuarding = state.isGuarding || false;
         fighter.isDashing = state.isDashing || false;
         fighter.dashCharges = typeof state.dashCharges !== 'undefined' ? state.dashCharges : fighter.dashCharges || 0;
+        fighter.guardWindowTimer = state.guardTimer || 0;
         // Apply authoritative evade state from server
         fighter.isEvading = state.isEvading || false;
 
@@ -979,6 +980,7 @@ function sendInputState() {
     const rawDash = keyIsDown(32);
     const isLeftMouseDown = mouseIsPressed && mouseButton === LEFT;
     const isRightMouseDown = mouseIsPressed && mouseButton === RIGHT;
+    const rawGuard = isRightMouseDown || keyIsDown(67); // Right mouse or C key
     
     // === JUMP (up) edge detection ===
     if (rawUp && !prevKeyState.up) {
@@ -1017,8 +1019,8 @@ function sendInputState() {
     const rawAbilityQ = keyIsDown(81); // Q key
     const rawAbilityX = keyIsDown(88); // X key
 
-    // === GUARD (right click) ===
-    keyState.guard = isRightMouseDown;
+    // === GUARD (right click or C key) ===
+    keyState.guard = rawGuard;
     
     // === SLAM (S + attack in air) ===
     // Determine if airborne using onGround property from server
@@ -1043,7 +1045,7 @@ function sendInputState() {
         attack: isLeftMouseDown,
         attackPressed: stickyAttackPressed,  // Held for 2+ ticks
         attackReleased: stickyAttackReleased, // Held for 2+ ticks
-        guard: isRightMouseDown,
+        guard: rawGuard,
         dash: rawDash || stickyDash,     // Keep dash active for server
         slam: stickySlam,                // Held for 2+ ticks
         evade: stickyEvade,              // Held for 2+ ticks

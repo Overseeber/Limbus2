@@ -102,6 +102,7 @@ class Match {
             gameState.hitTimer = 0; // hitstun timer
             gameState.hitstunTimer = 0;
             gameState.blockstunTimer = 0;
+            gameState.guardTimer = 0;
             gameState.basicAttackCooldown = 0; // recovery after basic attack whiff or attack 3 (basic attacks only)
             gameState.slamCooldown = 0;        // recovery after slam landing (slam attacks only)
             gameState.isEvading = false; // evade state
@@ -272,7 +273,7 @@ tick() {
                     }
                     
                     // Keep them in hit state during ultimate
-                    if (player.gameState.state === 'hit') {
+                    if (player.gameState.state === 'hurt') {
                         player.gameState.hitTimer = 999; // Lock in hit state
                     }
                     return;
@@ -509,7 +510,7 @@ tick() {
         const maxSpeed = moveSpeed * 60;
         
         // Don't allow movement input during hitstun or stagger active phase
-        if (state.state !== 'hit' && !(state.state === 'staggered' && state.staggerTimer > 0)) {
+        if (state.state !== 'hurt' && !(state.state === 'staggered' && state.staggerTimer > 0)) {
             // DASHING: Skip movement input and friction - dash maintains its own velocity
             // Reference: during dash, movement input is skipped entirely
             if (state.isDashing) {
@@ -548,7 +549,7 @@ tick() {
 
         // JUMP INPUT - edge triggered
         // Check both state conditions AND canJump flag (Game Target sets canJump=false)
-        const canJump = (state.canJump !== false) && state.state !== 'hit' && 
+        const canJump = (state.canJump !== false) && state.state !== 'hurt' && 
                        (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0));
         if (input.up && !prevInput.up && state.onGround && canJump && !state.isAttacking) {
             const jumpHeight = config.jumpHeight || 1200;
@@ -558,7 +559,7 @@ tick() {
 
         // GUARD INPUT
         const guardEdge = input.guard && !prevInput.guard;
-        const canGuard = state.state !== 'hit' && 
+        const canGuard = state.state !== 'hurt' && 
                         (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
                         state.hitstunTimer <= 0 && state.blockstunTimer <= 0;
         if (guardEdge && !state.isAttacking && canGuard) {
@@ -566,15 +567,19 @@ tick() {
             // This prevents continuous re-facing every tick while holding guard
             this.faceClosestEnemy(player);
             state.isGuarding = true;
+            state.guardTimer = 1.0;
         } else if (!input.guard) {
             state.isGuarding = false;
+            state.guardTimer = 0;
+        } else if (state.isGuarding && state.guardTimer > 0) {
+            state.guardTimer = Math.max(0, state.guardTimer - dt);
         }
 
         // DASH INPUT - edge triggered
         // Dash attacks are already limited by dash charges (3 charges, 3s recharge)
         // No additional cooldown needed - dash charges are the limiter
         const dashEdge = input.dash && !prevInput.dash;
-        const canDash = (state.canDash !== false) && state.state !== 'hit' && state.state !== 'slam' &&
+        const canDash = (state.canDash !== false) && state.state !== 'hurt' && state.state !== 'slam' &&
                        (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
                        state.hitstunTimer <= 0 && state.blockstunTimer <= 0;
         if (dashEdge && state.dashCharges > 0 && !state.isAttacking && state.onGround && canDash) {
@@ -627,7 +632,7 @@ tick() {
         // Allow attack if not in hit state (stagger is OK with staggerTimer <= 0)
         // Also cannot attack during hitstun or blockstun
         // Uses basicAttackCooldown which only affects basic attacks (not slam or dash)
-        const canAttack = state.state !== 'hit' && state.state !== 'slam' &&
+        const canAttack = state.state !== 'hurt' && state.state !== 'slam' &&
                          (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
                          state.hitstunTimer <= 0 && state.blockstunTimer <= 0 && state.basicAttackCooldown <= 0;
 
@@ -702,7 +707,7 @@ tick() {
         // and the fighter is airborne. This prevents down-only inputs from
         // accidentally starting a slam on the server.
         // Only blocked by slamCooldown (seperate from basic attack timers)
-        const canSlam = state.state !== 'hit' && 
+        const canSlam = state.state !== 'hurt' && 
                        (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
                        state.slamCooldown <= 0;
         if (input.slam && !input.up && !state.onGround && !state.isAttacking && canSlam && !player.isSlamAttacking) {
@@ -712,7 +717,7 @@ tick() {
         // EVADE INPUT - edge triggered
         // Pressing evade key when not already evading and not in a state that blocks it
         const evadeEdge = input.evade && !prevInput.evade;
-        if (evadeEdge && !state.isEvading && state.state !== 'hit' && 
+        if (evadeEdge && !state.isEvading && state.state !== 'hurt' && 
             state.state !== 'staggered' && !state.isAttacking && !state.isDashing) {
             this.startEvade(player);
         }
@@ -723,7 +728,7 @@ tick() {
         const abilityXEdge = input.abilityX && !prevInput.abilityX;
 
         // Check if fighter can use abilities (not in certain states)
-        const canUseAbility = state.state !== 'hit' && state.state !== 'slam' &&
+        const canUseAbility = state.state !== 'hurt' && state.state !== 'slam' &&
                              (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
                              !state.isDefeated;
 
@@ -1457,7 +1462,7 @@ tick() {
         // Third attack of basic rotation: always applies a 3-second recovery timer
         // This only affects basic attacks, not slam or dash attacks
         if (player.attackSequence === 3) {
-            state.basicAttackCooldown = 3;
+            state.basicAttackCooldown = 1.3;
         }
 
         // Miss detection: if this attack didn't hit anyone, reset combo AND apply recovery
@@ -1467,7 +1472,7 @@ tick() {
             // Apply whiff recovery penalty: extended lockout after missed attack (0.3s)
             // Only set if not already set to a higher value by the third-attack rule above
             if (state.basicAttackCooldown < 1.3) {
-                state.basicAttackCooldown = 1.3;
+                state.basicAttackCooldown = 1.0;
             }
         }
         // Clear the per-attack hit flag for next attack
@@ -1714,7 +1719,7 @@ tick() {
         const dx = enemy.gameState.position.x - state.position.x;
         const distance = Math.abs(dx);
         const approachDirection = dx > 0 ? 1 : -1;
-        const canAct = !state.isAttacking && !state.isDashing && !state.isEvading && state.onGround && state.state !== 'hit' && state.state !== 'staggered';
+        const canAct = !state.isAttacking && !state.isDashing && !state.isEvading && state.onGround && state.state !== 'hurt' && state.state !== 'staggered';
 
         // Basic positioning
         if (distance > 280) {
@@ -2124,7 +2129,7 @@ tick() {
             this.handleEvents(player, ce.concat(be));
             
             if (defender.gameState.state !== 'staggered') {
-                defender.gameState.state = 'hit';
+                defender.gameState.state = 'hurt';
                 defender.gameState.hitTimer = 0.18;
             }
             
@@ -2604,7 +2609,7 @@ tick() {
         
         // Only set hit state if the attack actually hit
         if (execResult.hit) {
-            defender.gameState.state = 'hit';
+            defender.gameState.state = 'hurt';
             defender.gameState.hitTimer = 0.18;
         }
         
@@ -2731,7 +2736,7 @@ tick() {
             }
 
             // Put defender into 'hit' state (timing consistent with other hits)
-            defenderState.state = 'hit';
+            defenderState.state = 'hurt';
             defenderState.hitTimer = 0.18;
 
             // Hitstop rules (tunable)
@@ -2861,6 +2866,7 @@ tick() {
                 // Hitstun / Blockstun / Whiff recovery timers (action lockout)
                 hitstunTimer: player.gameState.hitstunTimer || 0,
                 blockstunTimer: player.gameState.blockstunTimer || 0,
+                guardTimer: player.gameState.guardTimer || 0,
                 whiffRecoveryTimer: player.gameState.whiffRecoveryTimer || 0,
                 // Ability cooldowns (for UI countdown timers)
                 abilityCooldowns: { ...player.gameState.abilityCooldowns } || {},

@@ -790,7 +790,7 @@ class Fighter {
       }
 
       // Handle special states for Dihui
-      if (this.state === 'hit' || this.state === 'hurt') {
+      if (this.state === 'hurt') {
         this.currentSprite = 'dhurt';
       } else if (this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition) {
         this.currentSprite = 'ds3f1';
@@ -862,7 +862,7 @@ class Fighter {
 
       // Handle special states for Callisto
       // Hurt/hit states take priority over slam to ensure correct hurt sprite when hit during slam
-      if (this.state === 'hit' || this.state === 'hurt') {
+      if (this.state === 'hurt') {
         this.currentSprite = 'churt';
       } else if (this.state === 'slam' || this.isSlamAttacking || this.slamHoldPosition) {
         // Check for empowered slam costume sprites (cuf6/cus4 when consuming 20 Corpus)
@@ -3157,12 +3157,21 @@ addCombo(attacker) {
         // Align feet to hitbox bottom
         // Hitbox bottom is at this.pos.y + 72, so feet should be at y = 72
         const hitboxBottomY = 72;
+        if (this.guardWindowTimer > 0 && this.isGuarding) {
+          tint(222, 222, 222);
+        }
         drawSpriteScaled(this.currentSprite, 0, hitboxBottomY, scaleFactor);
+        if (this.guardWindowTimer > 0 && this.isGuarding) {
+          noTint();
+        }
       }
       pop();
     } else if (this.sprite && this.sprite.width > 0) {
       // Regular sprite loading
       push();
+      if (this.guardWindowTimer > 0 && this.isGuarding) {
+        tint(222, 222, 222);
+      }
       scale(this.facing, 1);
       imageMode(CENTER);
       
@@ -3172,6 +3181,9 @@ addCombo(attacker) {
       const scaledWidth = this.sprite.width * scaleFactor;
       
       image(this.sprite, 0, 0, scaledWidth, targetHeight);
+      if (this.guardWindowTimer > 0 && this.isGuarding) {
+        noTint();
+      }
       pop();
     } else {
       fill(this.color);

@@ -804,21 +804,21 @@ class GameplayEngine {
     const events = [];
     this.updateCooldowns(state, dt);
     // Handle hurt/stun state: allow any player input to exit hit early.
+    // Auto-exit when hitTimer expires (prevents softlock where a fighter
+    // is permanently stuck in 'hit' state when both fighters are active
+    // and trading hits — hitTimer decrements but had no timer-based exit).
     if (state.state === 'hit') {
+      state.hitTimer = Math.max(0, (state.hitTimer || 0) - dt);
       const inputReceived = playerInput && (
         playerInput.left || playerInput.right || playerInput.up || playerInput.down ||
         playerInput.attack || playerInput.attackPressed || playerInput.attackReleased ||
         playerInput.guard || playerInput.dash || playerInput.slam || playerInput.evade ||
         playerInput.abilityQ || playerInput.abilityX
       );
-      if (inputReceived) {
+      if (state.hitTimer <= 0 || inputReceived) {
         state.state = 'idle';
         state.hitTimer = 0;
         events.push({ type: 'STATE_CHANGE', from: 'hit', to: 'idle' });
-      } else {
-        // Hold hit state until the player provides input.
-        // Do not auto-transition out of hit by timer expiration.
-        state.hitTimer = Math.max(0, (state.hitTimer || 0) - dt);
       }
     }
     // Update stagger state machine (handles all three phases)

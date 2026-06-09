@@ -102,7 +102,8 @@ class Match {
             gameState.hitTimer = 0; // hitstun timer
             gameState.hitstunTimer = 0;
             gameState.blockstunTimer = 0;
-            gameState.whiffRecoveryTimer = 0;
+            gameState.basicAttackCooldown = 0; // recovery after basic attack whiff or attack 3 (basic attacks only)
+            gameState.slamCooldown = 0;        // recovery after slam landing (slam attacks only)
             gameState.isEvading = false; // evade state
             gameState.evadeTimer = 0;    // evade duration timer
             
@@ -570,11 +571,12 @@ tick() {
         }
 
         // DASH INPUT - edge triggered
-        // Check both state conditions AND canDash flag (Game Target sets canDash=false)
+        // Dash attacks are already limited by dash charges (3 charges, 3s recharge)
+        // No additional cooldown needed - dash charges are the limiter
         const dashEdge = input.dash && !prevInput.dash;
         const canDash = (state.canDash !== false) && state.state !== 'hit' && state.state !== 'slam' &&
                        (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
-                       state.hitstunTimer <= 0 && state.blockstunTimer <= 0 && state.whiffRecoveryTimer <= 0;
+                       state.hitstunTimer <= 0 && state.blockstunTimer <= 0;
         if (dashEdge && state.dashCharges > 0 && !state.isAttacking && state.onGround && canDash) {
             const dashDir = input.right ? 1 : (input.left ? -1 : state.facing);
             const dashSpeed = ((typeof config.dashSpeed !== 'undefined' ? config.dashSpeed : 60) * 60);
@@ -624,9 +626,10 @@ tick() {
 
         // Allow attack if not in hit state (stagger is OK with staggerTimer <= 0)
         // Also cannot attack during hitstun or blockstun
+        // Uses basicAttackCooldown which only affects basic attacks (not slam or dash)
         const canAttack = state.state !== 'hit' && state.state !== 'slam' &&
                          (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
-                         state.hitstunTimer <= 0 && state.blockstunTimer <= 0 && state.whiffRecoveryTimer <= 0;
+                         state.hitstunTimer <= 0 && state.blockstunTimer <= 0 && state.basicAttackCooldown <= 0;
 
         // Interrupt held combo state with any non-attack input.
         if (comboHoldActive && (
@@ -698,9 +701,10 @@ tick() {
         // Only trigger slam when the client explicitly sent the slam sticky flag
         // and the fighter is airborne. This prevents down-only inputs from
         // accidentally starting a slam on the server.
+        // Only blocked by slamCooldown (seperate from basic attack timers)
         const canSlam = state.state !== 'hit' && 
                        (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
-                       state.whiffRecoveryTimer <= 0;
+                       state.slamCooldown <= 0;
         if (input.slam && !input.up && !state.onGround && !state.isAttacking && canSlam && !player.isSlamAttacking) {
             this.startSlamAttack(player);
         }
@@ -1216,8 +1220,8 @@ tick() {
             player.slamHoldVisual = true;
             player.slamLandingHitbox = null;
             player.attackTimer = 1.0; // Slam cooldown
-            // Slams have a 3-second recovery timer (action lockout) on landing
-            state.whiffRecoveryTimer = 3;
+            // Slams have a 3-second recovery timer (prevents another slam immediately)
+            state.slamCooldown = 3;
             this.resolveSlamLanding(player);
             return;
         }
@@ -1337,6 +1341,14 @@ tick() {
         player.attackTimer -= dt;
         if (player.attackTimer < 0) player.attackTimer = 0;
 
+        // Basic attack cooldown (separate timer for basic attack recovery only)
+        state.basicAttackCooldown -= dt;
+        if (state.basicAttackCooldown < 0) state.basicAttackCooldown = 0;
+
+        // Slam cooldown (separate timer for slam attack recovery only)
+        state.slamCooldown -= dt;
+        if (state.slamCooldown < 0) state.slamCooldown = 0;
+
         // RESTORED: ATTACK SEQUENCE PHASE TIMING
         if (state.isAttacking && player.attackSequence > 0 && player.attackPhase !== 'none') {
             const attackKey = player.attackSequence === 1 ? 'light' :
@@ -1443,18 +1455,19 @@ tick() {
         const state = player.gameState;
 
         // Third attack of basic rotation: always applies a 3-second recovery timer
+        // This only affects basic attacks, not slam or dash attacks
         if (player.attackSequence === 3) {
-            state.whiffRecoveryTimer = 3;
+            state.basicAttackCooldown = 3;
         }
 
-        // Miss detection: if this attack didn't hit anyone, reset combo AND apply whiff recovery
+        // Miss detection: if this attack didn't hit anyone, reset combo AND apply recovery
         const cs = this.engine.combatState[state.id];
         if (cs && !cs.lastAttackHit) {
             this.engine.resetCombo(state.id);
             // Apply whiff recovery penalty: extended lockout after missed attack (0.3s)
             // Only set if not already set to a higher value by the third-attack rule above
-            if (state.whiffRecoveryTimer < 1.3) {
-                state.whiffRecoveryTimer = 1.3;
+            if (state.basicAttackCooldown < 1.3) {
+                state.basicAttackCooldown = 1.3;
             }
         }
         // Clear the per-attack hit flag for next attack

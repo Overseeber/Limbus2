@@ -24,6 +24,7 @@
  */
 
 const GameplayEngine = require('./gameplayEngine');
+const COMBAT_CONFIG = require('../../shared/config');
 const { 
   initUltimate, 
   updateJohnUltimate, 
@@ -103,6 +104,7 @@ class Match {
             gameState.hitstunTimer = 0;
             gameState.blockstunTimer = 0;
             gameState.guardTimer = 0;
+            gameState.guardReleaseTimer = 0;
             gameState.basicAttackCooldown = 0; // recovery after basic attack whiff or attack 3 (basic attacks only)
             gameState.slamCooldown = 0;        // recovery after slam landing (slam attacks only)
             gameState.isEvading = false; // evade state
@@ -557,7 +559,12 @@ tick() {
             state.onGround = false;
         }
 
-        // GUARD INPUT
+        // GUARD INPUT with release hold (0.5s after release, guard stays active)
+        // Guard is activated/deactivated with sustain + hold behavior:
+        //   - Activate on press: set isGuarding=true, guardTimer=1.0 (parry window)
+        //   - Sustain while held (guardTimer counts down after first second)
+        //   - Hold 0.5s after release: guard stays active
+        //   - After hold expires: guard fully deactivates
         const guardEdge = input.guard && !prevInput.guard;
         const canGuard = state.state !== 'hurt' && 
                         (state.state !== 'staggered' || (state.state === 'staggered' && state.staggerTimer <= 0)) &&
@@ -567,12 +574,31 @@ tick() {
             // This prevents continuous re-facing every tick while holding guard
             this.faceClosestEnemy(player);
             state.isGuarding = true;
-            state.guardTimer = 1.0;
+            state.guardTimer = COMBAT_CONFIG.GUARD_PARRY_WINDOW; // 1.0 = parry window duration
+            state.guardReleaseTimer = 0; // No release timer yet (still pressed)
         } else if (!input.guard) {
-            state.isGuarding = false;
-            state.guardTimer = 0;
+            // Guard input released: start release hold timer if currently guarding
+            if (state.isGuarding) {
+                if (typeof state.guardReleaseTimer === 'undefined' || state.guardReleaseTimer <= 0) {
+                    // Just released: set release hold timer (guard stays active for this duration)
+                    state.guardReleaseTimer = COMBAT_CONFIG.GUARD_RELEASE_HOLD; // 0.5s
+                }
+            }
+            // Guard release hold: timer counts down, guard stays active until timer expires
+            if (state.guardReleaseTimer > 0) {
+                state.guardReleaseTimer = Math.max(0, state.guardReleaseTimer - dt);
+                if (state.guardReleaseTimer <= 0) {
+                    // Release hold expired: fully deactivate guard
+                    state.isGuarding = false;
+                    state.guardTimer = 0;
+                    state.guardReleaseTimer = 0;
+                }
+            }
         } else if (state.isGuarding && state.guardTimer > 0) {
+            // Guard held down: parry window timer counts down
             state.guardTimer = Math.max(0, state.guardTimer - dt);
+            // While holding, clear any release timer
+            state.guardReleaseTimer = 0;
         }
 
         // DASH INPUT - edge triggered
@@ -1932,6 +1958,10 @@ tick() {
             if (!hitstopSeconds) {
                 hitstopSeconds = attackType === 'light' ? 0.03 : attackType === 'medium' ? 0.05 : 0.08;
             }
+            // Parry blockstun hitstop: 0.5 seconds
+            if (result.wasParried) {
+                hitstopSeconds = Math.max(hitstopSeconds, COMBAT_CONFIG.PARRY_HITSTOP_DURATION); // 0.5s
+            }
             if (attacker.attackSequence === 3) {
                 hitstopSeconds = Math.max(hitstopSeconds, 0.14);
             }
@@ -2867,6 +2897,7 @@ tick() {
                 hitstunTimer: player.gameState.hitstunTimer || 0,
                 blockstunTimer: player.gameState.blockstunTimer || 0,
                 guardTimer: player.gameState.guardTimer || 0,
+                guardReleaseTimer: player.gameState.guardReleaseTimer || 0,
                 whiffRecoveryTimer: player.gameState.whiffRecoveryTimer || 0,
                 // Ability cooldowns (for UI countdown timers)
                 abilityCooldowns: { ...player.gameState.abilityCooldowns } || {},

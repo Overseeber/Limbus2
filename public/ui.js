@@ -554,6 +554,9 @@ function drawPauseMenu() {
   pop();
 }
 
+// Settings panel button bounds - stored for click handling in mousePressed
+let settingsPanelDebugBtn = null; // { x, y, w, h }
+
 function drawSettingsPanel() {
   const panelWidth = 500;
   const panelHeight = 320;
@@ -588,6 +591,9 @@ function drawSettingsPanel() {
   const btnW = 180;
   const btnH = 28;
   
+  // Store button bounds for click handling in mousePressed()
+  settingsPanelDebugBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
+  
   push();
   if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled) {
     fill(60, 180, 60);
@@ -603,17 +609,10 @@ function drawSettingsPanel() {
   textAlign(CENTER, CENTER);
   textSize(13);
   const label = (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled) 
-    ? 'DEBUG: ON (click to toggle)' 
-    : 'DEBUG: OFF (click to toggle)';
+    ? 'DEBUG: ON' 
+    : 'DEBUG: OFF';
   text(label, btnX + btnW / 2, btnY + btnH / 2);
   pop();
-  
-  // Check if button was clicked
-  if (mouseIsPressed && mouseX > btnX && mouseX < btnX + btnW && mouseY > btnY && mouseY < btnY + btnH) {
-    if (typeof setDebugGraphics === 'function') {
-      setDebugGraphics();
-    }
-  }
   
   fill(180);
   textSize(12);

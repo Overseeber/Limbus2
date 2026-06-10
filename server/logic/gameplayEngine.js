@@ -6,6 +6,9 @@ const ARENA_WIDTH = 1400;
 const ARENA_HEIGHT = 700;
 const GRAVITY = 0.6;
 
+// Combat configuration constants (single source of truth)
+const COMBAT_CONFIG = require('../../shared/config');
+
 // Combo system constants (matches OldClientGameplay feel)
 const COMBO_DURATION = 1.4;        // Seconds before combo resets from inactivity
 const COMBO_DAMAGE_PER_STACK = 2;  // Bonus damage per combo stack
@@ -692,24 +695,18 @@ class GameplayEngine {
     result.hit = true;
 
     // VALENCINA: Check Precognition passive evade before resolving damage
-    // If defender has [Precognition] status, check for evade (3% x count, max 90%)
     if (defender.characterKey === 'VALENCINA') {
       try {
         const valencinaLogic = require('./characterLogic/valencina');
         if (valencinaLogic.checkPrecognitionEvade(defender)) {
-          // Evaded! Return with hit=true but no damage
           result.evaded = true;
           result.evadeReason = 'PRECOGNITION_EVADE';
           return result;
         }
-        
-        // Evade failed - being hit loses 1 Precognition
         const precog = defender.statuses.find(s => s.type === 'Precognition');
         if (precog && precog.count > 0) {
           precog.count = Math.max(0, precog.count - 1);
         }
-        
-        // If Precognition reaches 0 and no Overheat active, enter Overheat immediately
         if (precog && precog.count <= 0) {
           const overheat = defender.statuses.find(s => s.type === 'Overheat');
           if (!overheat || overheat.count <= 0) {
@@ -720,10 +717,15 @@ class GameplayEngine {
     }
 
     let base = attackData.baseDamage || attacker.baseDamage, knock = attackData.knockback || 0;
+    
+    // === GUARD / PARRY SYSTEM ===
+    // isParryWindow = first 1 second of guarding (blockstun triggers only during this window)
     const isParryWindow = defender.isGuarding && (defender.guardTimer || 0) > 0;
+    
     if (defender.isGuarding) {
-      base *= 0.05;
-      knock = 0;
+      // 95% damage reduction when guarding
+      base *= COMBAT_CONFIG.GUARD_DAMAGE_REDUCTION; // 0.05 = 95% reduction
+      knock = 0; // No knockback when guarding
       result.wasGuarded = true;
     }
 
@@ -733,43 +735,51 @@ class GameplayEngine {
     result.isCrit = dmgResult.isCrit;
     result.damageType = attackData.damageType || 'normal';
 
-    // Reset defender's combo when they get hit (getting hit breaks offensive momentum)
+    // Reset defender's combo when they get hit
     this.resetCombo(defender.id);
 
-    // Set hurt state only if not staggered (staggered state takes priority)
-    if (defender.state !== 'staggered') {
-      if (!result.wasGuarded) {
-        // Normal hit: enter hurt state
+    // PARRY SYSTEM: When attacker hits a defender in parry window,
+    // the ATTACKER gets blockstunned, not the defender
+    if (isParryWindow) {
+      // PARRY! The attacker gets stunned and knocked back
+      attacker.state = 'hurt';
+      attacker.hitTimer = 0; // hitstun not used during blockstun
+      attacker.blockstunTimer = Math.max(attacker.blockstunTimer || 0, COMBAT_CONFIG.GUARD_BLOCKSTUN_DURATION); // 3s
+      // Apply knockback away from the blocker
+      const dir = attacker.position.x < defender.position.x ? -1 : 1;
+      attacker.velocity.x = dir * COMBAT_CONFIG.GUARD_PARRY_KNOCKBACK; // 120
+      // Signal that this was a parry for hitstop handling
+      result.wasParried = true;
+      // Do NOT change defender state - blocker stays guarding/idle
+      // Do NOT apply any knockback or hitstun to the defender
+    } else if (!result.wasGuarded) {
+      // Normal hit (not guarded, not parried): enter hurt state with hitstun
+      if (defender.state !== 'staggered') {
         defender.state = 'hurt';
-        defender.hitTimer = 0.18;
-      } else if (isParryWindow) {
-        // Parry window hit: blockstun + knockback away
-        defender.state = 'hurt';
-        defender.hitTimer = 0.18;
-        defender.blockstunTimer = Math.max(defender.blockstunTimer || 0, 3.0);
-        defender.isGuarding = false;
-        defender.guardTimer = 0;
-        const dir = defender.position.x < attacker.position.x ? -1 : 1;
-        defender.velocity.x = dir * 120;
+        defender.hitTimer = COMBAT_CONFIG.HITSTUN_DURATION; // 0.18s
       }
-      // If guarded but NOT in parry window: no state change (stays in idle/guard)
+    }
+    // If guarded but NOT in parry window: defender stays in guard/idle
+    // No knockback, no hitstun, no hurt state for the defender
+    // 95% damage reduction still applies from above
+    
+    // Apply normal knockback if not guarded
+    if (knock && !result.wasGuarded) { 
+      const dir = defender.position.x < attacker.position.x ? -1 : 1; 
+      const fk = this.calculateKnockback(knock, attacker); 
+      this.applyKnockback(defender, fk, dir, attacker); 
+      result.knockback = fk; 
     }
     
-    // Apply knockback (0 if guarding)
-    if (knock) { const dir = defender.position.x < attacker.position.x ? -1 : 1; const fk = this.calculateKnockback(knock, attacker); this.applyKnockback(defender, fk, dir, attacker); result.knockback = fk; }
-    
-    // STAGGER SYSTEM: Buildup is based on ACTUAL DAMAGE TAKEN * 1.2 (original game)
-    // When guarding, no stagger is applied (guarded hits don't build stagger)
+    // STAGGER SYSTEM: Buildup based on ACTUAL DAMAGE TAKEN * 1.2
+    // When guarding, no stagger buildup
     if (!result.wasGuarded) {
       const staggerBuildup = Math.floor(result.damage * 1.2);
       defender.stagger += staggerBuildup;
       
-      // RESET recovery timer when taking damage - recovery only starts after delay expires
-      // This is critical: every hit resets the recovery process
       const recoveryDelay = config.staggerRecoveryDelay || defender.staggerRecoveryDelay || 2.0;
       defender.staggerRecoveryTimer = recoveryDelay;
       
-      // Clamp stagger to 0..threshold (never exceed threshold unless staggered)
       const threshold = config.staggerThreshold || defender.staggerThreshold || 1000;
       if (defender.stagger > threshold && defender.state !== 'staggered') {
         defender.stagger = threshold;
@@ -777,20 +787,17 @@ class GameplayEngine {
       
       result.staggerResult = { staggered: false, stagger: defender.stagger };
       
-      // Check if stagger threshold reached
       if (defender.stagger >= threshold && defender.state !== 'staggered') {
         const length = config.staggerLength || defender.staggerDuration || 5;
         defender.state = 'staggered';
         defender.staggerTimer = length;
         defender.staggerDuration = length;
         defender.stagger = threshold;
-        defender.staggerRecoveryTimer = 0; // Reset recovery when entering stagger
+        defender.staggerRecoveryTimer = 0;
         
-        // Emit stagger start event
         result.staggerEvents.push({ type: 'STAGGER_START', targetId: defender.id, duration: length });
         result.staggerResult = { staggered: true, duration: length };
         
-        // Tremor: consume on burst (stagger threshold reached)
         const tremorEvents = this.consumeTremor(defender, config);
         if (tremorEvents.length) result.staggerEvents = result.staggerEvents.concat(tremorEvents);
       } else {
@@ -798,21 +805,17 @@ class GameplayEngine {
       }
     }
     
-    // Apply status effects from attack
     if (attackData.statusEffects) attackData.statusEffects.forEach(s => { this.applyStatus(defender, s.type, s.count, s.potency); result.statuses.push(s.type); });
     
-    // Call character-specific onSuccessfulHit for per-hit status application
     const hitEffects = this.callOnSuccessfulHit(attacker, defender, result.damage, config);
     if (hitEffects) {
       if (hitEffects.statusesApplied) hitEffects.statusesApplied.forEach(s => result.statuses.push(s));
       else if (hitEffects.statusApplied) result.statuses.push(hitEffects.statusApplied);
     }
     
-    // Consume status effects on hit
     const ce = this.consumeOnHit(defender); if (ce.length) result.consumeEvents = ce;
     const be = this.consumeBleedOnAttack(attacker); if (be.length) result.bleedAttackEvents = be;
     
-    // Track charge attack and combo
     const cs = this.combatState[attacker.id] || {}; cs.chargeAttack = !!attackData.chargeAttack; this.combatState[attacker.id] = cs;
     this.addCombo(attacker.id); this.incrementAttackCounter(attacker.id);
     result.chargeAttack = cs.chargeAttack; result.success = true;
@@ -824,11 +827,13 @@ class GameplayEngine {
   updateFighter(state, dt, config, playerInput) {
     const events = [];
     this.updateCooldowns(state, dt);
-    // Handle blockstun state first so it overrides normal hurt behavior.
+    
+    // Handle blockstun state - always overrides normal behavior
     if (state.blockstunTimer > 0) {
       state.blockstunTimer = Math.max(0, state.blockstunTimer - dt);
       state.state = 'hurt';
       state.hitTimer = 0;
+      // Cannot act during blockstun (it's like hitstun)
       if (state.blockstunTimer <= 0) {
         state.blockstunTimer = 0;
         if (state.state === 'hurt') {
@@ -837,20 +842,20 @@ class GameplayEngine {
         }
       }
     } else if (state.state === 'hurt') {
+      // Hitstun: timer counts down naturally
       state.hitTimer = Math.max(0, (state.hitTimer || 0) - dt);
-      const inputReceived = playerInput && (
-        playerInput.left || playerInput.right || playerInput.up || playerInput.down ||
-        playerInput.attack || playerInput.attackPressed || playerInput.attackReleased ||
-        playerInput.guard || playerInput.dash || playerInput.slam || playerInput.evade ||
-        playerInput.abilityQ || playerInput.abilityX
-      );
-      if (state.hitTimer <= 0 || inputReceived) {
+      
+      // FIXED: In hitstun, cannot act - input does NOT cancel hitstun
+      // Player must wait for hitTimer to expire naturally
+      if (state.hitTimer <= 0) {
         state.state = 'idle';
         state.hitTimer = 0;
         events.push({ type: 'STATE_CHANGE', from: 'hurt', to: 'idle' });
       }
+      // No else: still in hitstun, cannot act. Input check removed.
     }
-    // Update stagger state machine (handles all three phases)
+    
+    // Update stagger state machine
     const su = this.updateStagger(state, dt, config);
     if (su.events && su.events.length) {
       su.events.forEach(ev => events.push(ev));
@@ -877,7 +882,6 @@ class GameplayEngine {
       if (!config) return [];
       return callistoLogic.updateSystems(state, dt, config);
     } catch (err) {
-      // Fallback: basic slam buff timer
       const fallbackEvents = [];
       if (state.resources.slamBuffActive) { 
         state.resources.slamBuffTimer -= dt; 
@@ -897,7 +901,6 @@ class GameplayEngine {
       if (!config) return [];
       return valencinaLogic.updateSystems(state, dt, config);
     } catch (e) {
-      // Fallback if module not available
       return [];
     }
   }
@@ -963,8 +966,6 @@ class GameplayEngine {
 
   /**
    * Consume Tremor status on stagger burst
-   * Tremor adds its potency to stagger when consumed
-   * If this pushes stagger to threshold, triggers stagger
    */
   consumeTremor(fighter, config) {
     const events = [];
@@ -973,11 +974,9 @@ class GameplayEngine {
       tremor.count -= 1;
       events.push({ type: 'STATUS_CONSUMED', statusType: 'Tremor', remaining: tremor.count });
       if (tremor.count <= 0) {
-        // Add tremor potency to stagger
         fighter.stagger += tremor.potency;
         events.push({ type: 'STAGGER_INCREASE', statusType: 'Tremor', amount: tremor.potency, stagger: fighter.stagger });
         
-        // Check if tremor burst triggers stagger
         const threshold = config.staggerThreshold || fighter.staggerThreshold || 1000;
         if (fighter.stagger >= threshold && fighter.state !== 'staggered') {
           const length = config.staggerLength || fighter.staggerDuration || 5;

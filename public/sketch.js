@@ -2990,8 +2990,19 @@ if (
       return;
     }
 
-    // If settings panel is open, any click will close it (placeholder behavior)
+    // If settings panel is open, check debug button click, otherwise close
     if (pauseSettingsOpen) {
+      // Check if the debug toggle button was clicked
+      if (typeof settingsPanelDebugBtn !== 'undefined' && settingsPanelDebugBtn) {
+        const btn = settingsPanelDebugBtn;
+        if (mx > btn.x && mx < btn.x + btn.w && my > btn.y && my < btn.y + btn.h) {
+          if (typeof setDebugGraphics === 'function') {
+            setDebugGraphics();
+          }
+          return;
+        }
+      }
+      // Any click outside the debug button closes settings
       pauseSettingsOpen = false;
       return;
     }

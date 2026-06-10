@@ -38,9 +38,6 @@ function drawDebugUI() {
   if (!debugGraphicsEnabled) return;
   if (!window.allFighters) return;
 
-  // FPS counter (top-left)
-  drawDebugFPS();
-
   // Per-fighter debug overlays
   for (const fighter of window.allFighters) {
     if (!fighter || !fighter.pos) continue;
@@ -143,6 +140,13 @@ function drawFighterDebugInfo(fighter) {
     textSize(8);
     textAlign(CENTER, CENTER);
     text(`Recovery: ${fighter.staggerRecoveryTimer.toFixed(2)}s`, x, recY);
+  }
+  
+  // --- Evade indicator (gray ellipse) ---
+  if (fighter.state === 'evade') {
+    noStroke();
+    fill(138, 138, 138, 180);
+    ellipse(x, y - 10, 12, 12);
   }
   
   // --- Player hitbox outline (green rect) ---

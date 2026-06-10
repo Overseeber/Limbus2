@@ -3215,10 +3215,6 @@ addCombo(attacker) {
       strokeWeight(4);
       line(this.facing * 22, -20, this.facing * 70, -30);
     }
-    if (this.state === 'evade') {
-      fill('#8a8a8a');
-      ellipse(0, -10, 12, 12);
-    }
     pop();
     
    
@@ -3229,12 +3225,7 @@ addCombo(attacker) {
     this.drawWorldHpBar();
     this.drawStatusEffects();
 
-    // Draw player hitbox
-    stroke(0, 255, 0);
-noFill();
-rect(this.pos.x - 25, this.pos.y - 36, 50, 72);
-
-// Draw Installation Art range and hitbox for Callisto
+    // Draw Installation Art range and hitbox for Callisto
     if (this.characterKey === 'CALLISTO' && this.installationArtActive) {
       this.drawInstallationArtRange();
     }

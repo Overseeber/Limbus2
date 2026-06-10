@@ -1,0 +1,2 @@
+Game code that runs on server
+AI assisted as this is game stuff and not server stuff

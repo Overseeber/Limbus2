@@ -266,7 +266,7 @@ function handleMainMenuClick() {
   
   // Check if we're ready for transition
   if (mainMenuReadyForTransition) {
-    console.log('[MainMenu] Click detected - transitioning to mode select');
+    console.log('[MainMenu] Click detected - starting tutorial');
     mainMenuActive = false;
     mainMenuClickRegistered = true;
     
@@ -275,8 +275,11 @@ function handleMainMenuClick() {
       ASSET_LOADER.startMenuAssetLoading();
     }
     
-    // Transition to mode select
-    setBattleState(BATTLE_STATES.MODE_SELECT);
+    // Start the tutorial slideshow - when completed, transition to mode select
+    startTutorial(() => {
+      console.log('[MainMenu] Tutorial complete, transitioning to mode select');
+      setBattleState(BATTLE_STATES.MODE_SELECT);
+    });
     return true;
   }
   

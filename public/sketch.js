@@ -365,6 +365,9 @@ function preload() {
   //
   // See asset-loader.js for Stage 2 loading.
   
+  // Preload tutorial images (Stage 1 - Boot alongside main menu images)
+  preloadTutorialImages();
+  
   console.log('[preload] Stage 1 boot assets enqueued');
 }
 
@@ -2101,6 +2104,11 @@ function draw() {
   if (battleState !== BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.OPENING && battleState !== BATTLE_STATES.COMBAT_OVER && (typeof shouldHideGameplayUI !== 'function' || !shouldHideGameplayUI())) {
     drawHud();
   }
+  
+  // Draw tutorial overlay on top of everything if active
+  if (tutorialState.active) {
+    drawTutorial();
+  }
 }
 
 function drawModeSelectScreen() {
@@ -2608,6 +2616,12 @@ function getPlayerControlledFighter() {
 }
 
 function keyPressed() {
+  // Handle tutorial key press (takes top priority over everything except main menu)
+  if (tutorialState.active) {
+    handleTutorialKeyPress();
+    return;
+  }
+  
   // Handle main menu key press (takes priority)
   if (mainMenuActive) {
     handleMainMenuKeyPress();
@@ -2779,6 +2793,12 @@ function mousePressed() {
   console.log('MOUSE PRESSED FIRED');
   console.log('battleState', battleState);
 console.log('myRoomState', myRoomState);
+  
+  // Handle tutorial click (takes priority over everything except main menu)
+  if (tutorialState.active) {
+    handleTutorialClick();
+    return;
+  }
   
   // Handle main menu click first (takes priority)
   if (mainMenuActive) {

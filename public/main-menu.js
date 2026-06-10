@@ -63,41 +63,91 @@ function drawMainMenu() {
    const pulseAlpha = 150 + 50 * Math.sin(frameCount * 0.02);
    
   // Layer 1: Background image (full-screen, fills width)
-  if (mainMenuImages.mainbkg) {
+  if (mainMenuImages.opnbkg) {
     drawFullWidthImage(mainMenuImages.opnbkg);
   }
   //layeer 2: back stilotes// have these sway back and forth slowly
-    if (mainMenuImages.opnlstil) {
+    if (mainMenuImages.opnstl) { 
+      push();
       const swayOffset = Math.sin(frameCount * 0.01) * 10;
-      const scale = width / mainMenuImages.opnlstil.width;
-      const drawW = mainMenuImages.opnlstil.width * scale;
-      const drawH = mainMenuImages.opnlstil.height * scale;
-      const drawX = (width - drawW) / 2 + swayOffset;
-      const drawY = (height - drawH) / 2;
-      image(mainMenuImages.opnlstil, drawX, drawY, drawW, drawH);
-       // Layer 2: Light overlay for bkg stiloetes (same xy location)
-      if (mainMenuImages.opnblight) {
-        push();
-        tint(255, 255, 255, pulseAlpha);
-        image(mainMenuImages.opnblight, drawX, drawY, drawW, drawH);
-        pop();
-      }
-    }
- //layer 3: foreground stillotes (stay still)
-    if (mainMenuImages.opnstl) {
       const scale = width / mainMenuImages.opnstl.width;
       const drawW = mainMenuImages.opnstl.width * scale;
       const drawH = mainMenuImages.opnstl.height * scale;
-      const drawX = (width - drawW) / 2;
+      const drawX = (width - drawW) / 2 + swayOffset-30;
       const drawY = (height - drawH) / 2;
       image(mainMenuImages.opnstl, drawX, drawY, drawW, drawH);
-       // Layer 2: Light overlay for foreground stiloetes (same xy location)
+       // Layer 2: Light overlay for bkg stiloetes (same xy location)
+      if (mainMenuImages.opnblight) {
+       
+        tint(255, 255, 255, pulseAlpha);
+        image(mainMenuImages.opnblight, drawX, drawY, drawW, drawH);
+        
+      }
+      pop();
+    }
+    //layer 2.5, smal red particles drifting upwards, use p5's random and noise functions to create a natural drifting effect, spawn from the bottom of the screen and slowly drift upwards, fading out as they go
+    // for (let i = 0; i < 5; i++) {
+    // if (random() < 0.02) { // spawn rate
+    //   const x = random(width);
+    //   const y = height + 10;
+    //   const particle = {
+    //     x: x,
+    //     y: y,
+    //     size: random(2, 5),
+    //     alpha: 255,
+    //     velX: random(-0.5, 0.5),
+    //     velY: random(-1, -2)
+    //   };
+    //   push();
+    //   fill(255, 100, 50, particle.alpha);
+    //   noStroke();
+    //   ellipse(particle.x, particle.y, particle.size);
+    //   // Update particle position
+    //   particle.x += particle.velX;
+    //   particle.y += particle.velY;
+    //   // Fade out
+    //   particle.alpha -= 2;
+    // }
+
+
+ //layer 3: foreground stillotes (stay still)
+ if (mainMenuImages.opnlstil) {
+      push();
+      const scale = width / mainMenuImages.opnlstil.width;
+      const drawW = mainMenuImages.opnlstil.width * scale;
+      const drawH = mainMenuImages.opnlstil.height * scale;
+      const drawX = (width - drawW) / 2;
+      const drawY = (height - drawH) / 2;
+      image(mainMenuImages.opnlstil, drawX, drawY, drawW, drawH);
+    pop();
+  }
+     // Layer 3: Light overlay for foreground stiloetes (same xy location)
+    if (mainMenuImages.opnlight) {
+      const scale = width / mainMenuImages.opnlight.width;
+      const drawW = mainMenuImages.opnlight.width * scale;
+      const drawH = mainMenuImages.opnlight.height * scale;
+      const drawX = (width - drawW) / 2;
+      const drawY = (height - drawH) / 2;
+      image(mainMenuImages.opnlight, drawX, drawY, drawW, drawH);
+       // Layer 3: Light overlay for foreground stiloetes (same xy location)
       if (mainMenuImages.opnlight) {
         push();
         tint(255, 255, 255, pulseAlpha);
         image(mainMenuImages.opnlight, drawX, drawY, drawW, drawH);
         pop();
       } 
+      //layer 3.5 star
+      if (mainMenuImages.opnstr) {
+       
+        const starW = mainMenuImages.opnstr.width 
+        const starH = mainMenuImages.opnstr.height 
+        const starX = (width - starW) / 2;
+        const starY = (height - starH) / 2;
+        push();
+        tint(255, 255, 255, pulseAlpha);
+        image(mainMenuImages.opnstr, starX, starY, starW, starH);
+        pop();
+      }
     }
     //layer 4: crack overlay, sudble random shifting both x and y to give a "shaking" effect, slight flickering
     if (mainMenuImages.opncrk) {
@@ -172,8 +222,11 @@ function drawMainMenuClickPrompt() {
   
   push();
   textAlign(CENTER, CENTER);
-    //textFont(BebasKai);<load font bebas kai from data/fonts and use it here for the main menu prompt>
-    
+  // BebasKai for subheadings/prompts - loaded as mainMenuFont in preload
+  if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
+    textFont(Subheadings);
+  }
+  textFont(Subheadings);
   // Shadow
   fill(0, 0, 0, 150 * mainMenuClickPromptAlpha);
   textSize(18);
@@ -192,8 +245,8 @@ function drawMainMenuClickPrompt() {
     }
   }
   
-  textSize(28);
-  text(mainMenuPromptText, width / 2, height - 80);
+  textSize(18);
+  text(mainMenuPromptText, width / 2, 100);
   
   // Version number or subtle decoration
   fill(100, 100, 120, 100 * mainMenuClickPromptAlpha);

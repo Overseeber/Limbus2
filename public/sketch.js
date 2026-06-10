@@ -264,61 +264,100 @@ function preload() {
   // ============================================================
   
   // Load main menu background images (Stage 1 - Boot)
-  mainMenuImages.mainbkg = loadImage('data/main/opnbkg.png', () => {
+  mainMenuImages.opnbkg = loadImage('data/main/opnbkg.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main menu asset loaded');
+    console.log('Main menu asset loaded: opnbkg');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main menu asset:', err);
+    console.error('Failed to load main menu asset: opnbkg', err);
   });
-  mainMenuImages.mainbkg = loadImage('data/main/opnblight.png', () => {
+  mainMenuImages.opnblight = loadImage('data/main/opnblight.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main menu asset loaded');
+    console.log('Main menu asset loaded: opnblight');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main menu asset:', err);
+    console.error('Failed to load main menu asset: opnblight', err);
   });
- mainMenuImages.mainbkg = loadImage('data/main/opncrk.png', () => {
+  mainMenuImages.opncrk = loadImage('data/main/opncrk.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main menu asset loaded');
+    console.log('Main menu asset loaded: opncrk');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main menu asset:', err);
+    console.error('Failed to load main menu asset: opncrk', err);
   });
-  mainMenuImages.mainbkg = loadImage('data/main/opnlight.png', () => {
+  mainMenuImages.opnlight = loadImage('data/main/opnlight.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main menu asset loaded');
+    console.log('Main menu asset loaded: opnlight');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main menu asset:', err);
+    console.error('Failed to load main menu asset: opnlight', err);
   });
-  mainMenuImages.mainbkg = loadImage('data/main/opnlogo.png', () => {
+  mainMenuImages.opnlogo = loadImage('data/main/opnlogo.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main menu asset loaded');
+    console.log('Main menu asset loaded: opnlogo');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main menu asset:', err);
+    console.error('Failed to load main menu asset: opnlogo', err);
   });
-  mainMenuImages.mainbkg = loadImage('data/main/opnlstil.png', () => {
+  mainMenuImages.opnlstil = loadImage('data/main/opnlstil.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main menu asset loaded');
+    console.log('Main menu asset loaded: opnlstil');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main menu asset:', err);
+    console.error('Failed to load main menu asset: opnlstil', err);
   });
-  mainMenuImages.mainbkg = loadImage('data/main/opnstl.png', () => {
+  mainMenuImages.opnstl = loadImage('data/main/opnstl.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main menu asset loaded');
+    console.log('Main menu asset loaded: opnstl');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main menu asset:', err);
+    console.error('Failed to load main menu asset: opnstl', err);
   });
-  mainMenuImages.mainbkg = loadImage('data/main/opnstr.png', () => {
+  mainMenuImages.opnstr = loadImage('data/main/opnstr.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main menu asset loaded');
+    console.log('Main menu asset loaded: opnstr');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main menu asset:', err);
+    console.error('Failed to load main menu asset: opnstr', err);
+  });
+  // Load fonts (Stage 1 - Boot)
+  // Available fonts:
+  //   Excelsior: HP, status and damage numbers
+  //   Mikodacs: titles
+  //   BebasKai: subheadings
+  //   LiberationSans: body text
+  window.fonts = {};
+  window.fonts.BebasKai = loadFont('data/fonts/BebasKai.ttf', () => {
+    Subheadings = window.fonts.BebasKai;
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Font loaded: BebasKai');
+  }, (err) => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load font: BebasKai', err);
+  });
+  window.fonts.Excelsior = loadFont('data/fonts/ExcelsiorSans.ttf', () => {
+    NumberFont = window.fonts.Excelsior;
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Font loaded: Excelsior');
+  }, (err) => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load font: Excelsior', err);
+  });
+  window.fonts.Mikodacs = loadFont('data/fonts/Mikodacs.otf', () => {
+    Titles = window.fonts.Mikodacs;
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Font loaded: Mikodacs');
+  }, (err) => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load font: Mikodacs', err);
+  });
+  window.fonts.LiberationSans = loadFont('data/fonts/LiberationSans.ttf', () => {
+    Bodytext = window.fonts.LiberationSans;
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Font loaded: LiberationSans');
+  }, (err) => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load font: LiberationSans', err);
   });
   // Gameplay assets (Stage 2) are NOT loaded here anymore.
   // They will be loaded in the background by ASSET_LOADER.startMenuAssetLoading()

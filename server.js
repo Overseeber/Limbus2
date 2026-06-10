@@ -2,14 +2,15 @@ var express = require('express');
 var app = express();
 var port = process.env.PORT || 3000;
 var server = app.listen(port);
-app.use(express.static('public'));
+app.use(express.static('public')); //ai assisted port stuff
+app.use('/shared', express.static('shared'));
 
 var socket = require('socket.io');
 var io = socket(server);
 var clientList = {};
 var roomList = {};
 
-// Import server-authoritative gameplay systems
+// Import server-authoritative gameplay systems ai assisted port stuff
 const GameplayEngine = require('./server/logic/gameplayEngine');
 const characterLogic = require('./server/logic/characterLogic');
 const abilityHandler = require('./server/logic/abilityHandler');

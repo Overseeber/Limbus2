@@ -78,10 +78,10 @@ const ASSET_LOADER = {
     this.loadedBootAssets = 0;
     this.loadedMenuAssets = 0;
     
-    // Count boot assets
-    this.totalBootAssets = this.bootAssets.images.length;
+    // Count boot assets (images + fonts)
+    this.totalBootAssets = this.bootAssets.images.length + Object.keys(this.bootFonts).length;
     
-    console.log(`[AssetLoader] Initialized. Boot assets: ${this.totalBootAssets}`);
+    console.log(`[AssetLoader] Initialized. Boot assets: ${this.totalBootAssets} (${this.bootAssets.images.length} images + ${Object.keys(this.bootFonts).length} fonts)`);
   },
   
   /**

@@ -3387,18 +3387,7 @@ addCombo(attacker) {
       pop();
     }
 
-    // Draw stagger buildup progress
-    if (this.stagger > 0 && this.stagger < this.staggerThreshold && this.state !== 'staggered') {
-      push();
-      textAlign(CENTER, CENTER);
-      textSize(16);
-      const progress = (this.stagger / this.staggerThreshold * 100).toFixed(0);
-      fill(255, 200, 100, 200);
-      stroke(0, 200);
-      strokeWeight(1);
-      text(`Buildup: ${progress}%`, this.pos.x, this.pos.y - 70);
-      pop();
-    }
+    
 
     // Draw stagger immunity indicator
     if (this.state === 'staggered') {

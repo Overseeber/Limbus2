@@ -336,7 +336,7 @@ function checkPrecognitionEvade(state) {
 
   const evadeChance = Math.min(0.03 * precogStatus.count, 0.9);
   if (Math.random() < evadeChance) {
-    precogStatus.count = Math.max(0, precogStatus.count - 1);
+    precogStatus.count = Math.max(0, precogStatus.count - 3); // Lose 3 Precognition on successful evade
     state.lastEvadeTime = Date.now();
     return true;
   }

@@ -18,7 +18,7 @@
     GUARD_PARRY_KNOCKBACK: 1200,        // Knockback force applied on parry
     
     // === HITSTUN ===
-    HITSTUN_DURATION: 0.18,            // Base hitstun duration for normal hits
+    HITSTUN_DURATION: 0.35,            // Base hitstun duration for normal hits
     HITSTUN_CANNOT_ACT: true,          // Whether player cannot act during hitstun
     
     // === HITSTOP ===

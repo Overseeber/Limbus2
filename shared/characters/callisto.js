@@ -311,7 +311,7 @@ const CALLISTO_CONFIG = {
   // ULTIMATE: Closing Time - Installation Art no. 1
   ultimate: {
     name: 'Closing Time - Installation Art no. 1: Your Flesh and Bones as the Gallery\'s Seats',
-    artworkRequired: 5,         // Available at 5 Artwork: Tibia stacks
+    artworkRequired: 3,         // Available at 3 Artwork: Tibia stacks
     cooldown: 0,
     range: 300,
     baseDamage: 2.0,

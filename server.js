@@ -470,6 +470,8 @@ socket.on('toggleReady', () => {
     });
 });
 
-
+setInterval(() => {
+    broadcastRoomList();
+}, 2000);
 
 

@@ -33,13 +33,29 @@ const ASSET_LOADER = {
   // Boot asset paths (Stage 1 - loaded in preload)
   bootAssets: {
     images: [
-      'data/main/mainbkg.png',
-      'data/main/mainlight.png',
-      'data/main/maintitle.png',
-      'data/main/titlefull.png'
+      'data/main/opnbkg.png',
+      'data/main/opnblight.png',
+      'data/main/opncrk.png',
+      'data/main/opnlight.png',
+      'data/main/opnlogo.png',
+      'data/main/opnlstil.png',
+      'data/main/opnstl.png',
+      'data/main/opnstr.png'
     ]
   },
-  
+  //load game fonts
+//   Fonts
+// Excelsior: hp, status and dmg numbs
+// Mikodacs: titles
+// Bebas Kai: subheadings
+// Liberation sans: body text
+  bootFonts: {
+    Excelsior: 'data/fonts/Excelsior-Regular.ttf',
+    Mikodacs: 'data/fonts/Mikodacs.ttf',
+    BebasKai: 'data/fonts/BebasKai-Regular.ttf',
+    LiberationSans: 'data/fonts/LiberationSans-Regular.ttf'
+  },
+
   // Menu gameplay assets (Stage 2 - loaded after boot)
   menuAssets: {
     // Will be populated dynamically

@@ -264,38 +264,62 @@ function preload() {
   // ============================================================
   
   // Load main menu background images (Stage 1 - Boot)
-  mainMenuImages.mainbkg = loadImage('data/main/mainbkg.png', () => {
+  mainMenuImages.mainbkg = loadImage('data/main/opnbkg.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main menu background loaded');
+    console.log('Main menu asset loaded');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main menu background:', err);
+    console.error('Failed to load main menu asset:', err);
   });
-  
-  mainMenuImages.mainlight = loadImage('data/main/mainlight.png', () => {
+  mainMenuImages.mainbkg = loadImage('data/main/opnblight.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main menu light overlay loaded');
+    console.log('Main menu asset loaded');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main menu light:', err);
+    console.error('Failed to load main menu asset:', err);
   });
-  
-  mainMenuImages.maintitle = loadImage('data/main/maintitle.png', () => {
+ mainMenuImages.mainbkg = loadImage('data/main/opncrk.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Main title loaded');
+    console.log('Main menu asset loaded');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load main title:', err);
+    console.error('Failed to load main menu asset:', err);
   });
-  
-  mainMenuImages.titlefull = loadImage('data/main/titlefull.png', () => {
+  mainMenuImages.mainbkg = loadImage('data/main/opnlight.png', () => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.log('Full title loaded');
+    console.log('Main menu asset loaded');
   }, (err) => {
     ASSET_LOADER.onBootAssetLoaded();
-    console.error('Failed to load full title:', err);
+    console.error('Failed to load main menu asset:', err);
   });
-  
+  mainMenuImages.mainbkg = loadImage('data/main/opnlogo.png', () => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Main menu asset loaded');
+  }, (err) => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load main menu asset:', err);
+  });
+  mainMenuImages.mainbkg = loadImage('data/main/opnlstil.png', () => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Main menu asset loaded');
+  }, (err) => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load main menu asset:', err);
+  });
+  mainMenuImages.mainbkg = loadImage('data/main/opnstl.png', () => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Main menu asset loaded');
+  }, (err) => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load main menu asset:', err);
+  });
+  mainMenuImages.mainbkg = loadImage('data/main/opnstr.png', () => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.log('Main menu asset loaded');
+  }, (err) => {
+    ASSET_LOADER.onBootAssetLoaded();
+    console.error('Failed to load main menu asset:', err);
+  });
   // Gameplay assets (Stage 2) are NOT loaded here anymore.
   // They will be loaded in the background by ASSET_LOADER.startMenuAssetLoading()
   // after the main menu becomes visible.

@@ -59,31 +59,70 @@ function drawMainMenu() {
     const drawY = (height - drawH) / 2;
     image(img, drawX, drawY, drawW, drawH);
   }
-  
+  //global lighting opacity, randomly fluctuate to give a "breathing" effect, use noise
+   const pulseAlpha = 150 + 50 * Math.sin(frameCount * 0.02);
+   
   // Layer 1: Background image (full-screen, fills width)
   if (mainMenuImages.mainbkg) {
-    drawFullWidthImage(mainMenuImages.mainbkg);
+    drawFullWidthImage(mainMenuImages.opnbkg);
   }
+  //layeer 2: back stilotes// have these sway back and forth slowly
+    if (mainMenuImages.opnlstil) {
+      const swayOffset = Math.sin(frameCount * 0.01) * 10;
+      const scale = width / mainMenuImages.opnlstil.width;
+      const drawW = mainMenuImages.opnlstil.width * scale;
+      const drawH = mainMenuImages.opnlstil.height * scale;
+      const drawX = (width - drawW) / 2 + swayOffset;
+      const drawY = (height - drawH) / 2;
+      image(mainMenuImages.opnlstil, drawX, drawY, drawW, drawH);
+       // Layer 2: Light overlay for bkg stiloetes (same xy location)
+      if (mainMenuImages.opnblight) {
+        push();
+        tint(255, 255, 255, pulseAlpha);
+        image(mainMenuImages.opnblight, drawX, drawY, drawW, drawH);
+        pop();
+      }
+    }
+ //layer 3: foreground stillotes (stay still)
+    if (mainMenuImages.opnstl) {
+      const scale = width / mainMenuImages.opnstl.width;
+      const drawW = mainMenuImages.opnstl.width * scale;
+      const drawH = mainMenuImages.opnstl.height * scale;
+      const drawX = (width - drawW) / 2;
+      const drawY = (height - drawH) / 2;
+      image(mainMenuImages.opnstl, drawX, drawY, drawW, drawH);
+       // Layer 2: Light overlay for foreground stiloetes (same xy location)
+      if (mainMenuImages.opnlight) {
+        push();
+        tint(255, 255, 255, pulseAlpha);
+        image(mainMenuImages.opnlight, drawX, drawY, drawW, drawH);
+        pop();
+      } 
+    }
+    //layer 4: crack overlay, sudble random shifting both x and y to give a "shaking" effect, slight flickering
+    if (mainMenuImages.opncrk) {
+      const shakeOffsetX = Math.sin(frameCount * 0.02) * 5;
+      const shakeOffsetY = Math.cos(frameCount * 0.02) * 5;
+      const scale = width / mainMenuImages.opncrk.width;
+      const drawW = mainMenuImages.opncrk.width * scale;
+      const drawH = mainMenuImages.opncrk.height * scale;
+      const drawX = (width - drawW) / 2 + shakeOffsetX;
+      const drawY = (height - drawH) / 2 + shakeOffsetY;
+      push();
+      tint(255, 255, 255, pulseAlpha * 0.8);
+      image(mainMenuImages.opncrk, drawX, drawY, drawW, drawH);
+      pop();
+    }
   
-  // Layer 2: Light overlay with subtle pulsing animation
-  if (mainMenuImages.mainlight) {
-    const pulseAlpha = 128 + Math.sin(frameCount * 0.02) * 40;
-    tint(255, pulseAlpha);
-    drawFullWidthImage(mainMenuImages.mainlight);
-    noTint();
-  }
   
-  // Layer 3: Title image (scaled to fill screen width, maintaining aspect ratio)
-  if (mainMenuImages.maintitle) {
-    const scale = width / mainMenuImages.maintitle.width;
-    const drawW = mainMenuImages.maintitle.width * scale;
-    const drawH = mainMenuImages.maintitle.height * scale;
+  // Layer 5: Title image (scaled to fill screen width, maintaining aspect ratio)
+  if (mainMenuImages.opnlogo) {
+    const scale = width / mainMenuImages.opnlogo.width;
+    const drawW = mainMenuImages.opnlogo.width * scale;
+    const drawH = mainMenuImages.opnlogo.height * scale;
     const drawX = (width - drawW) / 2;
     const drawY = (height - drawH) / 2;
-    
-    // Subtle float animation
-    const floatOffset = Math.sin(frameCount * 0.015) * 8;
-    image(mainMenuImages.maintitle, drawX, drawY + floatOffset, drawW, drawH);
+    image(mainMenuImages.opnlogo, drawX, drawY, drawW, drawH);
   }
   
   // Determine which prompt text to show
@@ -133,16 +172,12 @@ function drawMainMenuClickPrompt() {
   
   push();
   textAlign(CENTER, CENTER);
-  
-  // Use loaded font if available
-  if (mainMenuFont) {
-    textFont(mainMenuFont);
-  }
-  
+    //textFont(BebasKai);<load font bebas kai from data/fonts and use it here for the main menu prompt>
+    
   // Shadow
   fill(0, 0, 0, 150 * mainMenuClickPromptAlpha);
-  textSize(28);
-  text(mainMenuPromptText, width / 2 + 2, height - 80 + 2);
+  textSize(18);
+  text(mainMenuPromptText, width / 2 + 2, 100);
   
   // Main text
   if (mainMenuReadyForTransition) {

@@ -128,7 +128,7 @@ function drawPlayerHud() {
   textAlign(LEFT, CENTER);
   textSize(30);
  // text(fighter.name, titleX + 14, titleY + 18);
-
+textFont(NumberFont);
   textAlign(RIGHT, CENTER);
   text(`${safeHp.toFixed(0)}`, titleX + titleW - 14, titleY + 9);
 
@@ -213,6 +213,7 @@ pop();
     fill(255);
     textAlign(CENTER, CENTER);
     textSize(10);
+    textFont(Subheadings)
     text(cooldown.toFixed(1), x, y + size/2 + 4);
     pop();
   } else {
@@ -258,7 +259,7 @@ function drawMultiPlayerHuds() {
 }
 
 function drawFighterHudPanel(fighter, panelX, panelY) {
-  const isDefeated = fighter.isDefeated;
+   const isDefeated = fighter.isDefeated;
   const charKey = fighter.characterKey;
   const panelW = 64*7/2; // 7/2 cells * 64
   const panelH = 64; // 1 cells * 64
@@ -269,20 +270,41 @@ function drawFighterHudPanel(fighter, panelX, panelY) {
   if (charKey === 'DIHUI') { sprite = 'dihuienemy'; dedSprite = 'dihuienemyded'; }
   else if (charKey === 'VALENCINA') { sprite = 'valenemy'; dedSprite = 'valenemyded'; }
   else if (charKey === 'CALLISTO') { sprite = 'calenemy'; dedSprite = 'calenemyded'; }
-
-  drawBattleUISprite(isDefeated ? dedSprite : sprite, panelX + panelW/2, panelY + panelH/2, panelW, panelH);
-
   // Overlay info
   push();
   noStroke();
-  fill(isDefeated ? '#ff6464' : '#ffffff');
+ 
+
+  const hpBarX = panelX + 12;
+  const hpBarY = panelY + panelH - 18;
+  const hpBarW = panelW - 50;
+  fill('#222');
+  rect(hpBarX, hpBarY-10, hpBarW, 4);
+  fill(isDefeated ? '#663333' : '#42d492');
+  rect(hpBarX, hpBarY-10, hpBarW * (isDefeated ? 0 : fighter.hp / fighter.maxHp), 4);
+
+  if (!isDefeated) {
+    fill('#222');
+    rect(hpBarX, hpBarY -5, hpBarW, 4, 2);
+    const staggerPercent = constrain(fighter.stagger / fighter.staggerThreshold, 0, 1);
+    if (staggerPercent > 0) {
+      fill(255, 100 + staggerPercent * 50, 50);
+      rect(hpBarX, hpBarY -5, hpBarW * staggerPercent, 4, 2);
+    }
+  }
+ 
+
+  drawBattleUISprite(isDefeated ? dedSprite : sprite, panelX + panelW/2, panelY + panelH/2, panelW, panelH);
+
+     fill(isDefeated ? '#ff6464' : '#ffffff');
   textAlign(LEFT, CENTER);
   textSize(12);
+  textFont(Subheadings);
   const label = `P${fighter.playerId || 1}`;
-  text(label, panelX + 12, panelY + 18);
+  text(label, panelX + 20, panelY +25);
   textSize(13);
-  text(isDefeated ? 'DEFEATED' : fighter.name, panelX + 50, panelY + 18);
-
+  text(isDefeated ? 'DEFEATED' : fighter.name, panelX + 50, panelY +25);
+  textFont(NumberFont);
   if (!isDefeated) {
     const safeHp = fighter.hp !== null && fighter.hp !== undefined ? fighter.hp : 0;
     const safeMaxHp = fighter.maxHp || 100;
@@ -298,24 +320,6 @@ textSize(10);
   text('X', panelX + 15, panelY - 13);
   textSize(20 + `${fighter.combo}`.length * 2); // Dynamically increase combo number size based on digit count
   text(`${fighter.combo}`, panelX + 30, panelY - 13);
-  }
-
-  const hpBarX = panelX + 12;
-  const hpBarY = panelY + panelH - 18;
-  const hpBarW = panelW - 24;
-  fill('#222');
-  rect(hpBarX, hpBarY-10, hpBarW, 4);
-  fill(isDefeated ? '#663333' : '#42d492');
-  rect(hpBarX, hpBarY-10, hpBarW * (isDefeated ? 0 : fighter.hp / fighter.maxHp), 4);
-
-  if (!isDefeated) {
-    fill('#222');
-    rect(hpBarX, hpBarY + 10, hpBarW, 4, 2);
-    const staggerPercent = constrain(fighter.stagger / fighter.staggerThreshold, 0, 1);
-    if (staggerPercent > 0) {
-      fill(255, 100 + staggerPercent * 50, 50);
-      rect(hpBarX, hpBarY + 10, hpBarW * staggerPercent, 4, 2);
-    }
   }
   pop();
 }
@@ -367,6 +371,7 @@ function drawOverheadHealthbars() {
       fill(hp > 0.6 ? '#42d492' : hp > 0.3 ? '#ffcc33' : '#d94d4d');
       rect(fx - barWidth/2, fy - barOffset, barWidth * hp, barHeight, 2);
     }
+  
     pop();
   });
 }

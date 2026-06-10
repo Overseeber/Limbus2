@@ -218,9 +218,11 @@ class DamageNumber extends FloatingIndicator {
     
     // Draw damage number
     textSize(this.size);
+  
     fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
     stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
     strokeWeight(DAMAGE_CONSTANTS.STROKE_WEIGHT);
+      textFont(NumberFont);
     text(`${floor(this.value)}`, damageTextX, damageTextY);
     
     // Determine subtext for critical, depowered, or tremor burst
@@ -294,12 +296,12 @@ class EvadeIndicator extends FloatingIndicator {
     push();
     textAlign(CENTER, CENTER);
     textSize(this.size);
-    
+
     const colors = DAMAGE_CONSTANTS.COLOR.EVADE;
     fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
     stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
     strokeWeight(DAMAGE_CONSTANTS.STROKE_WEIGHT);
-    
+    textFont(NumberFont);   
     text('evade', this.pos.x, this.pos.y);
     pop();
   }
@@ -324,7 +326,7 @@ class TremorIndicator extends FloatingIndicator {
     push();
     textAlign(CENTER, CENTER);
     textSize(this.size);
-    
+    textFont(NumberFont);
     // Use orange/red colors for tremor to distinguish from evade
     fill(255, 100, 50, this.alpha);
     stroke(255, 50, 0, this.alpha);

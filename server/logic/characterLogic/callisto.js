@@ -628,7 +628,7 @@ function updateSystems(state, dt, config) {
   state.resources.artworkDamageBonus = artworkStacks * (config.artworkTibia.damageBonus || 0.1);
 
   // 7. Check ultimate availability
-  state.resources.ultimateAvailable = artworkStacks >= (config.ultimate.artworkRequired || 5);
+  state.resources.ultimateAvailable = artworkStacks >= (config.ultimate.artworkRequired || 3);
 
   return events;
 }

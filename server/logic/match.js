@@ -746,6 +746,12 @@ tick() {
         if (evadeEdge && !state.isEvading && state.state !== 'hurt' && 
             state.state !== 'staggered' && !state.isAttacking && !state.isDashing) {
             this.startEvade(player);
+
+            // VALENCINA: Manual evade loses 1 Precognition
+            if (player.characterKey === 'VALENCINA') {
+                const valencinaLogic = require('./characterLogic/valencina');
+                valencinaLogic.onManualEvade(state);
+            }
         }
 
         // ABILITY INPUT - Q and X keys for character-specific abilities
@@ -3086,17 +3092,21 @@ tick() {
 
         switch (charKey) {
             case 'CALLISTO':
-                // Ultimate requires 5 Artwork: Tibia stacks
-                return (state.resources && state.resources.artworkTibiaStacks >= 5);
+                // Ultimate requires 3 Artwork: Tibia stacks
+                const callistoConfig = this.engine.getCharacterConfig('CALLISTO');
+                const callistoThreshold = callistoConfig?.ultimate?.artworkRequired || 3;
+                return (state.resources && state.resources.artworkTibiaStacks >= callistoThreshold);
             case 'VALENCINA':
                 // Ultimate available when NOT in Overheat (exiting overheat stage)
                 // Check Overheat status: if present and count > 0, can't ult
                 const overheatStatus = state.statuses ? state.statuses.find(s => s.type === 'Overheat') : null;
                 return !overheatStatus || overheatStatus.count <= 0;
             case 'DIHUI':
-                // Ultimate requires [Dihui Star's Blade] >= 50
+                // Ultimate requires [Dihui Star's Blade] >= config threshold
+                const bladeDihuiConfig = this.engine.getCharacterConfig('DIHUI');
+                const dihuiThreshold = bladeDihuiConfig?.dihuiBlade?.ultimateThreshold || 20;
                 const bladeStatus = state.statuses ? state.statuses.find(s => s.type === "Dihui Star's Blade") : null;
-                return bladeStatus && bladeStatus.count >= 50;
+                return bladeStatus && bladeStatus.count >= dihuiThreshold;
             case 'JOHN':
                 // Always available
                 return true;

@@ -108,6 +108,13 @@ function onSuccessfulHit(state, targetState, damage, config) {
   // Apply Accelerating Future effects to speed/interval
   applyAcceleratingFutureEffects(state, config);
 
+  // On hit (landing an attack): lose 1 Precognition
+  const precogHit = getStatus(state, 'Precognition');
+  if (precogHit && precogHit.count > 0) {
+    precogHit.count = Math.max(0, precogHit.count - 1);
+    effects.precognitionLost = 1;
+  }
+
   // On hit (landing an attack): lose 1 Overheat
   const oh = getStatus(state, 'Overheat');
   if (oh && oh.count > 0) {
@@ -337,6 +344,21 @@ function checkPrecognitionEvade(state) {
 }
 
 /**
+ * Called when Valencina manually evades (presses E key).
+ * Lose 1 Precognition count.
+ */
+function onManualEvade(state) {
+  if (!state || state.isDefeated) return { success: false };
+  
+  const precogStatus = getStatus(state, 'Precognition');
+  if (precogStatus && precogStatus.count > 0) {
+    precogStatus.count = Math.max(0, precogStatus.count - 1);
+    return { success: true, precognitionLost: 1 };
+  }
+  return { success: false, reason: 'No Precognition' };
+}
+
+/**
  * Update Precognition system each tick.
  * At 0: Enter Overheat
  */
@@ -419,7 +441,7 @@ function onReceiveHit(state, damage, attacker, config) {
   // Lose 1 Precognition if she has Precognition (not in Overheat)
   const precog = getStatus(state, 'Precognition');
   if (precog && precog.count > 0) {
-    precog.count = Math.max(0, precog.count - 10);
+    precog.count = Math.max(0, precog.count - 1);
     effects.precognitionLost = 1;
   }
 
@@ -568,6 +590,7 @@ if (typeof module !== 'undefined' && module.exports) {
     onSuccessfulHit,
     onReceiveHit,
     checkPrecognitionEvade,
+    onManualEvade,
     updatePrecognition,
     updateOverheat,
     enterOverheat,

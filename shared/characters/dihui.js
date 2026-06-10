@@ -151,7 +151,7 @@ const DIHUI_CONFIG = {
     // Unsheathing Dihui Star's Blade
     damageReductionPerStack: 0.01,  // -1% damage taken per stack
     critDamagePerStack: 0.01,       // +1% critical damage per stack
-    ultimateThreshold: 50,          // 50 stacks to unlock ultimate
+    ultimateThreshold: 20,          // 20 stacks to unlock ultimate
     shinName: 'Shin (心) - Dihui Star',
     shinTitle: 'Lacerating Afterimages for Myriad Moments'
   },

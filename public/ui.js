@@ -294,10 +294,10 @@ function drawFighterHudPanel(fighter, panelX, panelY) {
     const comboRatio = constrain(fighter.comboTimer / fighter.comboTimeout, 0, 1);
 textSize(10);
      fill(255);
-  text('Combo', panelX + 14, panelY - 7);
-  text('X', panelX + 15, panelY - 20);
+  text('Combo', panelX + 14, panelY - 0);
+  text('X', panelX + 15, panelY - 13);
   textSize(20 + `${fighter.combo}`.length * 2); // Dynamically increase combo number size based on digit count
-  text(`${fighter.combo}`, panelX + 30, panelY - 20);
+  text(`${fighter.combo}`, panelX + 30, panelY - 13);
   }
 
   const hpBarX = panelX + 12;
@@ -650,20 +650,8 @@ function drawCombatOver() {
   const panelH = 340;
   const panelX = (width - panelW) / 2;
   const panelY = (height - panelH) / 2 + 30;
-  push();
-  fill(10, 10, 18, 220);
-  stroke(255, 64);
-  strokeWeight(1.5);
-  rect(panelX, panelY, panelW, panelH, 18);
-  pop();
-  push();
-  noFill();
-  stroke(255, 16);
-  strokeWeight(1);
-  for (let ring = 0; ring < 3; ring++) {
-    rect(panelX + panelW / 2, panelY + panelH / 2, panelW - ring * 50, panelH - ring * 50, 18);
-  }
-  pop();
+  
+  
 
   const btnW = 300;
   const btnH = 56;

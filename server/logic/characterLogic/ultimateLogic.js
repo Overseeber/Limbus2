@@ -346,7 +346,7 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
         ult.damageInstances++;
         if (ult.damageInstances <= 20) {
           // Deal 1/20th of base damage per instance
-          targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, Math.floor(fighter.baseDamage / 20), false, 5, false); });
+        //  targetEnemies.forEach(e => { if (e) dealUltDamage(fighter, ult, e, Math.floor(0), false, 5, false); });
           // Spawn red line effect
           const bottomX = random(100, ARENA_WIDTH - 100);
           const topX = clampX(bottomX + random(-100, 100));
@@ -370,7 +370,7 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
     // ============ PHASE 11: FINAL HOLD - cuend, debris, zoom out ============
     case 11:
       ult.currentSprite = 'cuend';
-      ult.cameraZoom = 0.25; // Zoom out
+      ult.cameraZoom = 0.5; // Zoom out
       ult.backgroundDim = 0;
       
       // Fade in red lines
@@ -384,7 +384,10 @@ function updateCallistoUltimate(fighter, ult, enemies, dt) {
         for (let i = 0; i < 21; i++) {
           const randomSkull = skullTypes[Math.floor(random(0, 3))];
           const randomScale = random(0.2, 2.0);
-          const randomX = clampX(fighter.position.x + random(-500, 500));
+         let randomX;
+do {
+  randomX = clampX(fighter.position.x + random(-500, 500));
+} while (Math.abs(randomX - fighter.position.x) < 50);
           // Y starts 500 pixels UNDER the arena
           const randomY = ARENA_HEIGHT + random(100, 200);
           const randomRotation = random(-Math.PI / 5, Math.PI / 5);

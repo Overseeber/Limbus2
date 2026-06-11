@@ -345,17 +345,64 @@ function checkPrecognitionEvade(state) {
 
 /**
  * Called when Valencina manually evades (presses E key).
- * Lose 1 Precognition count.
+ * 
+ * If in Precognition state:
+ *   - Lose 1 Precognition count.
+ *   - If Precognition reaches 0, enter Overheat with 30 Overheat.
+ * 
+ * If in Overheat state:
+ *   - Lose 1 Overheat count.
+ *   - If Overheat reaches 0, exit Overheat, return to Precognition with 30.
  */
-function onManualEvade(state) {
+/**
+ * Called when Valencina manually evades (presses E key).
+ * 
+ * If in Precognition state:
+ *   - Lose 1 Precognition count.
+ *   - If Precognition reaches 0, enter Overheat with config.overheat.startingValue Overheat.
+ * 
+ * If in Overheat state:
+ *   - Lose 1 Overheat count.
+ *   - If Overheat reaches 0, exit Overheat, return to Precognition with config.precognition.startingValue.
+ * 
+ * @param {Object} state - The fighter game state
+ * @param {Object} [config] - The character config (will be loaded from shared configs if not provided)
+ */
+function onManualEvade(state, config) {
   if (!state || state.isDefeated) return { success: false };
   
+  // Require config from shared if not provided
+  if (!config) {
+    config = require('../../../shared/characters/valencina');
+  }
+  
   const precogStatus = getStatus(state, 'Precognition');
+  const overheatStatus = getStatus(state, 'Overheat');
+  
+  // If currently in Overheat, lose 1 Overheat
+  if (overheatStatus && overheatStatus.count > 0) {
+    overheatStatus.count = Math.max(0, overheatStatus.count - 1);
+    if (overheatStatus.count <= 0) {
+      // Overheat reached 0 via manual evade: exit Overheat, return to Precognition
+      exitOverheat(state, config);
+      return { success: true, overheatLost: 1, overheatExited: true, precognitionRestored: true };
+    }
+    return { success: true, overheatLost: 1 };
+  }
+  
+  // If in Precognition state, lose 1 Precognition
   if (precogStatus && precogStatus.count > 0) {
     precogStatus.count = Math.max(0, precogStatus.count - 1);
+    // If Precognition reaches 0, enter Overheat (same behavior as passive-evade depletion)
+    if (precogStatus.count <= 0) {
+      enterOverheat(state, config);
+      return { success: true, precognitionLost: 1, overheatEntered: true };
+    }
     return { success: true, precognitionLost: 1 };
   }
-  return { success: false, reason: 'No Precognition' };
+  
+  // No Precognition and no Overheat (shouldn't happen, but just in case)
+  return { success: false, reason: 'No Precognition or Overheat' };
 }
 
 /**

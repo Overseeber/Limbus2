@@ -295,18 +295,47 @@ tick() {
                     };
                 }
                 
-        // Update gameplay state through GameplayEngine FIRST
-        // This allows hit/stagger state to exit on input before input processing
-        const config = {
-            staggerThreshold: player.config.staggerThreshold,
-            staggerLength: player.config.staggerLength,
-            staggerRecoveryDelay: player.config.staggerRecoveryDelay || 2.0,
-            staggerRecoveryRate: player.config.staggerRecoveryRate || 12
-        };
-        const events = this.engine.updateFighter(player.gameState, dt, config, player.input);
+                // Update gameplay state through GameplayEngine FIRST
+                // This allows hit/stagger state to exit on input before input processing
+                const config = {
+                    staggerThreshold: player.config.staggerThreshold,
+                    staggerLength: player.config.staggerLength,
+                    staggerRecoveryDelay: player.config.staggerRecoveryDelay || 2.0,
+                    staggerRecoveryRate: player.config.staggerRecoveryRate || 12
+                };
+                const events = this.engine.updateFighter(player.gameState, dt, config, player.input);
 
                 // Handle events from GameplayEngine
                 this.handleEvents(player, events);
+
+                // CRITICAL: Synchronize hitTimer to hitstunTimer so processInput can check
+                // the same timer value that updateFighter actually decrements.
+                // hitTimer is set by resolveAttack and decremented by updateFighter.
+                // hitstunTimer is checked by processInput for action gating.
+                // Without this sync, actions would bypass hitstun protection.
+                player.gameState.hitstunTimer = player.gameState.hitTimer || 0;
+
+                // CRITICAL: Clear stale attack state when the fighter was interrupted
+                // during an attack (e.g., hit during startup/active frames).
+                // resolveAttack overrides state to 'hurt' but never calls endAttack(),
+                // leaving isAttacking=true, attackPhase, attackSequence stale.
+                // These stale flags block new actions even after hitstun expires.
+                if (player.gameState.state !== 'attacking' && player.gameState.state !== 'attack') {
+                    if (player.attackPhase !== 'none' || player.attackSequence !== 0 || player.gameState.isAttacking) {
+                        // Fighter is NOT in an attack state but has stale attack flags - clear them
+                        player.gameState.isAttacking = false;
+                        player.attackPhase = 'none';
+                        player.attackSequence = 0;
+                        player.strikeActive = false;
+                        player.attackCharge = false;
+                        player.attackFrameTimer = 0;
+                        player.attackFrame = 0;
+                        player.attackCounter = 0;
+                        player.comboHoldTimer = 0;
+                        player.attackRequestActive = false;
+                        player.attackHoldStart = null;
+                    }
+                }
 
                 // Process Valencina's Game Target status on all fighters each tick
                 // This restricts speed/jump/dash for any fighter with Game Target active
@@ -991,6 +1020,9 @@ tick() {
         
         // Update attack counter for rotation
         player.attackCounter = sequence;
+        
+        // Reset hard attack timeout
+        player._totalAttackFrameTimer = 0;
     }
 
     /**
@@ -1385,6 +1417,35 @@ tick() {
         // Slam cooldown (separate timer for slam attack recovery only)
         state.slamCooldown -= dt;
         if (state.slamCooldown < 0) state.slamCooldown = 0;
+
+        // HARD ATTACK TIMEOUT: Universal safety net that checks if fighter is stuck
+        // in ANY attack state for more than 3 seconds. This must run OUTSIDE the
+        // phase/sequence checks so it catches cases where attackPhase or attackSequence
+        // have been corrupted/cleared but state.isAttacking remains true.
+        if (state.isAttacking || state.state === 'attacking' || state.state === 'attack') {
+            player._totalAttackFrameTimer = (player._totalAttackFrameTimer || 0) + dt;
+            if (player._totalAttackFrameTimer > 3.0) {
+                console.warn('[MATCH] Attack timeout exceeded, force-ending. Player:', player.clientId, 'State:', state.state, 'Phase:', player.attackPhase, 'Seq:', player.attackSequence, 'isAttacking:', state.isAttacking);
+                // Force-clear ALL attack state unconditionally
+                state.isAttacking = false;
+                state.state = 'idle';
+                player.attackSequence = 0;
+                player.attackPhase = 'none';
+                player.strikeActive = false;
+                player.attackCharge = false;
+                player.attackFrameTimer = 0;
+                player.attackFrame = 0;
+                player.attackCounter = 0;
+                player.comboHoldTimer = 0;
+                player.attackRequestActive = false;
+                player.attackHoldStart = null;
+                player._totalAttackFrameTimer = 0;
+                return;
+            }
+        } else {
+            // Not attacking - reset timeout accumulator
+            player._totalAttackFrameTimer = 0;
+        }
 
         // RESTORED: ATTACK SEQUENCE PHASE TIMING
         if (state.isAttacking && player.attackSequence > 0 && player.attackPhase !== 'none') {
@@ -3136,6 +3197,10 @@ tick() {
         player.ultimate = initUltimate(state);
         player.ultimateActive = true;
         
+        // CRITICAL: Immediately set ultimateAvailable to false when ultimate starts.
+        // This prevents double-activation and ensures it must be re-earned.
+        state.resources.ultimateAvailable = false;
+        
         // Set ultimate name and dialogue based on character
         switch (player.characterKey) {
             case 'JOHN':
@@ -3212,12 +3277,68 @@ tick() {
             other.gameState.ultimateProtected = false;
             other.gameState.state = 'idle';
             other.gameState.isAttacking = false;
+            // CRITICAL: Reset hitTimer and hitstunTimer that were set to 999
+            // during ultimate protection to prevent permanent action lockout.
+            other.gameState.hitTimer = 0;
+            other.gameState.hitstunTimer = 0;
+            other.gameState.blockstunTimer = 0;
         });
         
         // Restore collision
         Object.values(this.players).forEach(other => {
             other.gameState.collisionEnabled = true;
         });
+        
+        // CONSUME CHARACTER-SPECIFIC ULTIMATE RESOURCES ON ULTIMATE END
+        // This ensures reacquisition requires meeting conditions again.
+        switch (player.characterKey) {
+            case 'CALLISTO':
+                // Consume all Artwork: Tibia stacks and Corpus Ingredient at ultimate end
+                state.resources.artworkTibiaStacks = 0;
+                state.resources.corpusIngredient = 0;
+                state.resources.corpusSpentTotal = 0;
+                // Sync status effects for client visibility
+                const artworkStatus = state.statuses.find(s => s.type === 'Artwork Tibia');
+                if (artworkStatus) {
+                    artworkStatus.count = 0;
+                    artworkStatus.potency = 0;
+                }
+                const corpusStatus = state.statuses.find(s => s.type === 'Corpus Ingredient');
+                if (corpusStatus) {
+                    corpusStatus.count = 0;
+                    corpusStatus.potency = 0;
+                }
+                // Ultimate becomes unavailable immediately; reacquisition requires Artwork: Tibia >= 3
+                state.resources.ultimateAvailable = false;
+                break;
+            case 'DIHUI':
+                // Consume all Dihui Star's Blade stacks at ultimate end
+                const bladeStatus = state.statuses.find(s => s.type === "Dihui Star's Blade");
+                if (bladeStatus) {
+                    bladeStatus.count = 0;
+                    bladeStatus.potency = 0;
+                }
+                // Ultimate becomes unavailable immediately; reacquisition requires Blade >= 20
+                state.resources.ultimateAvailable = false;
+                break;
+            case 'VALENCINA':
+                // Ultimate becomes unavailable immediately; reacquisition requires exiting Overheat
+                // (handled by updateSystems() which checks Overheat count each tick)
+                state.resources.ultimateAvailable = false;
+                // Force Valencina into Overheat after ultimate ends.
+                // She must exit Overheat (return to Precognition with Precognition > 0)
+                // before ultimate becomes available again. This prevents immediate re-use.
+                try {
+                    const valencinaLogic = require('./characterLogic/valencina');
+                    const valencinaConfig = this.engine.getCharacterConfig('VALENCINA');
+                    if (valencinaLogic && valencinaConfig) {
+                        valencinaLogic.enterOverheat(state, valencinaConfig);
+                    }
+                } catch(e) {
+                    console.error('[endUltimate] Failed to enter Overheat after Valencina ultimate:', e);
+                }
+                break;
+        }
         
         // Reset ultimate state
         player.ultimateActive = false;
@@ -3227,6 +3348,10 @@ tick() {
         state.ultimateCameraZoom = 1;
         state.ultimateBackgroundDim = 0;
         
+        // Reset the ultimate user's hitstun/hitTimer too (may have been set during sequence)
+        state.hitTimer = 0;
+        state.hitstunTimer = 0;
+        state.blockstunTimer = 0;
         
         // Broadcast ultimate end
         this.broadcast({

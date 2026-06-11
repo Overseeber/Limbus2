@@ -75,10 +75,16 @@ function onSuccessfulHit(state, targetState, damage, config) {
     state.statuses.push({ type: "Dihui Star's Blade", count: 1, potency: 0, timer: 0 });
   }
 
-  // Check if Bladetrail Afterimage count reaches 50 to unlock ultimate
+  // NOTE: ultimate availability is handled dynamically by updateSystems(),
+  // which re-evaluates on every tick based on current blade count.
+  // Do not set ultimateAvailable here - it would incorrectly re-enable
+  // ultimate immediately after use before the blade has been consumed.
+  // The Shin status is also handled by updateSystems if needed.
+  // See: updateSystems() in this file.
+  
+  // Fire event if the threshold was JUST crossed (for potential use elsewhere)
   if (getStatusCount(state, "Dihui Star's Blade") >= config.dihuiBlade.ultimateThreshold) {
-    state.resources.ultimateAvailable = true;
-    ensureStatus(state, config.dihuiBlade.shinName, 1, 1);
+    effects.ultimateThresholdReached = true;
   }
 
   return { success: true, ...effects };
@@ -480,6 +486,18 @@ function updateSystems(state, dt, config) {
       ensureStatus(targetPlayer, 'Bladetrail Afterimage', excess, 0);
       events.push({ type: 'BLADETRAIL_AFTERIMAGE_INFLICTED', amount: excess });
     }
+  }
+
+  // 3. Update ultimate availability dynamically based on Dihui Star's Blade count
+  const bladeStatus = getStatus(state, "Dihui Star's Blade");
+  const bladeCount = bladeStatus ? bladeStatus.count : 0;
+  const requiresBlade = config.dihuiBlade?.ultimateThreshold || 20;
+  const wasAvailable = state.resources.ultimateAvailable;
+  state.resources.ultimateAvailable = bladeCount >= requiresBlade;
+  
+  // If ultimate availability just transitioned, emit event
+  if (state.resources.ultimateAvailable && !wasAvailable) {
+    events.push({ type: 'ULTIMATE_AVAILABLE' });
   }
 
   return events;

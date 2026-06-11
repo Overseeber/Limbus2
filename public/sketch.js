@@ -13,6 +13,37 @@ const BATTLE_STATES = {
   COMBAT_OVER: 'combatOver'
 };
 
+// Unified pre-match state system
+const PRE_MATCH_STATES = {
+  LOBBY: 'lobby',
+  CHARACTER_SELECT: 'characterSelect',
+  CHARACTER_INSPECT: 'characterInspect'
+};
+
+// Character cycling order
+const CHARACTER_ORDER = ['VALENCINA', 'CALLISTO', 'DIHUI'];
+
+// Character art asset mapping
+const CHARACTER_ART_ASSETS = {
+  'VALENCINA': 'vals',
+  'CALLISTO': 'cals',
+  'DIHUI': 'dstar'
+};
+
+// Character kit asset mapping
+const CHARACTER_KIT_ASSETS = {
+  'VALENCINA': 'valkit',
+  'CALLISTO': 'calkit',
+  'DIHUI': 'starkit'
+};
+
+// Character passive asset mapping
+const CHARACTER_PASSIVE_ASSETS = {
+  'VALENCINA': 'valpassive',
+  'CALLISTO': 'calpassive',
+  'DIHUI': 'starpassive'
+};
+
 let gameMode = null; // 'multiplayer' or 'cpu'
 let player;
 let enemy;
@@ -24,6 +55,17 @@ let battleTimer = 0;
 
 function setBattleState(newState) {
   console.log('[STATE] ->', newState);
+  
+  // Initialize unified pre-match system when entering lobby
+  if (newState === BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.LOBBY) {
+    preMatchState = PRE_MATCH_STATES.LOBBY;
+    currentViewedCharacter = localSelectedCharacter;
+    inspectPage = 'active';
+    isFading = false;
+    characterFadeAlpha = 0;
+    targetCharacter = null;
+  }
+  
   battleState = newState;
 }
 
@@ -148,6 +190,16 @@ let availableCharacterKeys = () => {
 // Current previewed character for the new selection flow
 let previewCharacterKey = null;
 
+// Unified pre-match state variables
+let preMatchState = PRE_MATCH_STATES.LOBBY;
+let currentViewedCharacter = 'VALENCINA'; // Currently viewed character in select/inspect
+let localSelectedCharacter = 'VALENCINA'; // Local player's selected character
+let inspectPage = 'active'; // 'active' or 'passive' page in inspect mode
+let characterFadeAlpha = 0; // For fade transitions (0 = fully visible, 255 = fully black)
+let isFading = false;
+let fadeDirection = 0; // -1 = fading out, 1 = fading in
+let targetCharacter = null; // Target character during fade transition
+
 // Buttons for character cards in the menu (rebuilt each frame)
 let characterCardButtons = [];
 // Buttons for the preview screen (rebuilt each frame)
@@ -256,6 +308,9 @@ const BTN_READY_H = 30;
 // Room slot buttons (rebuilt each frame)
 let roomSlotButtons = [];
 let combatOverButtons = [];
+
+// Unified pre-match buttons (rebuilt each frame)
+let preMatchButtons = [];
 
 function preload() {
   // ============================================================
@@ -434,6 +489,17 @@ function setup() {//test
       myRoomState = state;
       myRoomId = state.id;
       localSlotSelections = (state.slots || []).map(s => s.character || null);
+      
+      // Sync local selected character with room state
+      const myClientId = Network.myClientId;
+      if (myClientId && state.slots) {
+        const mySlot = state.slots.find(s => s.clientId === myClientId);
+        if (mySlot && mySlot.character) {
+          localSelectedCharacter = mySlot.character;
+          currentViewedCharacter = localSelectedCharacter;
+        }
+      }
+      
       // Minimal logging to avoid main-thread stalls on low-power servers
       if (DEBUG_UI) console.log('roomState', state);
       _lastNetworkEvent.roomState = Date.now();
@@ -1915,14 +1981,14 @@ function draw() {
 
   if (battleState === BATTLE_STATES.MODE_SELECT) {
     drawModeSelectScreen();
+  } else if (battleState === BATTLE_STATES.LOBBY) {
+    drawUnifiedPreMatch();
   } else if (battleState === BATTLE_STATES.CHARACTER_SELECT_MENU) {
     drawCharacterSelectMenu();
   } else if (battleState === BATTLE_STATES.CHARACTER_PREVIEW) {
     drawCharacterPreview();
   } else if (battleState === BATTLE_STATES.CPU_OPPONENT_CONFIG) {
     drawCPUOpponentConfig();
-  } else if (battleState === BATTLE_STATES.LOBBY) {
-    drawLobby();
   } else if (battleState === BATTLE_STATES.READY) {
     drawReadyScreen();
   } else if (battleState === BATTLE_STATES.OPENING) {
@@ -2842,72 +2908,50 @@ console.log('myRoomState', myRoomState);
     }
   }
   
-  if (battleState === BATTLE_STATES.LOBBY && myRoomState) {
-    const mx = mouseX;
-    const my = mouseY;
-    
-    // Check Leave Room button click
-    if (mx > width - 140 && mx < width - 20 && my > 40 && my < 68) {
-      Network.leaveRoom();
-      myRoomState = null;
-      myRoomId = null;
-      localSlotSelections = [];
+  if (battleState === BATTLE_STATES.LOBBY) {
+    // Handle unified pre-match clicks
+    if (handleUnifiedPreMatchClick(mouseX, mouseY)) {
       return;
     }
     
-    const slots = myRoomState.slots || [];
-
-    // Check Start Battle button click
-    if (myRoomState.allReady) {
-      const btnX = width / 2 - 100;
-      const btnY = 430;
-      if (mx > btnX && mx < btnX + 200 && my > btnY && my < btnY + 50) {
-        console.log('Sending startBattle');
-        Network.startBattle();
+    // Fallback to old lobby click handling for room selection (when not in a room)
+    if (!myRoomState) {
+      const mx = mouseX;
+      const my = mouseY;
+      
+      // Handle room selection and creation (old lobby behavior)
+      const availRooms = availableRooms || [];
+      const roomButtonWidth = 260;
+      const roomButtonHeight = 60;
+      const roomStartX = (width - roomButtonWidth) / 2;
+      let roomY = 150;
+      
+      // Check available room clicks
+      for (let i = 0; i < availRooms.length; i++) {
+        const roomData = availRooms[i];
+        const roomId = typeof roomData === 'string' ? roomData : roomData.id;
+        
+        if (mx > roomStartX && mx < roomStartX + roomButtonWidth && my > roomY && my < roomY + roomButtonHeight) {
+          if (typeof Network !== 'undefined' && Network.joinRoom) {
+            Network.joinRoom(roomId);
+          }
+          return;
+        }
+        
+        roomY += roomButtonHeight + 12;
+      }
+      
+      // Check create room button
+      const createButtonY = roomY + 50;
+      if (mx > roomStartX && mx < roomStartX + roomButtonWidth && my > createButtonY && my < createButtonY + roomButtonHeight) {
+        if (typeof Network !== 'undefined' && Network.createRoom) {
+          Network.createRoom();
+        }
         return;
       }
     }
-
-    // Check button clicks first (UIButton system)
-    for (const btn of roomSlotButtons) {
-      if (btn.click(mx, my)) return;
-    }
-
-    // Clicking anywhere on an owned slot opens character select
-    const columnWidth = SLOT_COLUMN_W;
-    const count = Math.max(2, slots.length);
-    const startX = (width - (count * columnWidth)) / 2;
-
-    for (let i = 0; i < count; i++) {
-      const x = startX + i * columnWidth;
-
-const slotWidth = columnWidth - 20;
-
-if (
-  mx >= x &&
-  mx <= x + slotWidth &&
-  my >= SLOT_Y &&
-  my <= SLOT_Y + SLOT_H
-) {
-  console.log('chgaeck', i);
-        const slot = slots[i];
-        if (!slot || !slot.clientId) return; // empty slot
-
-        const isOwnedSlot = (Network && Network.myClientId && slot.clientId === Network.myClientId) || (Network && Network.isLocalAuthority && slot.clientId === 'local');
-        if (!isOwnedSlot) return;
-
-    
-      roomCharacterSelectSlot = i;
-      previewCharacterKey = localSlotSelections[i] || keys[0];
-
-      console.log('OPEN CHARACTER SELECT MENU');
-      setBattleState(BATTLE_STATES.CHARACTER_SELECT_MENU);
-        return;
-      }
-    }
-
-    return;
   }
+
   // Character Select menu / preview handlers
   if (battleState === BATTLE_STATES.CHARACTER_SELECT_MENU) {
     handleCharacterMenuClick(mouseX, mouseY);
@@ -2922,130 +2966,6 @@ if (
     return;
   }
 
-  if (battleState === BATTLE_STATES.LOBBY && !myRoomState) {
-    const mx = mouseX;
-    const my = mouseY;
-    
-    const availRooms = availableRooms || [];
-    const roomButtonWidth = 260;
-    const roomButtonHeight = 60;
-    const roomStartX = (width - roomButtonWidth) / 2;
-    let roomY = 150;
-    
-    // Check clicks on available room buttons
-    if (availRooms.length > 0) {
-      for (let i = 0; i < availRooms.length; i++) {
-        const roomData = availRooms[i];
-        const roomId = typeof roomData === 'string' ? roomData : roomData.id;
-        if (mx > roomStartX && mx < roomStartX + roomButtonWidth && my > roomY && my < roomY + roomButtonHeight) {
-          Network.joinRoom(roomId);
-          return;
-        }
-        roomY += roomButtonHeight + 12;
-      }
-    } else {
-      roomY += 40;
-    }
-    
-    // Check click on Create New Room button
-    const createButtonX = (width - roomButtonWidth) / 2;
-    const createButtonY = roomY + 50;
-    if (mx > createButtonX && mx < createButtonX + roomButtonWidth && my > createButtonY && my < createButtonY + roomButtonHeight) {
-      const newRoomId = `room-${Date.now()}`;
-      Network.createRoom(newRoomId);
-      return;
-    }
-  }
-
-  if (battleState === BATTLE_STATES.LOBBY) {
-    const mx = mouseX;
-    const my = mouseY;
-    
-    // Calculate column layout
-    const columnWidth = 200;
-    const startX = (width - (players.length * columnWidth)) / 2;
-    
-    // Check clicks on player columns
-    for (let i = 0; i < players.length; i++) {
-      const player = players[i];
-      const x = startX + i * columnWidth;
-      
-      // Check if click is within this player's column
-      if (mx > x && mx < x + columnWidth) {
-        // Join game (for inactive players)
-        if (!player.active && my > 120 && my < 140) {
-          player.active = true;
-          player.character = getAvailableFighters()[0];
-          player.ready = player.ai; // AI players are auto-ready
-          console.log(`Player ${i + 1} joined the game`);
-          return;
-        }
-        
-        // Add new player option (only show if below max and all slots are active)
-        if (players.filter(p => p.active).length >= 3 && 
-            players.filter(p => p.active).length < MAX_PLAYERS && 
-            i === players.filter(p => p.active).length && 
-            my > 120 && my < 140) {
-          // Find first inactive slot
-          for (let j = 0; j < players.length; j++) {
-            if (!players[j].active) {
-              players[j].active = true;
-              players[j].character = getAvailableFighters()[0];
-              players[j].ready = players[j].ai;
-              console.log(`Added player ${j + 1}`);
-              break;
-            }
-          }
-          return;
-        }
-        
-        // Only process clicks for active players
-        if (!player.active) continue;
-        
-        // Character selection
-        if (my > 170 && my < 190) {
-          const availableFighters = getAvailableFighters();
-          const currentIndex = availableFighters.indexOf(player.character);
-          const nextIndex = currentIndex < availableFighters.length - 1 ? currentIndex + 1 : 0;
-          player.character = availableFighters[nextIndex];
-          selectedPlayerSlot = i;
-          characterSelectOption = 0;
-          return;
-        }
-        
-        // AI toggle
-        if (my > 230 && my < 250) {
-          player.ai = !player.ai;
-          // Auto-ready AI players
-          if (player.ai) {
-            player.ready = true;
-          }
-          selectedPlayerSlot = i;
-          characterSelectOption = 1;
-          return;
-        }
-        
-        // Ready toggle (for non-AI players)
-        if (!player.ai && my > 290 && my < 310) {
-          player.ready = !player.ready;
-          selectedPlayerSlot = i;
-          characterSelectOption = 2;
-          return;
-        }
-        
-        // Remove player
-        if (my > 330 && my < 350 && players.filter(p => p.active).length > 1) {
-          player.active = false;
-          player.ready = false;
-          player.controlled = false;
-          console.log(`Removed player ${i + 1}`);
-          return;
-        }
-      }
-    }
-    
-    return;
-  }
   // Combat over screen button handling
   if (battleState === BATTLE_STATES.COMBAT_OVER && showCombatOverMenu) {
     const mx = mouseX;
@@ -3799,6 +3719,541 @@ function getCharacterIdleSpriteName(characterKey) {
   if (characterKey === 'CALLISTO') return 'cidle';
   if (characterKey === 'VALENCINA') return 'idle';
   return 'idle';
+}
+
+// ============================================================
+// UNIFIED PRE-MATCH SYSTEM
+// ============================================================
+
+/**
+ * Main entry point for the unified pre-match system
+ * Routes to the appropriate sub-state based on preMatchState
+ */
+function drawUnifiedPreMatch() {
+  // Update fade transitions
+  updateCharacterFade();
+  
+  // Draw character art background (always visible)
+  drawCharacterArtBackground();
+  
+  // Route to appropriate sub-state
+  if (preMatchState === PRE_MATCH_STATES.LOBBY) {
+    drawPreMatchLobby();
+  } else if (preMatchState === PRE_MATCH_STATES.CHARACTER_SELECT) {
+    drawPreMatchCharacterSelect();
+  } else if (preMatchState === PRE_MATCH_STATES.CHARACTER_INSPECT) {
+    drawPreMatchCharacterInspect();
+  }
+  
+  // Draw fade overlay if fading
+  if (isFading) {
+    push();
+    noStroke();
+    fill(0, characterFadeAlpha);
+    rect(0, 0, width, height);
+    pop();
+  }
+}
+
+/**
+ * Draw the character art background based on the currently viewed character
+ */
+function drawCharacterArtBackground() {
+  const artAsset = CHARACTER_ART_ASSETS[currentViewedCharacter];
+  const artImage = window.characterArt && window.characterArt[artAsset];
+  
+  if (artImage && artImage.width > 0) {
+    push();
+    imageMode(CENTER);
+    // Scale image to cover the screen while maintaining aspect ratio
+    const scale = Math.max(width / artImage.width, height / artImage.height);
+    const drawW = artImage.width * scale;
+    const drawH = artImage.height * scale;
+    image(artImage, width / 2, height / 2, drawW, drawH);
+    pop();
+  } else {
+    // Fallback to solid color background
+    push();
+    background(20);
+    pop();
+  }
+}
+
+/**
+ * Update character fade transitions
+ */
+function updateCharacterFade() {
+  if (!isFading) return;
+  
+  const fadeSpeed = 15; // Alpha change per frame
+  
+  if (fadeDirection === -1) {
+    // Fading out
+    characterFadeAlpha += fadeSpeed;
+    if (characterFadeAlpha >= 255) {
+      characterFadeAlpha = 255;
+      // Swap character
+      if (targetCharacter) {
+        currentViewedCharacter = targetCharacter;
+        targetCharacter = null;
+      }
+      fadeDirection = 1; // Start fading in
+    }
+  } else if (fadeDirection === 1) {
+    // Fading in
+    characterFadeAlpha -= fadeSpeed;
+    if (characterFadeAlpha <= 0) {
+      characterFadeAlpha = 0;
+      isFading = false;
+      fadeDirection = 0;
+    }
+  }
+}
+
+/**
+ * Start a character fade transition
+ */
+function startCharacterFade(newCharacter) {
+  if (isFading) return; // Don't interrupt existing fade
+  if (newCharacter === currentViewedCharacter) return;
+  
+  isFading = true;
+  fadeDirection = -1; // Start fading out
+  targetCharacter = newCharacter;
+  characterFadeAlpha = 0;
+}
+
+/**
+ * Get the next character in the cycling order
+ */
+function getNextCharacter(currentChar) {
+  const index = CHARACTER_ORDER.indexOf(currentChar);
+  if (index === -1) return CHARACTER_ORDER[0];
+  const nextIndex = (index + 1) % CHARACTER_ORDER.length;
+  return CHARACTER_ORDER[nextIndex];
+}
+
+/**
+ * Get the previous character in the cycling order
+ */
+function getPrevCharacter(currentChar) {
+  const index = CHARACTER_ORDER.indexOf(currentChar);
+  if (index === -1) return CHARACTER_ORDER[0];
+  const prevIndex = (index - 1 + CHARACTER_ORDER.length) % CHARACTER_ORDER.length;
+  return CHARACTER_ORDER[prevIndex];
+}
+
+/**
+ * LOBBY STATE
+ * Shows local player controls and opponent information
+ */
+function drawPreMatchLobby() {
+  preMatchButtons = [];
+  
+  // Sync current viewed character with local selection
+  currentViewedCharacter = localSelectedCharacter;
+  
+  // Local Player Controls (lower-center)
+  const buttonW = 200;
+  const buttonH = 50;
+  const buttonY = height - 100;
+  const buttonGap = 20;
+  const centerX = width / 2;
+  
+  // Ready button
+  const readyBtn = new UIButton(centerX - buttonW - buttonGap / 2, buttonY, buttonW, buttonH, () => {
+    if (typeof Network !== 'undefined' && Network.toggleReady) {
+      Network.toggleReady();
+    }
+  });
+  
+  const isLocalReady = getLocalReadyState();
+  readyBtn.draw(isLocalReady ? 'UNREADY' : 'READY', {
+    stroke: isLocalReady ? [255, 100, 100] : [100, 255, 100],
+    fill: isLocalReady ? [100, 80, 80] : [60, 100, 60],
+    text: 255
+  });
+  preMatchButtons.push(readyBtn);
+  
+  // Switch Character button
+  const switchBtn = new UIButton(centerX + buttonGap / 2, buttonY, buttonW, buttonH, () => {
+    preMatchState = PRE_MATCH_STATES.CHARACTER_SELECT;
+    currentViewedCharacter = localSelectedCharacter;
+  });
+  switchBtn.draw('SWITCH CHARACTER', {
+    stroke: [100, 160, 255],
+    fill: [40, 70, 120],
+    text: 255
+  });
+  preMatchButtons.push(switchBtn);
+  
+  // Opponent Display (lower-right)
+  drawOpponentDisplay();
+  
+  // Room info (top-left)
+  if (myRoomState) {
+    push();
+    textAlign(LEFT, TOP);
+    textSize(16);
+    fill(200);
+    text(`Room: ${myRoomState.id}`, 20, 20);
+    
+    // Leave button
+    const leaveBtn = new UIButton(width - 140, 20, 120, 30, () => {
+      if (typeof Network !== 'undefined' && Network.leaveRoom) {
+        Network.leaveRoom();
+      }
+    });
+    leaveBtn.draw('LEAVE', {
+      stroke: [180, 80, 80],
+      fill: [80, 40, 40],
+      text: 255,
+      textSize: 12
+    });
+    preMatchButtons.push(leaveBtn);
+    pop();
+  }
+  
+  // Start Battle button if all ready
+  if (myRoomState && myRoomState.allReady) {
+    const startBtn = new UIButton(centerX - 120, height - 180, 240, 50, () => {
+      if (typeof Network !== 'undefined' && Network.startBattle) {
+        Network.startBattle();
+      }
+    });
+    startBtn.draw('START BATTLE!', {
+      stroke: [100, 255, 100],
+      fill: [60, 120, 60],
+      text: 255,
+      textSize: 18
+    });
+    preMatchButtons.push(startBtn);
+  }
+}
+
+/**
+ * Get the local player's ready state from room state
+ */
+function getLocalReadyState() {
+  if (!myRoomState || !myRoomState.slots) return false;
+  const myClientId = Network && Network.myClientId;
+  if (!myClientId) return false;
+  
+  const mySlot = myRoomState.slots.find(s => s.clientId === myClientId);
+  return mySlot ? mySlot.ready : false;
+}
+
+/**
+ * Draw opponent information in the lower-right corner
+ */
+function drawOpponentDisplay() {
+  if (!myRoomState || !myRoomState.slots) return;
+  
+  const myClientId = Network && Network.myClientId;
+  if (!myClientId) return;
+  
+  const opponentSlot = myRoomState.slots.find(s => s.clientId !== myClientId && s.clientId);
+  if (!opponentSlot) return;
+  
+  const displayX = width - 220;
+  const displayY = height - 150;
+  const displayW = 200;
+  const displayH = 120;
+  
+  push();
+  // Background
+  fill(30, 30, 40, 230);
+  stroke(100, 100, 120);
+  strokeWeight(2);
+  rect(displayX, displayY, displayW, displayH, 10);
+  
+  // Character name
+  const charKey = opponentSlot.character || '—';
+  const charName = (window.CHARACTERS && window.CHARACTERS[charKey]) ? window.CHARACTERS[charKey].name : charKey;
+  
+  textAlign(LEFT, TOP);
+  textSize(16);
+  fill(255);
+  text(charName, displayX + 15, displayY + 15);
+  
+  // Ready state
+  textSize(14);
+  if (opponentSlot.ready) {
+    fill(100, 255, 100);
+    text('✓ READY', displayX + 15, displayY + 45);
+  } else {
+    fill(255, 255, 100);
+    text('NOT READY', displayX + 15, displayY + 45);
+  }
+  
+  // Character portrait placeholder
+  fill(50);
+  noStroke();
+  rect(displayX + 15, displayY + 70, 60, 60, 5);
+  
+  pop();
+}
+
+/**
+ * CHARACTER SELECT STATE
+ * Allows cycling through characters with fade transitions
+ */
+function drawPreMatchCharacterSelect() {
+  preMatchButtons = [];
+  
+  const buttonW = 120;
+  const buttonH = 45;
+  const buttonY = height - 100;
+  const centerX = width / 2;
+  const buttonGap = 15;
+  
+  // Left button (previous character)
+  const leftBtn = new UIButton(centerX - buttonW * 2 - buttonGap * 2, buttonY, buttonW, buttonH, () => {
+    const prevChar = getPrevCharacter(currentViewedCharacter);
+    startCharacterFade(prevChar);
+  });
+  leftBtn.draw('<', {
+    stroke: [150, 150, 180],
+    fill: [50, 50, 70],
+    text: 255,
+    textSize: 24
+  });
+  preMatchButtons.push(leftBtn);
+  
+  // Right button (next character)
+  const rightBtn = new UIButton(centerX + buttonW + buttonGap * 2, buttonY, buttonW, buttonH, () => {
+    const nextChar = getNextCharacter(currentViewedCharacter);
+    startCharacterFade(nextChar);
+  });
+  rightBtn.draw('>', {
+    stroke: [150, 150, 180],
+    fill: [50, 50, 70],
+    text: 255,
+    textSize: 24
+  });
+  preMatchButtons.push(rightBtn);
+  
+  // Inspect button
+  const inspectBtn = new UIButton(centerX - buttonW - buttonGap / 2, buttonY, buttonW, buttonH, () => {
+    preMatchState = PRE_MATCH_STATES.CHARACTER_INSPECT;
+    inspectPage = 'active';
+  });
+  inspectBtn.draw('INSPECT', {
+    stroke: [150, 150, 200],
+    fill: [60, 60, 90],
+    text: 255
+  });
+  preMatchButtons.push(inspectBtn);
+  
+  // Select button
+  const selectBtn = new UIButton(centerX + buttonGap / 2, buttonY, buttonW, buttonH, () => {
+    selectCharacter(currentViewedCharacter);
+  });
+  selectBtn.draw('SELECT', {
+    stroke: [100, 200, 100],
+    fill: [50, 100, 50],
+    text: 255
+  });
+  preMatchButtons.push(selectBtn);
+  
+  // Back button (top-left)
+  const backBtn = new UIButton(20, 20, 100, 35, () => {
+    preMatchState = PRE_MATCH_STATES.LOBBY;
+    currentViewedCharacter = localSelectedCharacter;
+  });
+  backBtn.draw('BACK', {
+    stroke: [120, 120, 120],
+    fill: [40, 40, 40],
+    text: 255,
+    textSize: 12
+  });
+  preMatchButtons.push(backBtn);
+  
+  // Character name display (top-center)
+  const charData = window.CHARACTERS && window.CHARACTERS[currentViewedCharacter];
+  const charName = charData ? charData.name : currentViewedCharacter;
+  
+  push();
+  textAlign(CENTER, TOP);
+  textSize(32);
+  fill(255);
+  stroke(0);
+  strokeWeight(3);
+  text(charName, centerX, 30);
+  pop();
+}
+
+/**
+ * CHARACTER INSPECT STATE
+ * Shows kit/passive information with page switching
+ */
+function drawPreMatchCharacterInspect() {
+  preMatchButtons = [];
+  
+  // Draw vignette overlay
+  drawInspectVignette();
+  
+  // Draw kit/passive information
+  drawInspectInfo();
+  
+  const buttonW = 120;
+  const buttonH = 45;
+  const buttonY = height - 100;
+  const centerX = width / 2;
+  const buttonGap = 15;
+  
+  // Active Page button
+  const activeBtn = new UIButton(centerX - buttonW - buttonGap / 2, buttonY, buttonW, buttonH, () => {
+    inspectPage = 'active';
+  });
+  activeBtn.draw('ACTIVE PAGE', {
+    stroke: inspectPage === 'active' ? [100, 200, 100] : [120, 120, 150],
+    fill: inspectPage === 'active' ? [50, 100, 50] : [40, 40, 60],
+    text: 255
+  });
+  preMatchButtons.push(activeBtn);
+  
+  // Passive Page button
+  const passiveBtn = new UIButton(centerX + buttonGap / 2, buttonY, buttonW, buttonH, () => {
+    inspectPage = 'passive';
+  });
+  passiveBtn.draw('PASSIVE PAGE', {
+    stroke: inspectPage === 'passive' ? [100, 200, 100] : [120, 120, 150],
+    fill: inspectPage === 'passive' ? [50, 100, 50] : [40, 40, 60],
+    text: 255
+  });
+  preMatchButtons.push(passiveBtn);
+  
+  // Select button (bottom-center, above page buttons)
+  const selectBtn = new UIButton(centerX - 80, buttonY - 60, 160, 45, () => {
+    selectCharacter(currentViewedCharacter);
+  });
+  selectBtn.draw('SELECT', {
+    stroke: [100, 200, 100],
+    fill: [50, 100, 50],
+    text: 255
+  });
+  preMatchButtons.push(selectBtn);
+  
+  // Back button (top-left)
+  const backBtn = new UIButton(20, 20, 100, 35, () => {
+    preMatchState = PRE_MATCH_STATES.CHARACTER_SELECT;
+    // Preserve current viewed character
+  });
+  backBtn.draw('BACK', {
+    stroke: [120, 120, 120],
+    fill: [40, 40, 40],
+    text: 255,
+    textSize: 12
+  });
+  preMatchButtons.push(backBtn);
+  
+  // Character name display (top-center)
+  const charData = window.CHARACTERS && window.CHARACTERS[currentViewedCharacter];
+  const charName = charData ? charData.name : currentViewedCharacter;
+  
+  push();
+  textAlign(CENTER, TOP);
+  textSize(32);
+  fill(255);
+  stroke(0);
+  strokeWeight(3);
+  text(charName, centerX, 30);
+  pop();
+}
+
+/**
+ * Draw the vignette overlay for inspect mode
+ */
+function drawInspectVignette() {
+  if (window.kitVignette && window.kitVignette.width > 0) {
+    push();
+    imageMode(CENTER);
+    image(window.kitVignette, width / 2, height / 2, width, height);
+    pop();
+  } else {
+    // Fallback: draw a simple vignette
+    push();
+    noStroke();
+    // Create a radial gradient effect
+    for (let r = 0; r < 500; r += 20) {
+      const alpha = map(r, 0, 500, 0, 200);
+      fill(0, alpha);
+      ellipse(width / 2, height / 2, width - r * 2, height - r * 2);
+    }
+    pop();
+  }
+}
+
+/**
+ * Draw the kit/passive information image
+ */
+function drawInspectInfo() {
+  const infoX = width / 2;
+  const infoY = height / 2;
+  const infoW = 600;
+  const infoH = 400;
+  
+  let infoImage = null;
+  
+  if (inspectPage === 'active') {
+    const kitAsset = CHARACTER_KIT_ASSETS[currentViewedCharacter];
+    infoImage = window.characterKits && window.characterKits[kitAsset];
+  } else {
+    const passiveAsset = CHARACTER_PASSIVE_ASSETS[currentViewedCharacter];
+    infoImage = window.characterPassives && window.characterPassives[passiveAsset];
+  }
+  
+  if (infoImage && infoImage.width > 0) {
+    push();
+    imageMode(CENTER);
+    // Scale image to fit while maintaining aspect ratio
+    const scale = Math.min(infoW / infoImage.width, infoH / infoImage.height);
+    const drawW = infoImage.width * scale;
+    const drawH = infoImage.height * scale;
+    image(infoImage, infoX, infoY, drawW, drawH);
+    pop();
+  } else {
+    // Fallback: draw placeholder
+    push();
+    fill(40, 40, 50, 200);
+    stroke(100, 100, 120);
+    strokeWeight(2);
+    rect(infoX - infoW / 2, infoY - infoH / 2, infoW, infoH, 10);
+    
+    textAlign(CENTER, CENTER);
+    textSize(18);
+    fill(180);
+    noStroke();
+    text(inspectPage === 'active' ? 'Kit Information' : 'Passive Information', infoX, infoY);
+    pop();
+  }
+}
+
+/**
+ * Select a character and update room state
+ */
+function selectCharacter(characterKey) {
+  localSelectedCharacter = characterKey;
+  
+  // Update room state if in multiplayer mode
+  if (gameMode === 'multiplayer' && typeof Network !== 'undefined' && Network.changeCharacter) {
+    Network.changeCharacter(characterKey);
+  }
+  
+  // Return to lobby
+  preMatchState = PRE_MATCH_STATES.LOBBY;
+  currentViewedCharacter = localSelectedCharacter;
+}
+
+/**
+ * Handle mouse clicks for the unified pre-match system
+ */
+function handleUnifiedPreMatchClick(mx, my) {
+  for (const btn of preMatchButtons) {
+    if (btn.click(mx, my)) return true;
+  }
+  return false;
 }
 
 // (old fullscreen character select removed)

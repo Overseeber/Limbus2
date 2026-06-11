@@ -140,6 +140,20 @@ const ASSET_LOADER = {
     assets.push('data/UI/battleui.png');
     assets.push('data/UI/status.png');
     
+    // Character art assets for pre-match flow
+    assets.push('data/UI/Vals.png');
+    assets.push('data/UI/Cals.png');
+    assets.push('data/UI/Dstar.png');
+    
+    // Character kit/passive assets for inspect mode
+    assets.push('data/UI/Valkit.png');
+    assets.push('data/UI/Calpassive.png');
+    assets.push('data/UI/Calkit.png');
+    assets.push('data/UI/Starkit.png');
+    assets.push('data/UI/Starpassive.png');
+    assets.push('data/UI/Valpassive.png');
+    assets.push('data/UI/Kitvin.png');
+    
     // Character atlases - Valencina
     assets.push('data/valencina/val1.png');
     assets.push('data/valencina/val2.png');
@@ -240,6 +254,26 @@ const ASSET_LOADER = {
         setTimeout(() => precacheStatusSpriteData(), 50);
       }
     });
+    
+    // Load character art assets for pre-match flow
+    window.characterArt = window.characterArt || {};
+    window.characterArt.vals = loadImage('data/UI/Vals.png', () => this._onMenuAssetLoaded());
+    window.characterArt.cals = loadImage('data/UI/Cals.png', () => this._onMenuAssetLoaded());
+    window.characterArt.dstar = loadImage('data/UI/Dstar.png', () => this._onMenuAssetLoaded());
+    
+    // Load character kit/passive assets for inspect mode
+    window.characterKits = window.characterKits || {};
+    window.characterKits.valkit = loadImage('data/UI/Valkit.png', () => this._onMenuAssetLoaded());
+    window.characterKits.calkit = loadImage('data/UI/Calkit.png', () => this._onMenuAssetLoaded());
+    window.characterKits.starkit = loadImage('data/UI/Starkit.png', () => this._onMenuAssetLoaded());
+    
+    window.characterPassives = window.characterPassives || {};
+    window.characterPassives.valpassive = loadImage('data/UI/Valpassive.png', () => this._onMenuAssetLoaded());
+    window.characterPassives.calpassive = loadImage('data/UI/Calpassive.png', () => this._onMenuAssetLoaded());
+    window.characterPassives.starpassive = loadImage('data/UI/Starpassive.png', () => this._onMenuAssetLoaded());
+    
+    // Load vignette for inspect mode
+    window.kitVignette = loadImage('data/UI/Kitvin.png', () => this._onMenuAssetLoaded());
     
     // Load particles atlas into atlases (for particle sprite system)
     atlases.particles = loadImage('data/particles/particles.png', () => {

@@ -756,7 +756,7 @@ class GameplayEngine {
       // Normal hit (not guarded, not parried): enter hurt state with hitstun
       if (defender.state !== 'staggered') {
         defender.state = 'hurt';
-        defender.hitTimer = COMBAT_CONFIG.HITSTUN_DURATION; // 0.18s
+        defender.hitTimer = COMBAT_CONFIG.HITSTUN_DURATION; // 0.35s (from config)
       }
     }
     // If guarded but NOT in parry window: defender stays in guard/idle
@@ -824,36 +824,80 @@ class GameplayEngine {
 
   updateCooldowns(state, dt) { Object.keys(state.abilityCooldowns).forEach(a => { if (state.abilityCooldowns[a] > 0) state.abilityCooldowns[a] -= dt; }); }
 
+  /**
+   * Synchronize all stun-related timers to a consistent state.
+   * This ensures action gating checks (hitstunTimer, blockstunTimer)
+   * match the actual state and primary timers (hitTimer, blockstunTimer).
+   * Called at the START of updateFighter and whenever stun state changes.
+   */
+  syncStunTimers(state) {
+    // hitstunTimer is the authoritative action-gating value for hitstun.
+    // Always mirror it from hitTimer.
+    state.hitstunTimer = state.hitTimer || 0;
+    
+    // If blockstun just expired on a previous code path, ensure state is updated.
+    if (state.blockstunTimer <= 0 && state.state === 'hurt' && state.hitTimer <= 0) {
+      // Neither blockstun nor hitstun is active, but state is still 'hurt'.
+      // Fix it to idle (the stagger system will override later if needed).
+      state.state = 'idle';
+    }
+    
+    // Clamp all timers to non-negative.
+    state.hitTimer = state.hitTimer || 0;
+    state.hitstunTimer = state.hitstunTimer || 0;
+    state.blockstunTimer = state.blockstunTimer || 0;
+  }
+
   updateFighter(state, dt, config, playerInput) {
     const events = [];
     this.updateCooldowns(state, dt);
     
-    // Handle blockstun state - always overrides normal behavior
-    if (state.blockstunTimer > 0) {
+    // STEP 1: Sync stale timers before any state logic runs.
+    // This prevents stale hitstunTimer values from persisting after
+    // state has exited 'hurt' on a previous tick.
+    this.syncStunTimers(state);
+    
+    // STEP 2: Handle blockstun and hitstun UNIFORMLY.
+    // Both timers decrement independently. If one is active, the fighter
+    // remains in 'hurt' state. When BOTH expire, state transitions to idle.
+    // 
+    // CRITICAL: Do NOT zero hitTimer when blockstun is active.
+    // A new hit can set hitTimer while blockstun is still counting down.
+    // Zeroing it here would erase the new hitstun before the next tick
+    // has a chance to process it.
+    const wasBlockstunActive = state.blockstunTimer > 0;
+    const wasHitstunActive = state.hitTimer > 0;
+    
+    if (wasBlockstunActive) {
       state.blockstunTimer = Math.max(0, state.blockstunTimer - dt);
+    }
+    
+    if (wasHitstunActive) {
+      state.hitTimer = Math.max(0, state.hitTimer - dt);
+    }
+    
+    // If either stun is active, keep state in 'hurt'.
+    // Priority: blockstun takes visual/functional precedence if both are active.
+    if (wasBlockstunActive || wasHitstunActive) {
       state.state = 'hurt';
-      state.hitTimer = 0;
-      // Cannot act during blockstun (it's like hitstun)
-      if (state.blockstunTimer <= 0) {
-        state.blockstunTimer = 0;
-        if (state.state === 'hurt') {
-          state.state = 'idle';
-          events.push({ type: 'STATE_CHANGE', from: 'hurt', to: 'idle' });
-        }
-      }
-    } else if (state.state === 'hurt') {
-      // Hitstun: timer counts down naturally
-      state.hitTimer = Math.max(0, (state.hitTimer || 0) - dt);
-      
-      // FIXED: In hitstun, cannot act - input does NOT cancel hitstun
-      // Player must wait for hitTimer to expire naturally
-      if (state.hitTimer <= 0) {
+    }
+    
+    // Check if BOTH timers have now expired (either naturally or were already 0).
+    const bothInactive = state.blockstunTimer <= 0 && state.hitTimer <= 0;
+    
+    if (bothInactive) {
+      // Both stuns are done. Exit hurt state only if fighter is still in 'hurt'.
+      if (state.state === 'hurt') {
         state.state = 'idle';
-        state.hitTimer = 0;
         events.push({ type: 'STATE_CHANGE', from: 'hurt', to: 'idle' });
       }
-      // No else: still in hitstun, cannot act. Input check removed.
+      state.hitTimer = 0;
+      state.blockstunTimer = 0;
     }
+    
+    // Sync hitstunTimer AFTER decrementing for the current tick's action checks.
+    // processInput and other code will read hitstunTimer for action gating.
+    state.hitstunTimer = state.hitTimer || 0;
     
     // Update stagger state machine
     const su = this.updateStagger(state, dt, config);

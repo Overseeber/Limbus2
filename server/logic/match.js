@@ -308,11 +308,10 @@ tick() {
                 // Handle events from GameplayEngine
                 this.handleEvents(player, events);
 
-                // CRITICAL: Synchronize hitTimer to hitstunTimer so processInput can check
-                // the same timer value that updateFighter actually decrements.
-                // hitTimer is set by resolveAttack and decremented by updateFighter.
-                // hitstunTimer is checked by processInput for action gating.
-                // Without this sync, actions would bypass hitstun protection.
+                // hitstunTimer is now synced by GameplayEngine.updateFighter() and
+                // GameplayEngine.syncStunTimers(). This sync is redundant but kept
+                // as a safety net in case processInput runs before updateFighter
+                // on the same tick.
                 player.gameState.hitstunTimer = player.gameState.hitTimer || 0;
 
                 // CRITICAL: Clear stale attack state when the fighter was interrupted
@@ -2228,6 +2227,8 @@ tick() {
             if (defender.gameState.state !== 'staggered') {
                 defender.gameState.state = 'hurt';
                 defender.gameState.hitTimer = 0.18;
+                // Sync hitstunTimer immediately so action gating works on the same tick
+                defender.gameState.hitstunTimer = defender.gameState.hitTimer;
             }
             
             if (attackData.knockback) {

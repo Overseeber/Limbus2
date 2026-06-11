@@ -215,7 +215,10 @@ io.sockets.on('connection', (socket) => {
 
     // Create and join a room
     socket.on('createRoom', (roomId) => {
-        if (!roomId) return;
+        // Auto-generate a room ID if none provided
+        if (!roomId) {
+            roomId = 'room-' + Math.random().toString(36).substring(2, 8);
+        }
         if (client.room) {
             const oldRoom = roomList[client.room];
             if (oldRoom) {

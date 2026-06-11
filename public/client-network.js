@@ -110,7 +110,7 @@ window.Network = {
     });
   },
 
-  // Room API helpers
+  // Room stuff
   createRoom(roomId) {
     if (this.socket) this.socket.emit('createRoom', roomId);
   },
@@ -119,6 +119,9 @@ window.Network = {
   },
   leaveRoom() {
     if (this.socket) this.socket.emit('leaveRoom');
+    // Clear local room state immediately so the UI transitions back to room selection
+    window.myRoomState = null;
+    window.myRoomId = null;
   },
   changeCharacter(characterKey) {
     if (this.socket) this.socket.emit('changeCharacter', characterKey);
@@ -130,7 +133,7 @@ window.Network = {
   startBattle() {
     if (this.socket) this.socket.emit('startBattle');
   },
-  startCpuBattle(config) {
+  startCpuBattle(config) {//cpu bat is ai assisted
     if (this.socket) this.socket.emit('startCpuBattle', config);
   },
   claimSlot(slotIndex) {
@@ -157,7 +160,7 @@ window.Network = {
   sendInput(input) {
     if (this.isConnected && this.socket) {
       this.socket.emit('input', input);
-    } else if (this.isLocalAuthority && window.LocalSimulator) {
+    } else if (this.isLocalAuthority && window.LocalSimulator) {//cpu battle stuff ai did
       window.LocalSimulator.enqueue({ type: 'INPUT', data: input });
     }
   },

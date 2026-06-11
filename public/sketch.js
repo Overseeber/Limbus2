@@ -2738,55 +2738,8 @@ function keyPressed() {
   }
   
   if (battleState === BATTLE_STATES.LOBBY) {
-    // Room-based keyboard controls
-    if (myRoomState) {
-      const slots = myRoomState.slots || [];
-      if (keyCode === UP_ARROW) {
-        selectedPlayerSlot = Math.max(0, selectedPlayerSlot - 1);
-        return;
-      }
-      if (keyCode === DOWN_ARROW) {
-        selectedPlayerSlot = Math.min(Math.max(0, slots.length - 1), selectedPlayerSlot + 1);
-        return;
-      }
-      if (keyCode === LEFT_ARROW || keyCode === RIGHT_ARROW) {
-        const keys = availableCharacterKeys();
-        if (keys.length === 0) return;
-        const cur = localSlotSelections[selectedPlayerSlot] || keys[0];
-        const idx = keys.indexOf(cur);
-        const next = keyCode === LEFT_ARROW ? ((idx - 1 + keys.length) % keys.length) : ((idx + 1) % keys.length);
-        localSlotSelections[selectedPlayerSlot] = keys[next];
-        const slot = slots[selectedPlayerSlot];
-        if (slot && Network && Network.myClientId && slot.clientId === Network.myClientId) {
-          console.log('Changing character to:', keys[next]);
-          Network.changeCharacter(keys[next]);
-        }
-        return;
-      }
-
-      if (keyCode === ENTER) {
-        // Do nothing for now; mouse is used to join/claim
-        return;
-      }
-
-      return;
-    }
-
-    // Fallback: legacy ready behavior when not using rooms
-    if (keyCode === ENTER) {
-      // Check if all active players are ready
-      const activePlayers = players.filter(p => p.active);
-      const allReady = activePlayers.every(p => p.ready);
-
-      if (!allReady) {
-        console.log('Not all players are ready!');
-        return;
-      }
-
-      // Start battle with ready players
-      initBattle();
-      return;
-    }
+    // No keyboard controls - all navigation is mouse-based in the unified pre-match system
+    return;
   }
   
   if (battleState === BATTLE_STATES.READY && keyCode === ENTER) {
@@ -2893,11 +2846,10 @@ console.log('myRoomState', myRoomState);
     
     // CPU button
     const cpuBtnX = width / 2 + 20;
-    const cpuBtnY = height / 2 + 60;
+    const cpuBtnY = multiplayerBtnY;
     
     if (mx > cpuBtnX && mx < cpuBtnX + btnW && my > cpuBtnY && my < cpuBtnY + btnH) {
       gameMode = 'cpu';
-      // For CPU mode, go to character select for the player
       // Reset player slot for local play
       players[0].character = 'VALENCINA';
       players[0].ai = false;
@@ -2906,7 +2858,8 @@ console.log('myRoomState', myRoomState);
       // Set opponent defaults
       cpuOpponentCharacter = 'CALLISTO';
       cpuOpponentAIEnabled = true;
-      setBattleState(BATTLE_STATES.CHARACTER_SELECT_MENU);
+      // Use unified pre-match system directly
+      setBattleState(BATTLE_STATES.LOBBY);
       return;
     }
   }
@@ -3856,6 +3809,18 @@ function drawPreMatchLobby() {
   // Sync current viewed character with local selection
   currentViewedCharacter = localSelectedCharacter;
   
+  // If not in a room and in multiplayer mode, show room selection
+  if (!myRoomState && gameMode === 'multiplayer') {
+    drawRoomSelection();
+    return;
+  }
+  
+  // CPU mode (no room): show ready/switch controls directly
+  if (gameMode === 'cpu') {
+    drawCPULobby();
+    return;
+  }
+  
   // Local Player Controls (lower-center)
   const buttonW = 200;
   const buttonH = 50;
@@ -3890,19 +3855,20 @@ function drawPreMatchLobby() {
   });
   preMatchButtons.push(switchBtn);
   
-  // Opponent Display (lower-right)
+  // Opponent Display (lower-right) - small square
   drawOpponentDisplay();
   
-  // Room info (top-left)
+  // Room info (top-left) with leave button
   if (myRoomState) {
     push();
     textAlign(LEFT, TOP);
     textSize(16);
     fill(200);
     text(`Room: ${myRoomState.id}`, 20, 20);
+    pop();
     
-    // Leave button
-    const leaveBtn = new UIButton(width - 140, 20, 120, 30, () => {
+    // Leave button (top-left, next to room code)
+    const leaveBtn = new UIButton(20, 45, 100, 28, () => {
       if (typeof Network !== 'undefined' && Network.leaveRoom) {
         Network.leaveRoom();
       }
@@ -3914,7 +3880,6 @@ function drawPreMatchLobby() {
       textSize: 12
     });
     preMatchButtons.push(leaveBtn);
-    pop();
   }
   
   // Start Battle button if all ready
@@ -3935,6 +3900,207 @@ function drawPreMatchLobby() {
 }
 
 /**
+ * Draw room selection when not in a room (multiplayer mode)
+ */
+function drawRoomSelection() {
+  push();
+  
+  // Connection status
+  if (typeof Network !== 'undefined' && !Network.isConnected) {
+    textAlign(CENTER, CENTER);
+    textSize(18);
+    fill(255, 220, 100);
+    noStroke();
+    text('Connecting to server...', width / 2, 120);
+    pop();
+    return;
+  }
+  
+  textAlign(CENTER, CENTER);
+  textSize(28);
+  fill(255);
+  stroke(0);
+  strokeWeight(3);
+  text('FIND MATCH', width / 2, 50);
+  
+  textSize(16);
+  fill(180);
+  noStroke();
+  text('Available Rooms:', width / 2, 90);
+  
+  const availRooms = availableRooms || [];
+  const roomButtonWidth = 300;
+  const roomButtonHeight = 50;
+  const roomStartX = (width - roomButtonWidth) / 2;
+  let roomY = 120;
+  
+  if (availRooms.length === 0) {
+    fill(130);
+    textSize(14);
+    text('No rooms available — create one!', width / 2, roomY + 20);
+    roomY += 50;
+  } else {
+    for (let i = 0; i < availRooms.length; i++) {
+      const roomData = availRooms[i];
+      const roomId = typeof roomData === 'string' ? roomData : roomData.id;
+      const players = typeof roomData === 'string' ? 0 : (roomData.players || 0);
+      const maxPlayers = typeof roomData === 'string' ? 2 : (roomData.maxPlayers || 2);
+      
+      // Room button
+      const roomBtn = new UIButton(roomStartX, roomY, roomButtonWidth, roomButtonHeight, () => {
+        if (typeof Network !== 'undefined' && Network.joinRoom) {
+          Network.joinRoom(roomId);
+        }
+      });
+      roomBtn.draw(roomId, {
+        stroke: [100, 200, 100],
+        fill: [40, 80, 40],
+        text: 255,
+        textSize: 14
+      });
+      preMatchButtons.push(roomBtn);
+      
+      // Player count squares
+      const squareSize = 12;
+      const squareGap = 5;
+      const totalWidth = maxPlayers * (squareSize + squareGap) - squareGap;
+      const squaresStartX = (width - totalWidth) / 2;
+      const squaresY = roomY + roomButtonHeight + 6;
+      
+      push();
+      for (let j = 0; j < maxPlayers; j++) {
+        const sx = squaresStartX + j * (squareSize + squareGap);
+        fill(j < players ? color(100, 255, 100) : color(50, 60, 50));
+        noStroke();
+        rect(sx, squaresY, squareSize, squareSize, 2);
+      }
+      pop();
+      
+      roomY += roomButtonHeight + 20;
+    }
+  }
+  
+  // Create room button
+  const createY = roomY + 20;
+  const createBtn = new UIButton(roomStartX, createY, roomButtonWidth, roomButtonHeight, () => {
+    if (typeof Network !== 'undefined' && Network.createRoom) {
+      Network.createRoom();
+    }
+  });
+  createBtn.draw('CREATE NEW ROOM', {
+    stroke: [150, 150, 255],
+    fill: [50, 50, 100],
+    text: 255,
+    textSize: 14
+  });
+  preMatchButtons.push(createBtn);
+  
+  pop();
+}
+
+/**
+ * Draw CPU mode lobby (no room needed)
+ */
+function drawCPULobby() {
+  preMatchButtons = [];
+  
+  // Character name display
+  const charData = window.CHARACTERS && window.CHARACTERS[localSelectedCharacter];
+  const charName = charData ? charData.name : localSelectedCharacter;
+  
+  push();
+  textAlign(CENTER, TOP);
+  textSize(32);
+  fill(255);
+  stroke(0);
+  strokeWeight(3);
+  text(charName, width / 2, 30);
+  pop();
+  
+  // CPU opponent display
+  const opponentChar = cpuOpponentCharacter || 'CALLISTO';
+  const opponentData = window.CHARACTERS && window.CHARACTERS[opponentChar];
+  const opponentName = opponentData ? opponentData.name : opponentChar;
+  
+  // Opponent info (bottom-right square)
+  push();
+  const ox = width - 170;
+  const oy = height - 170;
+  fill(30, 30, 40, 230);
+  stroke(100, 100, 120);
+  strokeWeight(2);
+  rect(ox, oy, 150, 150, 10);
+  
+  textAlign(CENTER, CENTER);
+  fill(255);
+  textSize(16);
+  text(opponentName, ox + 75, oy + 30);
+  textSize(12);
+  fill(200);
+  text('CPU', ox + 75, oy + 55);
+  pop();
+  
+  // Lower-center controls
+  const buttonW = 200;
+  const buttonH = 50;
+  const buttonY = height - 100;
+  const buttonGap = 20;
+  const centerX = width / 2;
+  
+  // Ready / Start Battle button
+  const readyBtn = new UIButton(centerX - buttonW - buttonGap / 2, buttonY, buttonW, buttonH, () => {
+    // Start CPU battle
+    players[0].character = localSelectedCharacter;
+    players[0].active = true;
+    players[0].controlled = true;
+    players[0].ai = false;
+    players[0].ready = true;
+    
+    if (typeof Network !== 'undefined' && Network.isConnected) {
+      cpuUsesServer = true;
+      Network.startCpuBattle({
+        characterKey: localSelectedCharacter,
+        cpuCharacterKey: cpuOpponentCharacter || 'CALLISTO',
+        cpuAIEnabled: cpuOpponentAIEnabled
+      });
+    } else {
+      initCPUBattle();
+    }
+    setBattleState(BATTLE_STATES.READY);
+  });
+  readyBtn.draw('START BATTLE', {
+    stroke: [100, 200, 100],
+    fill: [50, 100, 50],
+    text: 255
+  });
+  preMatchButtons.push(readyBtn);
+  
+  // Switch Character button
+  const switchBtn = new UIButton(centerX + buttonGap / 2, buttonY, buttonW, buttonH, () => {
+    preMatchState = PRE_MATCH_STATES.CHARACTER_SELECT;
+    currentViewedCharacter = localSelectedCharacter;
+  });
+  switchBtn.draw('SWITCH CHARACTER', {
+    stroke: [100, 160, 255],
+    fill: [40, 70, 120],
+    text: 255
+  });
+  preMatchButtons.push(switchBtn);
+  
+  // AI Toggle button
+  const aiToggleBtn = new UIButton(centerX - 80, buttonY - 60, 160, 40, () => {
+    cpuOpponentAIEnabled = !cpuOpponentAIEnabled;
+  });
+  aiToggleBtn.draw('AI: ' + (cpuOpponentAIEnabled ? 'ON' : 'OFF'), {
+    stroke: cpuOpponentAIEnabled ? [80, 200, 80] : [200, 80, 80],
+    fill: cpuOpponentAIEnabled ? [40, 80, 40] : [80, 40, 40],
+    text: 255,
+    textSize: 13
+  });
+  preMatchButtons.push(aiToggleBtn);
+}
+
+/**
  * Get the local player's ready state from room state
  */
 function getLocalReadyState() {
@@ -3947,7 +4113,7 @@ function getLocalReadyState() {
 }
 
 /**
- * Draw opponent information in the lower-right corner
+ * Draw opponent information in the lower-right corner as a small square
  */
 function drawOpponentDisplay() {
   if (!myRoomState || !myRoomState.slots) return;
@@ -3958,41 +4124,35 @@ function drawOpponentDisplay() {
   const opponentSlot = myRoomState.slots.find(s => s.clientId !== myClientId && s.clientId);
   if (!opponentSlot) return;
   
-  const displayX = width - 220;
-  const displayY = height - 150;
-  const displayW = 200;
-  const displayH = 120;
+  const boxSize = 100;
+  const displayX = width - boxSize - 20;
+  const displayY = height - boxSize - 20;
   
   push();
-  // Background
+  // Background square
   fill(30, 30, 40, 230);
-  stroke(100, 100, 120);
+  stroke(opponentSlot.ready ? [100, 255, 100] : [100, 100, 120]);
   strokeWeight(2);
-  rect(displayX, displayY, displayW, displayH, 10);
+  rect(displayX, displayY, boxSize, boxSize, 8);
   
-  // Character name
+  // Character name (truncated)
   const charKey = opponentSlot.character || '—';
   const charName = (window.CHARACTERS && window.CHARACTERS[charKey]) ? window.CHARACTERS[charKey].name : charKey;
   
-  textAlign(LEFT, TOP);
-  textSize(16);
+  textAlign(CENTER, CENTER);
+  textSize(12);
   fill(255);
-  text(charName, displayX + 15, displayY + 15);
+  text(charName, displayX + boxSize / 2, displayY + boxSize / 2 - 10);
   
-  // Ready state
-  textSize(14);
+  // Ready state indicator
+  textSize(10);
   if (opponentSlot.ready) {
     fill(100, 255, 100);
-    text('✓ READY', displayX + 15, displayY + 45);
+    text('READY', displayX + boxSize / 2, displayY + boxSize / 2 + 12);
   } else {
     fill(255, 255, 100);
-    text('NOT READY', displayX + 15, displayY + 45);
+    text('WAITING', displayX + boxSize / 2, displayY + boxSize / 2 + 12);
   }
-  
-  // Character portrait placeholder
-  fill(50);
-  noStroke();
-  rect(displayX + 15, displayY + 70, 60, 60, 5);
   
   pop();
 }

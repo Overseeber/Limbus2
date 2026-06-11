@@ -140,7 +140,7 @@ textFont(NumberFont);
   text('Combo', titleX + 14, titleY - 7);
   text('X', titleX + 15, titleY - 20);
   textSize(20 + `${fighter.combo}`.length * 2); // Dynamically increase combo number size based on digit count
-  text(`${fighter.combo}`, titleX + 30, titleY - 20);
+  text(`${fighter.combo}`, titleX + 25, titleY - 20);
   pop();
 
  // Ultimate UI: show active sprite when conditions are met, deactive otherwise
@@ -319,7 +319,7 @@ textSize(10);
   text('Combo', panelX + 14, panelY - 0);
   text('X', panelX + 15, panelY - 13);
   textSize(20 + `${fighter.combo}`.length * 2); // Dynamically increase combo number size based on digit count
-  text(`${fighter.combo}`, panelX + 30, panelY - 13);
+  text(`${fighter.combo}`, panelX + 25, panelY - 13);
   }
   pop();
 }
@@ -458,11 +458,13 @@ function drawStatusRows(fighter, x, y) {
     fill(255);
     textSize(8);
     textAlign(LEFT, CENTER);
+    textFont(NumberFont);
     text(status.potency, px + 2, py + 9);
     drawStatusIcon(status.type, px + 15, py + 9, 21);
     fill(255);
     textSize(8);
     textAlign(RIGHT, CENTER);
+    textFont(NumberFont);
     text(status.count, px + 25, py + 9);
   }
 }

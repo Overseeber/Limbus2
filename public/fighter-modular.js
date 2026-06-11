@@ -290,7 +290,7 @@ class Fighter {
     this.ultimateBackgroundDim = 0;     // Reset background dimming effect
     this.ultimateName = "";              // Clear ultimate name display
     this.ultimateDialogue = "";         // Clear ultimate dialogue text
-    this.ultimateCanActivate = true;     // Allow ultimate activation (testing flag)
+    this.ultimateCanActivate = false;    // Ultimate activation controlled by server ultimateAvailable flag
     
     // VISUAL EFFECTS RESET
     this.spriteShakeX = 0;               // Clear horizontal sprite shake
@@ -1552,8 +1552,8 @@ class Fighter {
       }
     }
     
-    // Ultimate activation with X key (always available for testing)
-    if (keyLower === 'x' && this.ultimateCanActivate && !this.ultimateActive) {
+    // Ultimate activation with X key (controlled by server ultimateAvailable flag)
+    if (keyLower === 'x' && this.ultimateAvailable && !this.ultimateActive) {
       this.ultimateActivationRequested = true;
     }
     
@@ -3211,12 +3211,6 @@ addCombo(attacker) {
       fill(30);
       rectMode(CENTER);
       rect(this.facing * 20, -42, 20, 6, 4);
-    }
-    if (this.isGuarding) {
-      stroke('#90ee90');
-      strokeWeight(3);
-      noFill();
-      ellipse(0, 0, 72, 168);
     }
     // Attack indicator (yellow ellipse/arc/line) - gated behind debugGraphicsEnabled
     if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled && this.state === 'attack' && this.attackTimer > 0) {

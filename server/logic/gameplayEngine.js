@@ -762,8 +762,22 @@ class GameplayEngine {
       // Do NOT change defender state - blocker stays guarding/idle
       // Do NOT apply any knockback or hitstun to the defender
     } else if (!result.wasGuarded) {
-      // Normal hit (not guarded, not parried): enter hurt state with hitstun
-      if (defender.state !== 'staggered') {
+      // Check stagger first before setting hurt state
+      const threshold = config.staggerThreshold || defender.staggerThreshold || 1000;
+      if (defender.stagger >= threshold) {
+        defender.state = 'staggered';
+        defender.staggerTimer = config.staggerLength || defender.staggerDuration || 5;
+        defender.staggerDuration = defender.staggerTimer;
+        defender.stagger = threshold;
+        defender.staggerRecoveryTimer = 0;
+        defender.hitTimer = COMBAT_CONFIG.HITSTUN_DURATION;
+        result.staggerEvents.push({ type: 'STAGGER_START', targetId: defender.id, duration: defender.staggerTimer });
+        result.staggerResult = { staggered: true, duration: defender.staggerTimer };
+        
+        const tremorEvents = this.consumeTremor(defender, config);
+        if (tremorEvents.length) result.staggerEvents = result.staggerEvents.concat(tremorEvents);
+      } else {
+        // Normal hit (not guarded, not parried): enter hurt state with hitstun
         defender.state = 'hurt';
         defender.hitTimer = COMBAT_CONFIG.HITSTUN_DURATION; // 0.35s (from config)
       }
@@ -790,26 +804,12 @@ class GameplayEngine {
       defender.staggerRecoveryTimer = recoveryDelay;
       
       const threshold = config.staggerThreshold || defender.staggerThreshold || 1000;
-      if (defender.stagger > threshold && defender.state !== 'staggered') {
-        defender.stagger = threshold;
-      }
       
       result.staggerResult = { staggered: false, stagger: defender.stagger };
       
-      if (defender.stagger >= threshold && defender.state !== 'staggered') {
-        const length = config.staggerLength || defender.staggerDuration || 5;
-        defender.state = 'staggered';
-        defender.staggerTimer = length;
-        defender.staggerDuration = length;
-        defender.stagger = threshold;
-        defender.staggerRecoveryTimer = 0;
-        
-        result.staggerEvents.push({ type: 'STAGGER_START', targetId: defender.id, duration: length });
-        result.staggerResult = { staggered: true, duration: length };
-        
-        const tremorEvents = this.consumeTremor(defender, config);
-        if (tremorEvents.length) result.staggerEvents = result.staggerEvents.concat(tremorEvents);
-      } else {
+      // Stagger check is now done before setting hurt state above
+      // Only emit STAGGER_INCREASE event if not staggered
+      if (defender.state !== 'staggered') {
         result.staggerEvents.push({ type: 'STAGGER_INCREASE', targetId: defender.id, amount: staggerBuildup });
       }
     }

@@ -384,25 +384,19 @@ let isUltimateShake = false;
 
 function addScreenShake(intensity, isUltimate = false) {
   let shakeAmount;
-  if (isUltimate) {
-    const cappedDamage = Math.min(intensity, 60);
-    shakeAmount = Math.min(cappedDamage * 0.5, 30);
-    isUltimateShake = true;
-  } else {
-    const cappedDamage = Math.min(intensity, 40);
-    shakeAmount = Math.min(cappedDamage * 0.3, 12);
-    isUltimateShake = false;
-  }
+  // Use same values for both ultimate and normal attacks
+  const cappedDamage = Math.min(intensity, 40);
+  shakeAmount = Math.min(cappedDamage * 0.3, 12);
+  isUltimateShake = false;
   
   if (shakeAmount > screenShakeIntensity) {
     screenShakeIntensity = shakeAmount;
-    if (isUltimate) isUltimateShake = true;
   }
 }
 
 function updateScreenShake(dt) {
   if (screenShakeIntensity > 0) {
-    const decayRate = isUltimateShake ? 0.04 : 0.06;
+    const decayRate = 0.06;
     screenShakeIntensity -= decayRate * dt * 60;
     
     if (screenShakeIntensity <= 0) {

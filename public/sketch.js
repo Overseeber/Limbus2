@@ -4418,7 +4418,10 @@ function selectCharacter(characterKey) {
  */
 function handleUnifiedPreMatchClick(mx, my) {
   for (const btn of preMatchButtons) {
-    if (btn.click(mx, my)) return true;
+    if (btn.click(mx, my)) {
+      console.log('[handleUnifiedPreMatchClick] Button clicked:', btn.label);
+      return true;
+    }
   }
   return false;
 }

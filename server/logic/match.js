@@ -2226,6 +2226,18 @@ tick() {
             const be = this.engine.consumeBleedOnAttack(state);
             this.handleEvents(player, ce.concat(be));
             
+            // Apply stagger buildup first, before setting hurt state
+            if (attackData.staggerDamage) {
+                defender.gameState.stagger += attackData.staggerDamage;
+                if (defender.gameState.stagger >= (attacker.config.staggerThreshold || 1000)) {
+                    defender.gameState.state = 'staggered';
+                    defender.gameState.staggerTimer = attacker.config.staggerLength || 5;
+                    defender.gameState.hitTimer = 0.18;
+                    defender.gameState.hitstunTimer = defender.gameState.hitTimer;
+                }
+            }
+            
+            // Only set hurt state if not staggered
             if (defender.gameState.state !== 'staggered') {
                 defender.gameState.state = 'hurt';
                 defender.gameState.hitTimer = 0.18;
@@ -2237,15 +2249,6 @@ tick() {
                 const dir = defender.gameState.position.x < state.position.x ? -1 : 1;
                 const fk = this.engine.calculateKnockback(attackData.knockback, state);
                 this.engine.applyKnockback(defender.gameState, fk, dir, state);
-            }
-            
-            if (attackData.staggerDamage && defender.gameState.state !== 'staggered') {
-                defender.gameState.stagger += attackData.staggerDamage;
-                if (defender.gameState.stagger >= (attacker.config.staggerThreshold || 1000)) {
-                    defender.gameState.state = 'staggered';
-                    defender.gameState.staggerTimer = attacker.config.staggerLength || 5;
-                    defender.gameState.stagger = attacker.config.staggerThreshold || 1000;
-                }
             }
             
             const result = {
@@ -2709,8 +2712,17 @@ tick() {
         
         // Only set hit state if the attack actually hit
         if (execResult.hit) {
-            defender.gameState.state = 'hurt';
-            defender.gameState.hitTimer = 0.18;
+            // Check stagger first before setting hurt state
+            const threshold = attacker.config.staggerThreshold || 1000;
+            if (defender.gameState.stagger >= threshold) {
+                defender.gameState.state = 'staggered';
+                defender.gameState.staggerTimer = attacker.config.staggerLength || 5;
+                defender.gameState.hitTimer = 0.18;
+                defender.gameState.hitstunTimer = defender.gameState.hitTimer;
+            } else {
+                defender.gameState.state = 'hurt';
+                defender.gameState.hitTimer = 0.18;
+            }
         }
         
         let hitstopSeconds = abilityConfig.hitstop || 0.14;
@@ -2828,16 +2840,25 @@ tick() {
                 });
             }
 
-            // Apply stagger damage from ability config
+            // Apply stagger damage from ability config BEFORE checking threshold
             if (abilityConfig.staggerMultiplier && r.rawDamage) {
                 const staggerDmg = Math.floor(r.rawDamage * (abilityConfig.staggerMultiplier || 5.0));
                 defenderState.stagger = (defenderState.stagger || 0) + staggerDmg;
                 r.staggerDamage = staggerDmg;
             }
 
-            // Put defender into 'hit' state (timing consistent with other hits)
-            defenderState.state = 'hurt';
-            defenderState.hitTimer = 0.18;
+            // Check stagger first before setting hurt state
+            const threshold = config.staggerThreshold || 1000;
+            if (defenderState.stagger >= threshold) {
+                defenderState.state = 'staggered';
+                defenderState.staggerTimer = config.staggerLength || 5;
+                defenderState.hitTimer = 0.18;
+                defenderState.hitstunTimer = defenderState.hitTimer;
+            } else {
+                // Put defender into 'hit' state (timing consistent with other hits)
+                defenderState.state = 'hurt';
+                defenderState.hitTimer = 0.18;
+            }
 
             // Hitstop rules (tunable)
             let hitstopSeconds = abilityConfig.hitstop || 0.14;

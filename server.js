@@ -248,6 +248,11 @@ io.sockets.on('connection', (socket) => {
             socket.emit('error', { message: 'noroomie' });
             return;
         }
+        // block from joining full rooms and in progress rooms and stuff
+        if (room.clients.length >= 2) {
+            socket.emit('error', { message: 'Room is full' });
+            return;
+        }
         if (client.room) {
             const oldRoom = roomList[client.room];
             if (oldRoom) {
@@ -476,5 +481,3 @@ socket.on('toggleReady', () => {
 setInterval(() => {
     broadcastRoomList();
 }, 2000);
-
-

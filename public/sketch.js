@@ -3946,16 +3946,20 @@ function drawRoomSelection() {
       const players = typeof roomData === 'string' ? 0 : (roomData.players || 0);
       const maxPlayers = typeof roomData === 'string' ? 2 : (roomData.maxPlayers || 2);
       
-      // Room button
+      const isFull = players >= maxPlayers;
+      
+      // Room button - full rooms are red/disabled and won't join
       const roomBtn = new UIButton(roomStartX, roomY, roomButtonWidth, roomButtonHeight, () => {
+        if (isFull) return; // Don't allow joining full rooms
         if (typeof Network !== 'undefined' && Network.joinRoom) {
           Network.joinRoom(roomId);
         }
       });
-      roomBtn.draw(roomId, {
-        stroke: [100, 200, 100],
-        fill: [40, 80, 40],
-        text: 255,
+      roomBtn.enabled = !isFull;
+      roomBtn.draw(isFull ? roomId + ' (FULL)' : roomId, {
+        stroke: isFull ? [200, 100, 100] : [100, 200, 100],
+        fill: isFull ? [80, 40, 40] : [40, 80, 40],
+        text: isFull ? 200 : 255,
         textSize: 14
       });
       preMatchButtons.push(roomBtn);
@@ -3970,7 +3974,7 @@ function drawRoomSelection() {
       push();
       for (let j = 0; j < maxPlayers; j++) {
         const sx = squaresStartX + j * (squareSize + squareGap);
-        fill(j < players ? color(100, 255, 100) : color(50, 60, 50));
+        fill(j < players ? color(isFull ? 255 : 100, isFull ? 100 : 255, isFull ? 100 : 100) : color(50, 60, 50));
         noStroke();
         rect(sx, squaresY, squareSize, squareSize, 2);
       }

@@ -105,6 +105,13 @@ window.Network = {
       console.warn('[Network] disconnected:', reason);
       this.isConnected = false;
     });
+    socket.on('error', (error) => {
+      console.warn('[Network] error:', error);
+      // Show error feedback to the user
+      window.lastNetworkError = error && error.message ? error.message : 'Unknown error';
+      window.lastNetworkErrorTime = Date.now();
+      this._emit('error', error);
+    });
     socket.on('connect_error', (error) => {
       console.warn('[Network] connect_error:', error);
     });

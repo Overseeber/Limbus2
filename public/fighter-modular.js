@@ -3124,8 +3124,8 @@ addCombo(attacker) {
     push();
     translate(this.pos.x + this.spriteShakeX, this.pos.y + this.spriteShakeY);
     
-    // Debug: Show current sprite name
-    if (this.characterKey === 'VALENCINA') {
+    // Debug: Show current sprite name (gated behind debugGraphicsEnabled)
+    if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled && this.characterKey === 'VALENCINA') {
       push();
       fill(255);
       textAlign(CENTER);
@@ -3199,7 +3199,8 @@ addCombo(attacker) {
       noFill();
       ellipse(0, 0, 72, 168);
     }
-    if (this.state === 'attack' && this.attackTimer > 0) {
+    // Attack indicator (yellow ellipse/arc/line) - gated behind debugGraphicsEnabled
+    if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled && this.state === 'attack' && this.attackTimer > 0) {
       const progress = constrain(this.attackTimer / this.attackInterval, 0, 1);
       push();
       noFill();
@@ -3210,7 +3211,7 @@ addCombo(attacker) {
       arc(0, -40, 38, 14, PI, PI + progress * PI);
       pop();
     }
-    if (this.state === 'attack') {
+    if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled && this.state === 'attack') {
       stroke('#ffd24d');
       strokeWeight(4);
       line(this.facing * 22, -20, this.facing * 70, -30);
@@ -3318,8 +3319,8 @@ addCombo(attacker) {
       pop();
     }
 
-    // Draw attack cycle debug display
-    if (this.attackCounterTimer > 0 && this.attackCounterDisplay > 0) {
+    // Draw attack cycle debug display (gated behind debugGraphicsEnabled)
+    if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled && this.attackCounterTimer > 0 && this.attackCounterDisplay > 0) {
       push();
       textAlign(CENTER, CENTER);
       textSize(24);
@@ -3361,8 +3362,8 @@ addCombo(attacker) {
       pop();
     }
 
-    // Draw stagger phase timer
-    if (this.state === 'staggered' && this.staggerTimer > 0) {
+    // Draw stagger phase timer (gated behind debugGraphicsEnabled)
+    if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled && this.state === 'staggered' && this.staggerTimer > 0) {
       push();
       textAlign(CENTER, CENTER);
       textSize(20);
@@ -3374,8 +3375,8 @@ addCombo(attacker) {
       pop();
     }
 
-    // Draw recovery phase timer
-    if (this.state === 'staggered' && this.staggerTimer <= 0 && this.staggerRecoveryTimer > 0) {
+    // Draw recovery phase timer (gated behind debugGraphicsEnabled)
+    if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled && this.state === 'staggered' && this.staggerTimer <= 0 && this.staggerRecoveryTimer > 0) {
       push();
       textAlign(CENTER, CENTER);
       textSize(20);
@@ -3389,8 +3390,8 @@ addCombo(attacker) {
 
     
 
-    // Draw stagger immunity indicator
-    if (this.state === 'staggered') {
+    // Draw stagger immunity indicator (gated behind debugGraphicsEnabled)
+    if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled && this.state === 'staggered') {
       push();
       textAlign(CENTER, CENTER);
       textSize(14);

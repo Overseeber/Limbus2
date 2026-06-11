@@ -471,6 +471,8 @@ function drawStatusRows(fighter, x, y) {
 // ☰ PAUSE MENU BUTTON
 // ==========================
 function drawPauseMenuButton() {
+  // Only draw pause button for local player's own screen
+  // Multiplayer: pause is controlled by server
   const s = 40;
   const bx = width - s - 12;
   const by = 12;

@@ -445,6 +445,8 @@ function exitOverheat(state, config) {
   state.resources.overheatDamageReduction = 0;
   state.resources.overheatTimer = 0;
   state.resources.overheat = 0;
+  // Mark that Overheat has been exited at least once (required for ultimate availability)
+  state.resources._hasExitedOverheatOnce = true;
   // Restore Precognition
   ensureStatus(state, 'Precognition', config.precognition.startingValue || 30, 0);
 }
@@ -555,10 +557,19 @@ function updateSystems(state, dt, config) {
   // 4. Check Shin activation
   checkShinActivation(state, config);
 
-  // 5. Update ultimate availability: available when NOT in Overheat
+  // 5. Update ultimate availability: available after AT LEAST ONE Overheat cycle
+  //    has been completed. At match start, ultimate is unavailable until Valencina
+  //    enters and exits Overheat at least once.
   //    (Overheat count > 0 means overheated, can't ult)
   const oh = getStatus(state, 'Overheat');
-  state.resources.ultimateAvailable = !oh || oh.count <= 0;
+  const precog = getStatus(state, 'Precognition');
+  if (!state.resources._hasExitedOverheatOnce) {
+    // Ultimate not available until she exits Overheat at least once
+    state.resources.ultimateAvailable = false;
+  } else {
+    // After first Overheat exit: available when NOT in Overheat
+    state.resources.ultimateAvailable = !oh || oh.count <= 0;
+  }
 
   return events;
 }

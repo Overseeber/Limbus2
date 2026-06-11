@@ -727,6 +727,13 @@ class GameplayEngine {
       base *= COMBAT_CONFIG.GUARD_DAMAGE_REDUCTION; // 0.05 = 95% reduction
       knock = 0; // No knockback when guarding
       result.wasGuarded = true;
+      
+      // If not in parry window and has parry sprite active, clear it
+      // (player is guarding but the parry window has expired, so a new hit
+      // should revert the sprite to normal guard)
+      if (!isParryWindow && defender.parrySpriteActive) {
+        defender.parrySpriteActive = false;
+      }
     }
 
     const dmgResult = this.calculateDamage(base, attacker, defender);
@@ -750,6 +757,8 @@ class GameplayEngine {
       attacker.velocity.x = dir * COMBAT_CONFIG.GUARD_PARRY_KNOCKBACK; // 120
       // Signal that this was a parry for hitstop handling
       result.wasParried = true;
+      // Set parry sprite flag on the defender (blocker) - replaces guard sprite
+      defender.parrySpriteActive = true;
       // Do NOT change defender state - blocker stays guarding/idle
       // Do NOT apply any knockback or hitstun to the defender
     } else if (!result.wasGuarded) {

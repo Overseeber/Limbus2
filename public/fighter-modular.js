@@ -681,6 +681,13 @@ class Fighter {
         ultimate: 'du1'
       };
 
+      // PARRY SPRITE: Replace guard sprite with parry sprite on successful blockstun
+      // Only shown while still in guard state - exits guard = returns to normal sprites
+      if (this.parrySpriteActive && this.state === 'guard') {
+        this.currentSprite = 'dhalt2';
+        return;
+      }
+
       // Deathedge ability animation — driven by server phase/frameIndex, same as other abilities
       if (this.deathedgeActive) {
         // Reset one-shot flags when ability newly activates (for subsequent uses)
@@ -836,6 +843,12 @@ class Fighter {
         ultimate: 'cuend'
       };
 
+      // PARRY SPRITE: Replace guard sprite with parry sprite on successful blockstun
+      if (this.parrySpriteActive && this.state === 'guard') {
+        this.currentSprite = 'cs2f1';
+        return;
+      }
+
       // Installation Art ability animation - respect server phase timing
       if (this.installationArtActive) {
         if (this.installationArtExecutePhase) {
@@ -921,6 +934,12 @@ class Fighter {
       duck: 'idle',
       ultimate: 'dist1'
     };
+
+    // PARRY SPRITE: Replace guard sprite with parry sprite on successful blockstun
+    if (this.parrySpriteActive && this.state === 'guard') {
+      this.currentSprite = 's1f1';
+      return;
+    }
 
     // Time to Hunt ability animation - show dist1 sprite during casting
     if (this.timeToHuntCasting) {

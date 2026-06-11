@@ -617,6 +617,8 @@ tick() {
                 state.guardReleaseTimer = Math.max(0, state.guardReleaseTimer - dt);
                 if (state.guardReleaseTimer <= 0) {
                     // Release hold expired: fully deactivate guard
+                    // Clear parry sprite when guard fully deactivates
+                    state.parrySpriteActive = false;
                     state.isGuarding = false;
                     state.guardTimer = 0;
                     state.guardReleaseTimer = 0;
@@ -2969,6 +2971,8 @@ tick() {
                 whiffRecoveryTimer: player.gameState.whiffRecoveryTimer || 0,
                 // Ability cooldowns (for UI countdown timers)
                 abilityCooldowns: { ...player.gameState.abilityCooldowns } || {},
+                // Parry sprite flag: active when player parried an attack
+                parrySpriteActive: !!player.gameState.parrySpriteActive,
                 // Character-specific ability resources
                 resources: { ...player.gameState.resources } || {},
                 // Installation Art phase flags for client animation

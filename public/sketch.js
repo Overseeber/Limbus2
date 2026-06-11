@@ -789,6 +789,9 @@ function processSnapshot(snapshot) {
             fighter.slashEffectsSpawned = false;
         }
 
+        // Apply parry sprite flag from server (parry on successful blockstun)
+        fighter.parrySpriteActive = !!state.parrySpriteActive;
+
         // Apply ability cooldowns from server snapshot
         // These are used for UI countdown timers and ability state
         if (state.abilityCooldowns) {

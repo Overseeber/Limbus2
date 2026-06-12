@@ -4415,8 +4415,8 @@ function drawInspectVignette() {
 function drawInspectInfo() {
   const infoX = width / 2;
   const infoY = height / 2;
-  const infoW = 600;
-  const infoH = 400;
+  const infoW = 1400;
+  const infoH = 700;
   
   let infoImage = null;
   

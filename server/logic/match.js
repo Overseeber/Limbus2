@@ -2713,10 +2713,10 @@ tick() {
         // Only set hit state if the attack actually hit
         if (execResult.hit) {
             // Check stagger first before setting hurt state
-            const threshold = attacker.config.staggerThreshold || 1000;
+            const threshold = player.config.staggerThreshold || 1000;
             if (defender.gameState.stagger >= threshold) {
                 defender.gameState.state = 'staggered';
-                defender.gameState.staggerTimer = attacker.config.staggerLength || 5;
+                defender.gameState.staggerTimer = player.config.staggerLength || 5;
                 defender.gameState.hitTimer = 0.18;
                 defender.gameState.hitstunTimer = defender.gameState.hitTimer;
             } else {

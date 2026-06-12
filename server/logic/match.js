@@ -36,6 +36,24 @@ const {
   clampX,
   clampY
 } = require('./characterLogic/ultimateLogic');
+
+// Cache character logic modules at module load time to avoid repeated require() calls
+const CHARACTER_LOGIC_CACHE = {
+  valencina: null,
+  callisto: null,
+  dihui: null
+};
+function getCharLogic(key) {
+  const k = key.toLowerCase();
+  if (!CHARACTER_LOGIC_CACHE[k]) {
+    try {
+      CHARACTER_LOGIC_CACHE[k] = require(`./characterLogic/${k}`);
+    } catch(e) {
+      return null;
+    }
+  }
+  return CHARACTER_LOGIC_CACHE[k];
+}
 const ARENA_WIDTH = 1400;
 const ARENA_HEIGHT = 700;
 const SLAM_ATTACK_RADIUS = 160; // 50% bigger than original 80
@@ -338,15 +356,9 @@ tick() {
 
                 // Process Valencina's Game Target status on all fighters each tick
                 // This restricts speed/jump/dash for any fighter with Game Target active
-                if (player.characterKey === 'VALENCINA') {
-                    const valencinaLogic = require('./characterLogic/valencina');
+                const valencinaLogic = getCharLogic('valencina');
+                if (valencinaLogic) {
                     valencinaLogic.processGameTargetStatus(player.gameState, player.config);
-                } else {
-                    // Non-Valencina characters also need Game Target processing in case they are affected
-                    try {
-                        const valencinaLogic = require('./characterLogic/valencina');
-                        valencinaLogic.processGameTargetStatus(player.gameState, player.config);
-                    } catch(e) {}
                 }
                 
                 // Update ability animation timers
@@ -387,7 +399,7 @@ tick() {
         // Record afterimage history snapshot for Dihui (after syncing attack state)
         // This must happen AFTER attack state is synced from player wrapper to gameState
         if (player.characterKey === 'DIHUI') {
-          const dihuiLogic = require('./characterLogic/dihui');
+          const dihuiLogic = getCharLogic('dihui');
           const dihuiConfig = this.engine.getCharacterConfig('DIHUI');
           if (dihuiLogic && dihuiConfig) {
             dihuiLogic.initAfterimageHistory(player.gameState);
@@ -404,7 +416,7 @@ tick() {
         // Afterimages mimic the real Dihui's attack state with 0.5s/1.0s/1.5s delay
         // They deal damage, raise combo, use poise/crit, but cannot be hit / no on-hit effects / no collision
         if (player.characterKey === 'DIHUI' && !player.gameState.isDefeated) {
-          const dihuiLogic = require('./characterLogic/dihui');
+          const dihuiLogic = getCharLogic('dihui');
           const dihuiConfig = this.engine.getCharacterConfig('DIHUI');
           if (dihuiLogic && dihuiConfig && dihuiLogic.resolveAfterimageAttacks) {
             const enemies = Object.values(this.players)
@@ -779,8 +791,8 @@ tick() {
 
             // VALENCINA: Manual evade loses 1 Precognition
             if (player.characterKey === 'VALENCINA') {
-                const valencinaLogic = require('./characterLogic/valencina');
-                valencinaLogic.onManualEvade(state);
+                const valencinaLogic = getCharLogic('valencina');
+                if (valencinaLogic) valencinaLogic.onManualEvade(state);
             }
         }
 
@@ -1943,7 +1955,7 @@ tick() {
 
             // VALENCINA: Apply per-attack effects on hit
             if (attacker.characterKey === 'VALENCINA') {
-                const valencinaLogic = require('./characterLogic/valencina');
+                const valencinaLogic = getCharLogic('valencina');
                 
                 if (attacker.attackSequence === 1) {
                     // Attack 1: Gain 3 Poise Count
@@ -1980,7 +1992,7 @@ tick() {
 
                 // DIHUI STAR: Apply per-attack effects on hit
             if (attacker.characterKey === 'DIHUI') {
-                const dihuiLogic = require('./characterLogic/dihui');
+                const dihuiLogic = getCharLogic('dihui');
                 
                 if (attacker.attackSequence === 1) {
                     // Attack 1: Gain 3 Poise Count
@@ -1996,7 +2008,7 @@ tick() {
 
                 // CALLISTO: Apply per-attack effects on hit
             if (attacker.characterKey === 'CALLISTO') {
-                const callistoLogic = require('./characterLogic/callisto');
+                const callistoLogic = getCharLogic('callisto');
                 
                 if (attacker.attackSequence === 1) {
                     // Attack 1: inflict 1 Bind on enemy, gain 1 Haste

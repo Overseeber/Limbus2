@@ -111,25 +111,7 @@ function broadcastRoomList() {
     io.sockets.emit('roomsList', getRoomsData());
 }
 
-// ServerFighter class removed - Match.players now owns authoritative state
-// Match class handles all game simulation through GameplayEngine
 
-function broadcastEvent(event, excludeSocketId = null, roomId = null) {
-    if (!roomId) {
-        if (!excludeSocketId) return;
-        const client = clientList[excludeSocketId];
-        if (!client || !client.room) return;
-        roomId = client.room;
-    }
-    const room = roomList[roomId];
-    if (!room) return;
-
-    if (excludeSocketId) {
-        io.to(roomId).except(excludeSocketId).emit('event', event);
-    } else {
-        io.to(roomId).emit('event', event);
-    }
-}
 
 function resetRoomReadyState(room) {
     if (!room || !room.clients) return;
@@ -156,44 +138,22 @@ function handleForfeit(socket, client, room) {
 
 
 
-const EVENT_TYPES = {
-  INPUT_MOVE: 'INPUT_MOVE',
-  INPUT_ATTACK: 'INPUT_ATTACK',
-  INPUT_GUARD: 'INPUT_GUARD',
-  INPUT_DASH: 'INPUT_DASH',
-  INPUT_ABILITY: 'INPUT_ABILITY',
-  
-  HIT: 'HIT',
-  BLOCK: 'BLOCK',
-  PARRY: 'PARRY',
-  COUNTER: 'COUNTER',
-  
-  STATUS_APPLY: 'STATUS_APPLY',
-  STATUS_TICK: 'STATUS_TICK',
-  STATUS_REMOVE: 'STATUS_REMOVE',
-  
-  MOVE: 'MOVE',
-  DASH: 'DASH',
-  
-  STAGGER_START: 'STAGGER_START',
-  STAGGER_END: 'STAGGER_END',
-  
-  ABILITY_START: 'ABILITY_START',
-  ABILITY_HIT: 'ABILITY_HIT',
-  ABILITY_END: 'ABILITY_END',
-  
-  ULTIMATE_START: 'ULTIMATE_START',
-  ULTIMATE_HIT: 'ULTIMATE_HIT',
-  ULTIMATE_END: 'ULTIMATE_END',
-  
-  FIGHTER_DEFEATED: 'FIGHTER_DEFEATED',
-  MATCH_END: 'MATCH_END',
-};
+// eventstuff = {//for reference and to keep track
+//imput for mover, attack, guard, dash, ability
+//hit, block, parry, counter
+//status apply, tick, remove
+//move, dash
+//stagger start, end
+//ability start, hit, end
+//ultimate start, hit, end
+//fighter defeated, match end
+// };
 
 io.sockets.on('connection', (socket) => {
     console.log('Client connected:', socket.id);
   
     const client = new Client(socket.id);
+    //figters are now fully owend by the match obj. so server controls and we dont gotta worry about moveing the fighter with the client
 //    const fighter = new ServerFighter({ class: 'JOHN', hp: null, maxHp: null, speed: null, jumpHeight: null, baseDamage: null, staggerThreshold: null, staggerLength: null, weapon: 'Sword', knockbackMultiplier: 1 }, socket.id, null);
 //    client.fighter = fighter;
 

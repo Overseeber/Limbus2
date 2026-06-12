@@ -232,7 +232,7 @@ tick() {
             }
 
             this.checkWinCondition();
-            this.broadcastSnapshot();
+            this.broadcastSnapshot();//sends update every tick
             return;
         }
 
@@ -1747,7 +1747,7 @@ tick() {
         
         if (activePlayers.length <= 1) {
             const winner = activePlayers.length === 1 ? activePlayers[0] : null;
-            this.endMatch(winner ? winner.clientId : null);
+            this.endMatch(winner ? winner.clientId : null, { returnToLobby: true });
         }
     }
 
@@ -3408,6 +3408,8 @@ tick() {
             forfeiterId: options.forfeiterId || null
         });
         
+        // Clients will restore their room state from saved pre-battle data
+        // and request updated room state from the server
     }
 
     /**

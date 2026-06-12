@@ -218,6 +218,24 @@ let cpuOpponentAIEnabled = true; // Whether AI opponent has behavior enabled
 let cpuModeStep = 'playerSelect'; // 'playerSelect', 'opponentSelect', 'opponentConfig'
 let cpuUsesServer = false; // If CPU mode is running on the server instead of local simulation
 
+// Battle start fade-to-black variables
+let battleStartFadeActive = false;
+let battleStartFadeAlpha = 0;
+let battleStartFadeTimer = 0;
+let battleStartFadeCallback = null; // Callback to execute when fade completes
+const BATTLE_START_FADE_DURATION = 0.5; // seconds to fade to black
+
+/**
+ * Start the battle fade-to-black sequence
+ * @param {Function} onComplete - Called when fade is fully black
+ */
+function startBattleStartFade(onComplete) {
+  battleStartFadeActive = true;
+  battleStartFadeAlpha = 0;
+  battleStartFadeTimer = 0;
+  battleStartFadeCallback = onComplete || null;
+}
+
 // CPU opponent config screen buttons
 let cpuConfigButtons = [];
 
@@ -1327,6 +1345,9 @@ function initRoomBattle(slots) {
   fighters.forEach(f => f.reset());
   damageNumbers = [];
   
+  // Save room info before clearing for post-battle return
+  window._savedRoomId = myRoomId;
+  window._savedRoomState = myRoomState;
   // Clear room state since we're now in battle
   myRoomState = null;
 }
@@ -2549,6 +2570,13 @@ function drawEndingSequence() {
         enemy = null;
         showCombatOverMenu = false;
         endingReturnToLobby = false;
+        // Restore room state so lobby shows the room (not room search)
+        if (window._savedRoomId) {
+          myRoomId = window._savedRoomId;
+          myRoomState = window._savedRoomState;
+          window._savedRoomId = null;
+          window._savedRoomState = null;
+        }
         setBattleState(BATTLE_STATES.LOBBY);
       } else {
         // Finalize transition to COMBAT_OVER
@@ -3483,14 +3511,22 @@ function drawLobby() {
       const slot = slots[i];
 
       if (!slot || !slot.clientId) {
+        // Check if this is a multiplayer room with one player and an empty slot
+        const hasOnePlayer = slots.filter(s => s && s.clientId).length === 1;
         push();
         textAlign(CENTER, CENTER);
         textSize(14);
         fill(120);
         text('Empty', x + (columnWidth - 20) / 2, y + 70);
-        fill(100, 255, 100);
-        textSize(12);
-        text('Click to join', x + (columnWidth - 20) / 2, y + 100);
+        if (hasOnePlayer) {
+          fill(180, 180, 255);
+          textSize(12);
+          text('waiting for player...', x + (columnWidth - 20) / 2, y + 95);
+        } else {
+          fill(100, 255, 100);
+          textSize(12);
+          text('Click to join', x + (columnWidth - 20) / 2, y + 100);
+        }
         pop();
         continue;
       }
@@ -3973,6 +4009,21 @@ function drawRoomSelection() {
     return;
   }
   
+  // Return to Mode Select button (top-left)
+  const backToModeBtn = new UIButton(18, 18, 170, 34, () => {
+    gameMode = null;
+    myRoomState = null;
+    myRoomId = null;
+    setBattleState(BATTLE_STATES.MODE_SELECT);
+  });
+  backToModeBtn.draw('← RETURN TO MODE SELECT', {
+    stroke: [200, 180, 120],
+    fill: [80, 60, 30],
+    text: 255,
+    textSize: 11
+  });
+  preMatchButtons.push(backToModeBtn);
+  
   textAlign(CENTER, CENTER);
   textSize(28);
   fill(255);
@@ -4078,12 +4129,12 @@ function drawCPULobby() {
   text(charName, width / 2, 30);
   pop();
   
-  // CPU opponent display
+  // CPU opponent display (clickable to cycle characters)
   const opponentChar = cpuOpponentCharacter || 'CALLISTO';
   const opponentData = window.CHARACTERS && window.CHARACTERS[opponentChar];
   const opponentName = opponentData ? opponentData.name : opponentChar;
   
-  // Opponent info (bottom-right square)
+  // Opponent info (bottom-right square) - clickable to swap CPU character
   push();
   const ox = width - 170;
   const oy = height - 170;
@@ -4099,7 +4150,21 @@ function drawCPULobby() {
   textSize(12);
   fill(200);
   text('CPU', ox + 75, oy + 55);
+  
+  // Hint text
+  fill(150, 150, 200);
+  textSize(9);
+  text('click to change', ox + 75, oy + 80);
   pop();
+  
+  // Register CPU opponent box as clickable to cycle character
+  const cpuOpponentBoxBtn = new UIButton(ox, oy, 150, 150, () => {
+    const keys = availableCharacterKeys();
+    const currentIndex = keys.indexOf(cpuOpponentCharacter);
+    const nextIndex = (currentIndex + 1) % keys.length;
+    cpuOpponentCharacter = keys[nextIndex];
+  });
+  preMatchButtons.push(cpuOpponentBoxBtn);
   
   // Lower-center controls
   const buttonW = 200;
@@ -4159,6 +4224,20 @@ function drawCPULobby() {
     textSize: 13
   });
   preMatchButtons.push(aiToggleBtn);
+  
+  // Return to Mode Select button (top-left)
+  const backToModeBtn = new UIButton(18, 18, 170, 34, () => {
+    gameMode = null;
+    preMatchState = PRE_MATCH_STATES.LOBBY;
+    setBattleState(BATTLE_STATES.MODE_SELECT);
+  });
+  backToModeBtn.draw('← RETURN TO MODE SELECT', {
+    stroke: [200, 180, 120],
+    fill: [80, 60, 30],
+    text: 255,
+    textSize: 11
+  });
+  preMatchButtons.push(backToModeBtn);
 }
 
 /**

@@ -5,9 +5,51 @@
 // Arena: 1200x720
 // ==========================
 
+/**
+ * Update the battle start fade animation
+ * @param {number} dt - delta time in seconds
+ */
+function updateBattleStartFade(dt) {
+  if (!battleStartFadeActive) return;
+  
+  battleStartFadeTimer += dt;
+  const progress = constrain(battleStartFadeTimer / BATTLE_START_FADE_DURATION, 0, 1);
+  battleStartFadeAlpha = Math.floor(progress * 255);
+  
+  // When fade is complete, trigger the actual battle initialization
+  if (battleStartFadeTimer >= BATTLE_START_FADE_DURATION) {
+    battleStartFadeActive = false;
+    // The actual battle init is handled by the caller via a callback
+    if (typeof battleStartFadeCallback === 'function') {
+      battleStartFadeCallback();
+      battleStartFadeCallback = null;
+    }
+  }
+}
+
+/**
+ * Draw the battle start fade overlay (fullscreen black)
+ */
+function drawBattleStartFade() {
+  if (!battleStartFadeActive && battleStartFadeAlpha <= 0) return;
+  push();
+  resetMatrix();
+  noStroke();
+  fill(0, battleStartFadeAlpha);
+  rect(0, 0, width, height);
+  pop();
+}
+
 function drawReadyScreen() {
   push();
-
+  
+  // If battle start fade is active, render the fade overlay
+  if (battleStartFadeActive) {
+    drawBattleStartFade();
+    pop();
+    return;
+  }
+  
   pop();
 }
 
@@ -691,6 +733,27 @@ function drawCombatOver() {
   const btnX = panelX + (panelW - btnW) / 2;
   const btnY = panelY + panelH - 100;
   combatOverButtons = [];
+  
+  // "Return to Mode Select" button (for CPU mode - goes back to gamemode select)
+  const modeSelectBtn = new UIButton(btnX, btnY - 66, btnW, btnH, () => {
+    resetLobbyReadyState();
+    window.allFighters = null;
+    player = null;
+    enemy = null;
+    showCombatOverMenu = false;
+    gameMode = null;
+    setBattleState(BATTLE_STATES.MODE_SELECT);
+  });
+  modeSelectBtn.draw('Return to Mode Select', {
+    stroke: [200, 180, 120],
+    fill: [100, 80, 40],
+    text: 255,
+    textSize: 18,
+    radius: 12
+  });
+  combatOverButtons.push(modeSelectBtn);
+  
+  // "Return to Lobby" button (goes to room lobby or CPU lobby)
   const returnBtn = new UIButton(btnX, btnY, btnW, btnH, () => {
     resetLobbyReadyState();
     window.allFighters = null;

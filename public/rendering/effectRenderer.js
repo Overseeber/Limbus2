@@ -188,6 +188,7 @@ class DamageNumber extends FloatingIndicator {
     fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
     stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
     strokeWeight(DAMAGE_CONSTANTS.STROKE_WEIGHT);
+    textFont(NumberFont);
 
     text(damageText, this.pos.x, this.pos.y);
 
@@ -286,6 +287,7 @@ class StaggerDamageNumber extends FloatingIndicator {
     fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
     stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
     strokeWeight(1);
+    textFont(NumberFont);
     text(`${floor(this.value)}`, this.pos.x, this.pos.y);
 
     if (this.sourceType === 'tremor') {
@@ -293,6 +295,7 @@ class StaggerDamageNumber extends FloatingIndicator {
       fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);
       stroke(colors.stroke[0], colors.stroke[1], colors.stroke[2], this.alpha);
       strokeWeight(1);
+      textFont(NumberFont);
       text('TREMOR BURST', this.pos.x, this.pos.y + this.size * 0.8);
     }
 
@@ -338,6 +341,7 @@ class EvadeIndicator extends FloatingIndicator {
     push();
     textAlign(CENTER, CENTER);
     textSize(this.size);
+    textFont(NumberFont);
 
     const colors = DAMAGE_CONSTANTS.COLOR.EVADE;
     fill(colors.fill[0], colors.fill[1], colors.fill[2], this.alpha);

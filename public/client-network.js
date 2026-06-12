@@ -175,7 +175,7 @@ window.Network = {
   sendEvent(ev) {
     if (this.isConnected && this.socket) {
       this.socket.emit('event', ev);
-    } else if (this.isLocalAuthority && window.LocalSimulator) {
+    } else if (this.isLocalAuthority && window.LocalSimulator) {//ai fallback thing
       window.LocalSimulator.enqueue(ev);
     }
   },
@@ -183,9 +183,9 @@ window.Network = {
   on(name, fn) {
     this.eventHandlers[name] = this.eventHandlers[name] || [];
     this.eventHandlers[name].push(fn);
-    // Diagnostic: warn if many handlers are registered for the same event
+    // spam working stuff
     if (this.eventHandlers[name].length > 5) {
-      console.warn('[Network] many handlers registered for', name, this.eventHandlers[name].length);
+      console.warn('[Network] dis guy is spamming', name, this.eventHandlers[name].length);
     }
   },
 
@@ -195,7 +195,7 @@ window.Network = {
   }
 };
 
-// Minimal local authoritative simulator used as a development fallback.
+// ai fall back thingy
 class LocalSimulator {
   constructor() {
     this.eventQueue = [];

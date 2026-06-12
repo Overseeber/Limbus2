@@ -170,6 +170,11 @@ let characterSelectOption = 0; // 0: character, 1: AI, 2: ready, 3: remove playe
 let pauseMenuOpen = false;
 let pauseMenuOption = 0; // 0: settings, 1: forfeit match
 let pauseSettingsOpen = false; // Settings placeholder open
+let pauseStartTime = 0; // Timestamp when pause was initiated
+let unpauseCountdownActive = false; // Whether countdown is active
+let unpauseCountdownValue = 3; // Countdown from 3
+let unpauseCountdownTimer = 0; // Timer for countdown display
+let battlePaused = false; // Whether battle simulation is paused
 
 // Room-based character select state
 let availableRooms = [];
@@ -1934,6 +1939,33 @@ function drawSlamLandingOverlays() {
 }
 
 
+// Start unpause countdown that counts down from 3 before resuming gameplay
+function startUnpauseCountdown() {
+  pauseMenuOpen = false;
+  pauseSettingsOpen = false;
+  unpauseCountdownActive = true;
+  unpauseCountdownValue = 3;
+  unpauseCountdownTimer = 3.0;
+}
+
+// Update the unpause countdown each frame
+function updateUnpauseCountdown(dt) {
+  if (!unpauseCountdownActive) return;
+  
+  unpauseCountdownTimer -= dt;
+  unpauseCountdownValue = Math.max(0, Math.ceil(unpauseCountdownTimer));
+  
+  if (unpauseCountdownTimer <= 0) {
+    // Countdown finished - resume gameplay
+    unpauseCountdownActive = false;
+    battlePaused = false;
+    pauseMenuOpen = false;
+    pauseSettingsOpen = false;
+    unpauseCountdownValue = 3;
+    unpauseCountdownTimer = 0;
+  }
+}
+
 function draw() {
   // Perf diagnostics: sample center pixel when enabled to detect gray-frame toggles
   if (DEBUG_PERF) {
@@ -2008,7 +2040,13 @@ function draw() {
     
     background(0);
     
-    updateBattle();
+    // Update unpause countdown
+    updateUnpauseCountdown(deltaTime / 1000);
+    
+    // If countdown is active or paused, skip fight simulation (battle is frozen)
+    if (!unpauseCountdownActive && !battlePaused) {
+      updateBattle();
+    }
     
     // Position camera to keep characters centered vertically
     // Calculate the vertical midpoint of all active fighters
@@ -2723,7 +2761,8 @@ function keyPressed() {
       if (pauseSettingsOpen) {
         pauseSettingsOpen = false;
       } else {
-        pauseMenuOpen = false;
+        // Start unpause countdown when closing pause menu
+        startUnpauseCountdown();
       }
       return;
     }
@@ -2732,6 +2771,8 @@ function keyPressed() {
   
   // Open pause menu with ESC key during battle
   if (battleState === BATTLE_STATES.BATTLE && keyCode === ESCAPE) {
+    // Only open pause if not already in countdown
+    if (unpauseCountdownActive) return;
     pauseMenuOpen = true;
     pauseMenuOption = 0;
     return;
@@ -2949,7 +2990,8 @@ console.log('myRoomState', myRoomState);
       return;
     }
 
-    // If settings panel is open, check debug button click, otherwise close
+    // If settings panel is open, check debug button click, otherwise do NOT close
+    // Only ESC can close settings (handled in keyPressed)
     if (pauseSettingsOpen) {
       // Check if the debug toggle button was clicked
       if (typeof settingsPanelDebugBtn !== 'undefined' && settingsPanelDebugBtn) {
@@ -2961,8 +3003,7 @@ console.log('myRoomState', myRoomState);
           return;
         }
       }
-      // Any click outside the debug button closes settings
-      pauseSettingsOpen = false;
+      // Click does NOT close settings anymore - only ESC does
       return;
     }
 
@@ -3393,13 +3434,24 @@ function drawLobby() {
     fill(200);
     text(`Room: ${myRoomState.id}`, 20, 70);
 
-    // Show leave button
-    fill(180, 80, 80);
-    rect(width - 140, 40, 120, 28, 6);
-    fill(255);
-    textAlign(CENTER, CENTER);
-    textSize(14);
-    text('Leave Room', width - 80, 54);
+    // Leave button (uses preMatchButtons for click handling)
+    const leaveBtn = new UIButton(20, 45, 100, 28, () => {
+      if (typeof Network !== 'undefined' && Network.leaveRoom) {
+        Network.leaveRoom();
+      }
+      // Also clear local state and return to room matchmaking
+      myRoomState = null;
+      myRoomId = null;
+      // Clear room state but stay in LOBBY (room matchmaking)
+      preMatchState = PRE_MATCH_STATES.LOBBY;
+    });
+    leaveBtn.draw('LEAVE', {
+      stroke: [180, 80, 80],
+      fill: [80, 40, 40],
+      text: 255,
+      textSize: 12
+    });
+    preMatchButtons.push(leaveBtn);
 
     // Rebuild room slot buttons
     roomSlotButtons = [];
@@ -3872,6 +3924,11 @@ function drawPreMatchLobby() {
       if (typeof Network !== 'undefined' && Network.leaveRoom) {
         Network.leaveRoom();
       }
+      // Clear local room state and return to room matchmaking
+      myRoomState = null;
+      myRoomId = null;
+      // Clear room state but stay in LOBBY (room matchmaking)
+      preMatchState = PRE_MATCH_STATES.LOBBY;
     });
     leaveBtn.draw('LEAVE', {
       stroke: [180, 80, 80],

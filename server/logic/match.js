@@ -3184,8 +3184,13 @@ tick() {
                 const callistoThreshold = callistoConfig?.ultimate?.artworkRequired || 3;
                 return (state.resources && state.resources.artworkTibiaStacks >= callistoThreshold);
             case 'VALENCINA':
-                // Ultimate available when NOT in Overheat (exiting overheat stage)
-                // Check Overheat status: if present and count > 0, can't ult
+                // Ultimate available ONLY after at least one Overheat cycle has been completed.
+                // At match start, _hasExitedOverheatOnce is false, so ultimate is unavailable.
+                // After entering and exiting Overheat at least once, ultimate becomes available
+                // when NOT currently in Overheat.
+                if (!state.resources || !state.resources._hasExitedOverheatOnce) {
+                    return false;
+                }
                 const overheatStatus = state.statuses ? state.statuses.find(s => s.type === 'Overheat') : null;
                 return !overheatStatus || overheatStatus.count <= 0;
             case 'DIHUI':

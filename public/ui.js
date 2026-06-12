@@ -519,10 +519,34 @@ function drawPauseMenu() {
   const menuHeight = 200;
   const menuX = (width - menuWidth) / 2;
   const menuY = (height - menuHeight) / 2;
+  
+  // Draw darkened background overlay
   push();
   fill(0, 0, 0, 180);
   noStroke();
   rect(0, 0, width, height);
+  pop();
+  
+  // If countdown is active, show countdown instead of menu
+  if (typeof unpauseCountdownActive !== 'undefined' && unpauseCountdownActive) {
+    push();
+    fill(0, 0, 0, 200);
+    noStroke();
+    rect(0, 0, width, height);
+    fill(255);
+    noStroke();
+    textAlign(CENTER, CENTER);
+    textSize(120);
+    textFont(Subheadings || undefined);
+    text(`${Math.ceil(unpauseCountdownValue)}`, width / 2, height / 2);
+    textSize(24);
+    fill(200);
+    text('Resuming...', width / 2, height / 2 + 80);
+    pop();
+    return;
+  }
+  
+  push();
   fill(30, 30, 30, 240);
   stroke(255, 100);
   strokeWeight(2);

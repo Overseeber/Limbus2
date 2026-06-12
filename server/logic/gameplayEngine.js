@@ -761,26 +761,6 @@ class GameplayEngine {
       defender.parrySpriteActive = true;
       // Do NOT change defender state - blocker stays guarding/idle
       // Do NOT apply any knockback or hitstun to the defender
-    } else if (!result.wasGuarded) {
-      // Check stagger first before setting hurt state
-      const threshold = config.staggerThreshold || defender.staggerThreshold || 1000;
-      if (defender.stagger >= threshold) {
-        defender.state = 'staggered';
-        defender.staggerTimer = config.staggerLength || defender.staggerDuration || 5;
-        defender.staggerDuration = defender.staggerTimer;
-        defender.stagger = threshold;
-        defender.staggerRecoveryTimer = 0;
-        defender.hitTimer = COMBAT_CONFIG.HITSTUN_DURATION;
-        result.staggerEvents.push({ type: 'STAGGER_START', targetId: defender.id, duration: defender.staggerTimer });
-        result.staggerResult = { staggered: true, duration: defender.staggerTimer };
-        
-        const tremorEvents = this.consumeTremor(defender, config);
-        if (tremorEvents.length) result.staggerEvents = result.staggerEvents.concat(tremorEvents);
-      } else {
-        // Normal hit (not guarded, not parried): enter hurt state with hitstun
-        defender.state = 'hurt';
-        defender.hitTimer = COMBAT_CONFIG.HITSTUN_DURATION; // 0.35s (from config)
-      }
     }
     // If guarded but NOT in parry window: defender stays in guard/idle
     // No knockback, no hitstun, no hurt state for the defender
@@ -796,6 +776,8 @@ class GameplayEngine {
     
     // STAGGER SYSTEM: Buildup based on ACTUAL DAMAGE TAKEN * 1.2
     // When guarding, no stagger buildup
+    // FIX: Stagger buildup MUST happen BEFORE threshold check so the current
+    // hit's stagger damage can trigger stagger entry immediately.
     if (!result.wasGuarded) {
       const staggerBuildup = Math.floor(result.damage * 1.2);
       defender.stagger += staggerBuildup;
@@ -803,15 +785,36 @@ class GameplayEngine {
       const recoveryDelay = config.staggerRecoveryDelay || defender.staggerRecoveryDelay || 2.0;
       defender.staggerRecoveryTimer = recoveryDelay;
       
+      // Now check if stagger threshold is reached (AFTER adding this hit's buildup)
       const threshold = config.staggerThreshold || defender.staggerThreshold || 1000;
-      
-      result.staggerResult = { staggered: false, stagger: defender.stagger };
-      
-      // Stagger check is now done before setting hurt state above
-      // Only emit STAGGER_INCREASE event if not staggered
-      if (defender.state !== 'staggered') {
+      if (defender.stagger >= threshold && defender.state !== 'staggered' && defender.state !== 'hurt') {
+        // Enter stagger state (overrides hurt state)
+        defender.state = 'staggered';
+        defender.staggerTimer = config.staggerLength || defender.staggerDuration || 5;
+        defender.staggerDuration = defender.staggerTimer;
+        defender.stagger = threshold;
+        defender.staggerRecoveryTimer = 0;
+        defender.hitTimer = COMBAT_CONFIG.HITSTUN_DURATION;
+        result.staggerEvents.push({ type: 'STAGGER_START', targetId: defender.id, duration: defender.staggerTimer });
+        result.staggerResult = { staggered: true, duration: defender.staggerTimer };
+        
+        const tremorEvents = this.consumeTremor(defender, config);
+        if (tremorEvents.length) result.staggerEvents = result.staggerEvents.concat(tremorEvents);
+      } else if (defender.state !== 'staggered') {
+        // Normal hit (not guarded, not parried, not staggered): enter hurt state with hitstun
+        defender.state = 'hurt';
+        defender.hitTimer = COMBAT_CONFIG.HITSTUN_DURATION; // 0.35s (from config)
+        
+        result.staggerResult = { staggered: false, stagger: defender.stagger };
         result.staggerEvents.push({ type: 'STAGGER_INCREASE', targetId: defender.id, amount: staggerBuildup });
+      } else {
+        // Already staggered - just track the buildup
+        result.staggerResult = { staggered: true, stagger: defender.stagger, staggerTimer: defender.staggerTimer };
       }
+    } else if (!result.wasGuarded && defender.state !== 'staggered') {
+      // No stagger buildup from guarded hits, but still enter hurt state if not staggered
+      defender.state = 'hurt';
+      defender.hitTimer = COMBAT_CONFIG.HITSTUN_DURATION;
     }
     
     if (attackData.statusEffects) attackData.statusEffects.forEach(s => { this.applyStatus(defender, s.type, s.count, s.potency); result.statuses.push(s.type); });
@@ -874,6 +877,11 @@ class GameplayEngine {
     // A new hit can set hitTimer while blockstun is still counting down.
     // Zeroing it here would erase the new hitstun before the next tick
     // has a chance to process it.
+    // 
+    // CRITICAL: Do NOT override 'staggered' state with 'hurt' state.
+    // Stagger takes priority over hitstun. If a fighter is staggered,
+    // they remain staggered regardless of hitTimer/hitstunTimer values.
+    // The stagger system fully locks the fighter (no movement, no actions).
     const wasBlockstunActive = state.blockstunTimer > 0;
     const wasHitstunActive = state.hitTimer > 0;
     
@@ -885,22 +893,32 @@ class GameplayEngine {
       state.hitTimer = Math.max(0, state.hitTimer - dt);
     }
     
-    // If either stun is active, keep state in 'hurt'.
-    // Priority: blockstun takes visual/functional precedence if both are active.
-    if (wasBlockstunActive || wasHitstunActive) {
-      state.state = 'hurt';
-    }
-    
-    // Check if BOTH timers have now expired (either naturally or were already 0).
-    const bothInactive = state.blockstunTimer <= 0 && state.hitTimer <= 0;
-    
-    if (bothInactive) {
-      // Both stuns are done. Exit hurt state only if fighter is still in 'hurt'.
-      if (state.state === 'hurt') {
-        state.state = 'idle';
-        events.push({ type: 'STATE_CHANGE', from: 'hurt', to: 'idle' });
+    // Only apply hurt state override if fighter is NOT staggered.
+    // Staggered fighters remain in 'staggered' state regardless of stun timers.
+    if (state.state !== 'staggered') {
+      // If either stun is active, keep state in 'hurt'.
+      // Priority: blockstun takes visual/functional precedence if both are active.
+      if (wasBlockstunActive || wasHitstunActive) {
+        state.state = 'hurt';
       }
+      
+      // Check if BOTH timers have now expired (either naturally or were already 0).
+      const bothInactive = state.blockstunTimer <= 0 && state.hitTimer <= 0;
+      
+      if (bothInactive) {
+        // Both stuns are done. Exit hurt state only if fighter is still in 'hurt'.
+        if (state.state === 'hurt') {
+          state.state = 'idle';
+          events.push({ type: 'STATE_CHANGE', from: 'hurt', to: 'idle' });
+        }
+        state.hitTimer = 0;
+        state.blockstunTimer = 0;
+      }
+    } else {
+      // Fighter is staggered - clear hitTimer so it doesn't build up,
+      // but DO NOT change state. Stagger state machine handles everything.
       state.hitTimer = 0;
+      state.hitstunTimer = 0;
       state.blockstunTimer = 0;
     }
     

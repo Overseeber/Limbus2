@@ -1,47 +1,27 @@
-# Performance Optimization Pass - Task Progress
+# Task Progress - UI, Gameplay, and Networking Fixes
 
-## Server-Side Optimizations (match.js)
+## Fix 1: Damage Number and Status Font Consistency
+- [x] Verified `damage.js` already uses `textFont(NumberFont)` for damage numbers, evade indicators, tremor indicators
+- [x] **CRITICAL FINDING**: `public/rendering/effectRenderer.js` contains a *duplicate* set of DamageNumber, StaggerDamageNumber, EvadeIndicator, and TremorIndicator classes that were missing `textFont(NumberFont)` calls
+- [x] **Fix applied**: Added `textFont(NumberFont)` to ALL draw() methods in effectRenderer.js:
+  - `DamageNumber.draw()` - main damage text
+  - `StaggerDamageNumber.draw()` - stagger numbers and tremor burst text
+  - `EvadeIndicator.draw()` - evade text
+  - `TremorIndicator.draw()` - tremor text
+- [x] Verified subtext (CRITICAL!, DEPOWERED, TREMOR BURST) inherits font from push()/pop() scope
 
-### Snapshot Optimization
-- [ ] Cache player snapshot data structures to avoid full rebuild every tick
-- [ ] Avoid deep-cloning status arrays every snapshot tick when unchanged
-- [ ] Remove repetitive `Object.values(this.players)` calls by caching player arrays
+## Fix 2: Stagger State Never Activates
+- [x] **Root cause 1**: In `resolveAttack()`, stagger buildup was calculated AFTER the threshold check
+- [x] **Fix**: Moved stagger buildup before threshold check so current hit can trigger stagger
+- [x] **Root cause 2**: In `updateFighter()`, hitstun logic forced `state = 'hurt'` every tick, overriding the 'staggered' state
+- [x] **Fix**: Added protection: when state is 'staggered', hitTimer/hitstunTimer are cleared and hurt state override is skipped
+- [x] Stagger now persists for its full duration (e.g., 5 seconds for Valencina), then properly exits and resets stagger to 0
 
-### Gameplay Loop Optimization
-- [ ] Cache `require('./characterLogic/valencina')` calls (called every tick for every non-Valencina player)
-- [ ] Cache `require('./characterLogic/dihui')` and `require('./characterLogic/callisto')` calls
-- [ ] Avoid redundant `Object.values(this.players).filter(p => !p.gameState.isDefeated)` patterns
-- [ ] Optimize `findClosestEnemy` / `findFurthestEnemy` to use cached player arrays
-- [ ] Reduce duplicate `Object.values(this.players)` calls in `updateUltimates`
-- [ ] Optimize `broadcastSnapshot` to avoid creating new objects every tick
+## Fix 3: Leave Room Button Does Not Work
+- [x] **Root cause**: The "Leave Room" visual in `drawLobby()` was just rect+text with NO clickable button
+- [x] **Fix**: Replaced with proper `UIButton` that calls `Network.leaveRoom()`, clears local state, and returns to room matchmaking
+- [x] Also fixed `drawPreMatchLobby()` leave button to stay in LOBBY state (room matchmaking) instead of going to MODE_SELECT
 
-### Console Spam Removal (server-side)
-- [ ] Remove high-frequency gameplay logs from match.js
-
-## GameplayEngine Optimizations
-- [ ] Cache status lookups in `getDamageModifierSum` (called repeatedly by `calculateDamage`)
-- [ ] Reduce repeated `getStatus`/`hasStatus` calls in damage calculation
-- [ ] Optimize `processStatuses` event array allocations
-
-## Client-Side Optimizations
-
-### Console Spam Removal
-- [ ] Remove high-frequency logs from `sketch.js` (snapshot received, network events, etc.)
-- [ ] Remove debug logs from `handleStatusDamageNetworkEvent`
-- [ ] Remove ability result logs
-- [ ] Remove per-frame debug logs in `processSnapshot`
-
-### Visual/Combat Optimization
-- [ ] Optimize `updateCombatZoom` to reduce per-frame computation
-- [ ] Optimize `processSnapshot` to reduce allocations in hot path
-- [ ] Optimize particle system rendering (avoid `rotate(random(TWO_PI))` in draw)
-
-### Memory/Allocation
-- [ ] Reduce temporary object creation in `handleNetworkEvent` handlers
-- [ ] Optimize `applySnapshot` buffer handling
-- [ ] Reduce garbage collection pressure in hit event handlers
-
-## Verification
-- [ ] Ensure gameplay behaves identically
-- [ ] Verify snapshots function correctly
-- [ ] Verify console spam is removed but important logs remain
+## Fix 4: Valencina Ultimate Availability Bug
+- [x] **Root cause**: `canActivateUltimate()` didn't check `_hasExitedOverheatOnce`
+- [x] **Fix**: Added `_hasExitedOverheatOnce` check - ultimate unavailable at match start, requires completing one Overheat cycle first

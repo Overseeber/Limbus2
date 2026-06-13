@@ -3064,6 +3064,7 @@ addCombo(attacker) {
         
         push();
         textAlign(CENTER, CENTER);
+        textFont(NumberFont);
         
         // Draw status potency on left, closer to icon
         fill(255);

@@ -369,6 +369,7 @@ class TremorIndicator extends FloatingIndicator {
     push();
     textAlign(CENTER, CENTER);
     textSize(this.size);
+    textFont(NumberFont);
 
     fill(255, 100, 50, this.alpha);
     stroke(255, 50, 0, this.alpha);

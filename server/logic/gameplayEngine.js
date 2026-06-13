@@ -137,6 +137,12 @@ class GameplayEngine {
     // Sum of all percentage modifier fractions (e.g. 0.1 for +10%, -0.2 for -20%)
     let modSum = 0;
     
+    // Cache status lookups to avoid repeated linear scans of status arrays
+    const attackerStatuses = attacker.statuses || [];
+    const defenderStatuses = defender.statuses || [];
+    let cachedAttackerStatus = null;
+    let cachedDefenderStatus = null;
+    
     // Charge attack: +40%
     if (cs.chargeAttack) modSum += 0.4;
     
@@ -148,39 +154,47 @@ class GameplayEngine {
     
     // Overheat (Valencina): -20%
     if (attacker.characterKey === 'VALENCINA') {
-      const overheat = this.getStatus(attacker, 'Overheat');
+      // Single scan for Overheat
+      if (!cachedAttackerStatus) cachedAttackerStatus = attackerStatuses.find(s => s.type === 'Overheat');
+      const overheat = cachedAttackerStatus;
       if (overheat && overheat.count > 0) {
         modSum -= (attacker.resources?.overheatDamageReduction || 0.2);
       }
     }
     
     // Ingredient Shredding Wound on defender: -10%
-    if (this.hasStatus(defender, 'IngredientShreddingWound')) {
+    if (defenderStatuses.some(s => s.type === 'IngredientShreddingWound')) {
       modSum -= 0.1;
     }
     
     // Sinking on attacker: -1% per potency (max -50%)
-    if (this.hasStatus(attacker, 'Sinking')) {
-      const s = this.getStatus(attacker, 'Sinking');
-      modSum -= Math.min(0.5, 0.01 * s.potency);
+    if (!cachedAttackerStatus) cachedAttackerStatus = attackerStatuses.find(s => s.type === 'Sinking');
+    const atkSinking = cachedAttackerStatus;
+    if (atkSinking && atkSinking.type === 'Sinking') {
+      modSum -= Math.min(0.5, 0.01 * atkSinking.potency);
     }
     
     // Fragile on defender: +10% per potency
-    if (this.hasStatus(defender, 'Fragile')) {
-      const s = this.getStatus(defender, 'Fragile');
-      modSum += 0.1 * s.potency;
+    if (!cachedDefenderStatus) cachedDefenderStatus = defenderStatuses.reduce((found, s) => found || (s.type === 'Fragile' ? s : null), null);
+    const defFragile = cachedDefenderStatus;
+    if (defFragile) {
+      modSum += 0.1 * defFragile.potency;
     }
     
-    // Protection on defender: -10% per potency (min 10% damage, so modSum can go as low as -0.9)
-    if (this.hasStatus(defender, 'Protection')) {
-      const s = this.getStatus(defender, 'Protection');
-      modSum -= Math.min(0.9, 0.1 * s.potency);
+    // Protection on defender: -10% per potency
+    const defProtection = defenderStatuses.find(s => s.type === 'Protection');
+    if (defProtection) {
+      modSum -= Math.min(0.9, 0.1 * defProtection.potency);
     }
     
     // Sinking on defender: +5% per 5 potency (lose damage resistance)
-    if (this.hasStatus(defender, 'Sinking')) {
-      const s = this.getStatus(defender, 'Sinking');
-      modSum += 0.05 * Math.floor(s.potency / 5);
+    if (!defenderStatuses.some(s => s.type === 'Sinking')) {
+      // No defender sinking - skip
+    } else {
+      const defSinking = defenderStatuses.find(s => s.type === 'Sinking');
+      if (defSinking) {
+        modSum += 0.05 * Math.floor(defSinking.potency / 5);
+      }
     }
     
     // CALLISTO-SPECIFIC MODIFIERS
@@ -190,19 +204,15 @@ class GameplayEngine {
         try {
           const callistoLogic = require('./characterLogic/callisto');
           if (callistoLogic && callistoLogic.getCallistoDamageModifier) {
-            // Returns the additive modifier sum for Callisto-specific effects
-            // (Artwork: Tibia, Passive 2, Attack 3, Damage Down/Up)
             const charModSum = callistoLogic.getCallistoDamageModifier(attacker, defender, config, attackType || cs.attackCounter);
             modSum += charModSum;
           }
         } catch(e) {
-          // Fallback: basic Artwork: Tibia bonus
           if (attacker.resources.artworkTibiaStacks > 0) {
             modSum += 0.1 * attacker.resources.artworkTibiaStacks;
           }
         }
       } else if (attacker.resources.artworkTibiaStacks > 0) {
-        // Fallback: basic Artwork: Tibia bonus
         modSum += 0.1 * attacker.resources.artworkTibiaStacks;
       }
     }

@@ -1,10 +1,12 @@
 // ==========================
-// 💥 IMPACT VISUAL SYSTEM
+// ==========================
+// 💥 IMPACT VISUAL SYSTEM (OPTIMIZED)
 // ==========================
 
 // Graphics settings with impact visuals toggle
 const graphicsSettings = {
-  enableImpactVisuals: true
+  enableImpactVisuals: true,
+  maxActiveVisuals: 60 // Hard cap to prevent performance degradation
 };
 
 // Character-specific tints for impact visuals
@@ -20,6 +22,24 @@ const DEFAULT_TINT = { r: 255, g: 255, b: 255 };
 // Active impact visual instances
 let activeImpactVisuals = [];
 
+// Pre-allocated sprite name choices to avoid array creation per instance
+const SPARK_SPRITES = ['cspark1', 'cspark2', 'cspark3'];
+const FLASH_SPRITES = ['flash1', 'flash2', 'flash3'];
+const WAVE_SPRITES = ['swav1', 'swav2', 'swav3'];
+
+// Shared random function that's faster than Math.random for visual purposes
+let _rngSeed = 1;
+function fastRand() {
+  _rngSeed = (_rngSeed * 16807) % 2147483647;
+  return (_rngSeed - 1) / 2147483646;
+}
+function fastRandRange(min, max) {
+  return min + fastRand() * (max - min);
+}
+function fastRandInt(n) {
+  return Math.floor(fastRand() * n);
+}
+
 // Impact visual class for individual particle effects
 class ImpactVisual {
   constructor(type, x, y, tint, rotation = 0) {
@@ -34,52 +54,43 @@ class ImpactVisual {
     // Per-type state
     switch (type) {
       case 'spark': {
-        // Sparks: start small, shrink to 0 then despawn
-        const sparkSprites = ['cspark1', 'cspark2', 'cspark3'];
-        this.spriteName = sparkSprites[Math.floor(Math.random() * sparkSprites.length)];
-        this.size = random(16, 28);
-        this.sizeSpeed = random(60, 120); // pixels per second shrink
-        this.alpha = 255; // Not tinted
+        this.spriteName = SPARK_SPRITES[fastRandInt(3)];
+        this.size = fastRandRange(16, 28);
+        this.sizeSpeed = fastRandRange(60, 120);
         break;
       }
       case 'flash': {
-        // Flash: expand in size quickly and fade out
-        const flashSprites = ['flash1', 'flash2', 'flash3'];
-        this.spriteName = flashSprites[Math.floor(Math.random() * flashSprites.length)];
+        this.spriteName = FLASH_SPRITES[fastRandInt(3)];
         this.size = 0;
-        this.maxSize = random(40, 70);
-        this.expandSpeed = random(120, 200); // pixels per second expand
-        this.fadeSpeed = random(2.0, 3.5); // alpha fade per second
+        this.maxSize = fastRandRange(40, 70);
+        this.expandSpeed = fastRandRange(120, 200);
+        this.fadeSpeed = fastRandRange(2.0, 3.5);
         break;
       }
       case 'wave': {
-        // Impact wave: expand in size and fade out
-        const waveSprites = ['swav1', 'swav2', 'swav3'];
-        this.spriteName = waveSprites[Math.floor(Math.random() * waveSprites.length)];
+        this.spriteName = WAVE_SPRITES[fastRandInt(3)];
         this.size = 0;
-        this.maxSize = random(50, 90);
-        this.expandSpeed = random(100, 180);
-        this.fadeSpeed = random(2.0, 3.0);
+        this.maxSize = fastRandRange(50, 90);
+        this.expandSpeed = fastRandRange(100, 180);
+        this.fadeSpeed = fastRandRange(2.0, 3.0);
         break;
       }
       case 'slash': {
-        // Impact slash: expand lengthwise, contract heightwise, random rotation
         this.spriteName = 'slash';
         this.width = 0;
-        this.height = random(30, 50);
-        this.maxWidth = random(120, 200);
-        this.expandSpeed = random(300, 500); // width expand speed
-        this.contractSpeed = random(60, 120); // height contract speed
+        this.height = fastRandRange(30, 50);
+        this.maxWidth = fastRandRange(120, 200);
+        this.expandSpeed = fastRandRange(300, 500);
+        this.contractSpeed = fastRandRange(60, 120);
         break;
       }
       case 'heavyimpact': {
-        // Heavy impact: expand lengthwise, contract heightwise, random rotation
         this.spriteName = 'heavyimpact';
         this.width = 0;
-        this.height = random(40, 60);
-        this.maxWidth = random(180, 280);
-        this.expandSpeed = random(400, 600);
-        this.contractSpeed = random(80, 140);
+        this.height = fastRandRange(40, 60);
+        this.maxWidth = fastRandRange(180, 280);
+        this.expandSpeed = fastRandRange(400, 600);
+        this.contractSpeed = fastRandRange(80, 140);
         break;
       }
     }

@@ -3623,61 +3623,75 @@ addCombo(attacker) {
 
   /**
    * Record current state into afterimage history buffer each frame.
-   * Stores position, facing, and current sprite for delayed rendering.
-   * Cap buffer to max needed (1.5s * 60fps + margin = ~100 samples).
+   * Uses a circular buffer (fixed array + write index) to eliminate GC pressure
+   * from array push/splice operations.
    */
   updateAfterimageHistory(dt) {
     if (this.characterKey !== 'DIHUI') return;
 
-    // Initialize history if missing
-    if (!this.afterimageHistory) {
-      this.afterimageHistory = [];
+    // Initialize circular buffer: fixed size array with write index
+    if (!this._afterimageBuffer) {
+      this._afterimageBuffer = new Array(100);
+      this._afterimageWriteIdx = 0;
+      this._afterimageCount = 0;
     }
 
-    // Record current state
-    this.afterimageHistory.push({
-      x: this.pos.x,
-      y: this.pos.y,
-      facing: this.facing,
-      currentSprite: this.currentSprite || 'didle',
-      isAttacking: this.state === 'attack' || this.state === 'attacking',
-      state: this.state,
-      attackSequence: this.attackSequence,
-      attackPhase: this.attackPhase,
-      strikeActive: this.strikeActive,
-      timestamp: Date.now()
-    });
-
-    // Cap buffer to ~100 samples (1.5s max delay at 60fps = 90 samples + margin)
-    if (this.afterimageHistory.length > 100) {
-      this.afterimageHistory.splice(0, this.afterimageHistory.length - 100);
+    // Reuse a single temp object by copying values into the buffer slot
+    // Avoids allocating a new object every frame
+    const idx = this._afterimageWriteIdx;
+    let slot = this._afterimageBuffer[idx];
+    if (!slot) {
+      slot = {};
+      this._afterimageBuffer[idx] = slot;
     }
+    
+    slot.x = this.pos.x;
+    slot.y = this.pos.y;
+    slot.facing = this.facing;
+    slot.currentSprite = this.currentSprite || 'didle';
+    slot.isAttacking = this.state === 'attack' || this.state === 'attacking';
+    slot.attackSequence = this.attackSequence;
+    slot.strikeActive = this.strikeActive;
+    slot.timestamp = Date.now();
+    
+    this._afterimageWriteIdx = (idx + 1) % 100;
+    if (this._afterimageCount < 100) this._afterimageCount++;
+    
+    // Keep reference for existing getAfterimageStateAtDelay compat
+    this.afterimageHistory = this._afterimageBuffer;
   }
 
   /**
    * Get the historical state at a specific delay in milliseconds.
-   * Returns the closest recorded snapshot to (now - delayMs).
+   * Optimized for circular buffer - skips binary search for small buffers.
    */
   getAfterimageStateAtDelay(delayMs) {
-    if (!this.afterimageHistory || this.afterimageHistory.length === 0) return null;
+    const buf = this._afterimageBuffer;
+    if (!buf || this._afterimageCount === 0) return null;
 
-    const history = this.afterimageHistory;
     const targetTime = Date.now() - delayMs;
+    const count = this._afterimageCount;
+    const writeIdx = this._afterimageWriteIdx;
 
-    // Binary search for closest timestamp
-    let lo = 0, hi = history.length - 1;
-    let best = 0;
-    while (lo <= hi) {
-      const mid = Math.floor((lo + hi) / 2);
-      if (history[mid].timestamp <= targetTime) {
-        best = mid;
-        lo = mid + 1;
-      } else {
-        hi = mid - 1;
+    // Linear scan backwards from write index (most recent first)
+    // For small buffer sizes, this is faster than binary search
+    let best = null;
+    let bestDiff = Infinity;
+    
+    // Check the last 30 entries (0.5s at 60fps) max - we don't need further back for hits
+    const searchLimit = Math.min(count, 30);
+    for (let i = 0; i < searchLimit; i++) {
+      const idx = (writeIdx - 1 - i + 100) % 100;
+      const entry = buf[idx];
+      if (!entry) continue;
+      const diff = Math.abs(entry.timestamp - targetTime);
+      if (diff < bestDiff) {
+        bestDiff = diff;
+        best = entry;
       }
     }
-
-    return history[best] || null;
+    
+    return best;
   }
 
   /**

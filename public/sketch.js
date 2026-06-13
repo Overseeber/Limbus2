@@ -1752,6 +1752,18 @@ function handleHitNetworkEvent(event) {
   }
   applyNetworkScreenShake(event);
 
+  // 💥 Spawn impact visuals on hit
+  if (typeof spawnImpactVisuals === 'function') {
+    const isSlamOrUltimateOrThirdHit = event.attackType === 'slam' || event.attackType === 'ultimate' || (attacker && attacker.attackCounter === 3);
+    spawnImpactVisuals(
+      target.pos.x,
+      target.pos.y,
+      attacker ? attacker.characterKey : 'DEFAULT',
+      !!event.wasGuarded,
+      isSlamOrUltimateOrThirdHit
+    );
+  }
+
   if (event.statuses && Array.isArray(event.statuses) && target.addStatus) {
     event.statuses.forEach(statusType => target.addStatus(statusType, 1, 1));
   }
@@ -1784,6 +1796,17 @@ function handleSlamHitNetworkEvent(event) {
     );
   }
   applyNetworkScreenShake(event);
+
+  // 💥 Spawn impact visuals on slam hit (heavy impact always)
+  if (typeof spawnImpactVisuals === 'function') {
+    spawnImpactVisuals(
+      target.pos.x,
+      target.pos.y,
+      attacker ? attacker.characterKey : 'DEFAULT',
+      !!event.wasGuarded,
+      true // slam/ultimate/3rd hit = true for heavy impact
+    );
+  }
 
   if (event.defeated && !target.isDefeated) {
     target.isDefeated = true;
@@ -2166,6 +2189,7 @@ function draw() {
     drawSlamLandingOverlays();
     drawDamageNumbers();
     drawParticles();
+    drawImpactVisuals();
 
     // Draw overhead healthbars for non-player fighters
     drawOverheadHealthbars();
@@ -2741,6 +2765,7 @@ function updateBattle() {
   updateDamageNumbers(dt);
   updateParticles(dt);
   updateSlamLandingOverlays(dt);
+  updateImpactVisuals(dt);
 }
 
 function getPlayerControlledFighter() {

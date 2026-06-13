@@ -2134,69 +2134,100 @@ function draw() {
       clampCameraToVisibility(displayCameraZoom);
     }
 
-    beginCamera(displayCameraZoom, true);
-    drawArena();
-
-    // Draw shadows (above floor, below characters)
-    if (window.shadowImg && window.allFighters) {
-      window.allFighters.forEach(fighter => {
-        const groundY = fighter.spawnY - 34; // Ground level (moved up 100 pixels)
-        push();
-        imageMode(CENTER);
-        tint(255, 200); // Slight transparency
-        const shadowScale = 0.5; // Smaller scale
-        image(window.shadowImg, fighter.pos.x, groundY, 
-              window.shadowImg.width * shadowScale, 
-              window.shadowImg.height * shadowScale);
-        pop();
-      });
+    if (window.ultraLowGraphics) {
+      // === ULTRA LOW GRAPHICS MODE ===
+      // Replace everything with simple colored shapes
+      beginCamera(displayCameraZoom, true);
+      drawArenaULG();
+      
+      // Draw ULG shadows
+      if (window.allFighters) {
+        window.allFighters.forEach(fighter => {
+          drawShadowULG(fighter);
+        });
+      }
+      
+      // Update interpolation for positioning
+      updateClientInterpolation();
+      
+      // Draw fighters as simple rectangles
+      if (window.allFighters) {
+        window.allFighters.forEach(fighter => {
+          fighter.updateSprite();
+          drawFighterULG(fighter);
+          // Draw status effects over fighter (kept for gameplay readability)
+          fighter.drawStatusEffects();
+        });
+      }
+      
+      // Draw damage numbers in world space (kept in ULG mode)
+      drawDamageNumbers();
+      
+      endCamera();
+    } else {
+      // === NORMAL GRAPHICS MODE ===
+      beginCamera(displayCameraZoom, true);
+      drawArena();
+      
+      // Draw shadows (above floor, below characters)
+      if (window.shadowImg && window.allFighters) {
+        window.allFighters.forEach(fighter => {
+          const groundY = fighter.spawnY - 34; // Ground level (moved up 100 pixels)
+          push();
+          imageMode(CENTER);
+          tint(255, 200); // Slight transparency
+          const shadowScale = 0.5; // Smaller scale
+          image(window.shadowImg, fighter.pos.x, groundY, 
+                window.shadowImg.width * shadowScale, 
+                window.shadowImg.height * shadowScale);
+          pop();
+        });
+      }
+      
+      // Darken the battle background during ultimate sequences.
+      if (typeof drawUltimateBackgroundDim === 'function') {
+        const targetDim = ultimateActive
+          ? Math.max(0, ...ultimateFighters.map(f => f.ultimateBackgroundDim || 0))
+          : 0;
+        drawUltimateBackgroundDim(targetDim);
+      }
+      
+      // Draw ultimate name images in screen space (behind characters, above background)
+      if (typeof renderUltimateNameImages === 'function') {
+        renderUltimateNameImages();
+      }
+      
+      // Draw ultimate render behind characters (dialogue, effects)
+      if (window.allFighters) {
+        window.allFighters.forEach(fighter => {
+          if (typeof renderUltimate === 'function') {
+            renderUltimate(fighter);
+          }
+        });
+      }
+      
+      // Update interpolation targets before rendering
+      updateClientInterpolation();
+      // Draw all fighters
+      if (window.allFighters) {
+        window.allFighters.forEach(fighter => {
+          fighter.draw();
+          fighter.drawOverlays && fighter.drawOverlays();
+        });
+      }
+      
+      drawSlamLandingOverlays();
+      drawDamageNumbers();
+      drawParticles();
+      drawImpactVisuals();
+      
+      // Draw overhead healthbars for non-player fighters
+      drawOverheadHealthbars();
+      
+      // Draw debug overlay — world-space elements (hitboxes, labels, stagger bars)
+      drawDebugUI();
+      endCamera();
     }
-
-    // Darken the battle background during ultimate sequences.
-    if (typeof drawUltimateBackgroundDim === 'function') {
-      const targetDim = ultimateActive
-        ? Math.max(0, ...ultimateFighters.map(f => f.ultimateBackgroundDim || 0))
-        : 0;
-      drawUltimateBackgroundDim(targetDim);
-    }
-
-    // Draw ultimate name images in screen space (behind characters, above background)
-    // Draw without affecting camera transform
-    if (typeof renderUltimateNameImages === 'function') {
-      renderUltimateNameImages();
-    }
-
-    // Draw ultimate render behind characters (dialogue, effects)
-    if (window.allFighters) {
-      window.allFighters.forEach(fighter => {
-        if (typeof renderUltimate === 'function') {
-          renderUltimate(fighter);
-        }
-      });
-    }
-
-    // Update interpolation targets before rendering
-    updateClientInterpolation();
-    // Draw all fighters
-    if (window.allFighters) {
-      window.allFighters.forEach(fighter => {
-        fighter.draw();
-        fighter.drawOverlays && fighter.drawOverlays();
-
-      });
-    }
-    
-    drawSlamLandingOverlays();
-    drawDamageNumbers();
-    drawParticles();
-    drawImpactVisuals();
-
-    // Draw overhead healthbars for non-player fighters
-    drawOverheadHealthbars();
-
-    // Draw debug overlay — world-space elements (hitboxes, labels, stagger bars)
-    drawDebugUI();
-    endCamera();
     
     // Draw debug FPS — screen-space overlay (after camera)
     drawDebugFPS();
@@ -2253,8 +2284,13 @@ function draw() {
     drawVignette();
   }
 
+  // Draw HUD (on top of vignette)
   if (battleState !== BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.OPENING && battleState !== BATTLE_STATES.COMBAT_OVER && (typeof shouldHideGameplayUI !== 'function' || !shouldHideGameplayUI())) {
-    drawHud();
+    if (window.ultraLowGraphics) {
+      drawHudULG();
+    } else {
+      drawHud();
+    }
   }
   
   // Draw tutorial overlay on top of everything if active
@@ -3067,6 +3103,15 @@ console.log('myRoomState', myRoomState);
           if (typeof setDebugGraphics === 'function') {
             setDebugGraphics();
           }
+          return;
+        }
+      }
+      // Check if the ultra low graphics toggle button was clicked
+      if (typeof settingsPanelUlgBtn !== 'undefined' && settingsPanelUlgBtn) {
+        const ulgBtn = settingsPanelUlgBtn;
+        if (mx > ulgBtn.x && mx < ulgBtn.x + ulgBtn.w && my > ulgBtn.y && my < ulgBtn.y + ulgBtn.h) {
+          window.ultraLowGraphics = !window.ultraLowGraphics;
+          console.log('[ULG] Ultra Low Graphics:', window.ultraLowGraphics ? 'ON' : 'OFF');
           return;
         }
       }

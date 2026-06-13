@@ -631,6 +631,7 @@ function drawPauseMenu() {
 
 // Settings panel button bounds - stored for click handling in mousePressed
 let settingsPanelDebugBtn = null; // { x, y, w, h }
+let settingsPanelUlgBtn = null; // Ultra Low Graphics toggle button bounds
 
 function drawSettingsPanel() {
   const panelWidth = 500;
@@ -687,6 +688,37 @@ function drawSettingsPanel() {
     ? 'DEBUG: ON' 
     : 'DEBUG: OFF';
   text(label, btnX + btnW / 2, btnY + btnH / 2);
+  pop();
+  
+  // Ultra Low Graphics toggle button
+  const ulgX = gfxX;
+  const ulgY = gfxY + 36;
+  const ulgBtnX = ulgX + 110;
+  const ulgBtnY = ulgY - 4;
+  const ulgBtnW = 180;
+  const ulgBtnH = 28;
+  
+  // Store button bounds for click handling
+  settingsPanelUlgBtn = { x: ulgBtnX, y: ulgBtnY, w: ulgBtnW, h: ulgBtnH };
+  
+  push();
+  if (window.ultraLowGraphics) {
+    fill(200, 60, 60);
+    stroke(255, 100, 100);
+  } else {
+    fill(60, 60, 60);
+    stroke(100, 100, 100);
+  }
+  strokeWeight(2);
+  rect(ulgBtnX, ulgBtnY, ulgBtnW, ulgBtnH, 6);
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(13);
+  const ulgLabel = window.ultraLowGraphics 
+    ? 'ULTRA LOW: ON' 
+    : 'ULTRA LOW: OFF';
+  text(ulgLabel, ulgBtnX + ulgBtnW / 2, ulgBtnY + ulgBtnH / 2);
   pop();
   
   fill(180);

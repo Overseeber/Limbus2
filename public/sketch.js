@@ -2687,18 +2687,32 @@ function drawArena() {
 function updateClientInterpolation() {
   if (!window.allFighters) return;
   const now = (typeof millis !== 'undefined') ? millis() : Date.now();
-  for (const f of window.allFighters) {
-    if (!f) continue;
-    if (!f.targetServerPos || !f.prevServerPos) continue;
+  for (let i = 0; i < window.allFighters.length; i++) {
+    const f = window.allFighters[i];
+    if (!f || !f.targetServerPos || !f.prevServerPos) continue;
     const start = f.snapshotStart || now;
     const dur = Math.max(1, f.snapshotDuration || SNAPSHOT_INTERVAL_MS);
-    const t = constrain((now - start) / dur, 0, 1);
-    // ease out cubic
-    const eased = 1 - Math.pow(1 - t, 3);
-    const nx = lerp(f.prevServerPos.x, f.targetServerPos.x, eased);
-    const ny = lerp(f.prevServerPos.y, f.targetServerPos.y, eased);
-    f.pos.x = nx;
-    f.pos.y = ny;
+    let t = constrain((now - start) / dur, 0, 1);
+    
+    // OPTIMIZED INTERPOLATION: Use quadratic ease-out for smoother feel
+    // Prevents the sudden snap feeling when a new snapshot arrives late
+    const eased = t * (2 - t); // quadratic ease out (less CPU than cubic pow)
+    
+    // Apply initial velocity-based extrapolation for the first 30% of interpolation
+    // This reduces perceived input delay by moving toward target faster initially
+    if (t < 0.3 && (f.vel.x !== 0 || f.vel.y !== 0)) {
+      // Blend between extrapolation (velocity * dt) and interpolation
+      const extrapT = t / 0.3;
+      const extrapX = f.prevServerPos.x + f.vel.x * (t * (dur / 1000));
+      const extrapY = f.prevServerPos.y + f.vel.y * (t * (dur / 1000));
+      const intX = lerp(f.prevServerPos.x, f.targetServerPos.x, eased);
+      const intY = lerp(f.prevServerPos.y, f.targetServerPos.y, eased);
+      f.pos.x = lerp(extrapX, intX, extrapT);
+      f.pos.y = lerp(extrapY, intY, extrapT);
+    } else {
+      f.pos.x = lerp(f.prevServerPos.x, f.targetServerPos.x, eased);
+      f.pos.y = lerp(f.prevServerPos.y, f.targetServerPos.y, eased);
+    }
   }
 }
 

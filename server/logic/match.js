@@ -94,6 +94,12 @@ class Match {
         this.tickRate = 50; // 50ms = 20 ticks per second
         this.hitstopTimer = 0;
         this.hitstopActive = false;
+        
+        // Cache for snapshot optimization - reused each tick to avoid GC pressure
+        this._snapshotTemplate = { hitstop: { active: false, timer: 0 }, players: [] };
+        this._playerSnapshotTemplate = {};
+        this._ultActiveCache = false;
+        this._ultActiveCacheValid = false;
     }
 
     /**
@@ -2927,36 +2933,54 @@ tick() {
      * Broadcast snapshot to all clients
      */
     broadcastSnapshot() {
+        const playersArr = Object.values(this.players);
         // Update prevInput for next tick (done here to ensure proper edge detection)
-        Object.values(this.players).forEach(player => {
-            player.prevInput = { ...player.input };
-        });
+        // Inline this to avoid creating spread objects per player each tick
+        // Reuse the prevInput objects by reference copy
+        for (let i = 0; i < playersArr.length; i++) {
+            const player = playersArr[i];
+            const pi = player.prevInput;
+            const inp = player.input;
+            pi.left = inp.left;
+            pi.right = inp.right;
+            pi.up = inp.up;
+            pi.down = inp.down;
+            pi.attack = inp.attack;
+            pi.guard = inp.guard;
+            pi.dash = inp.dash;
+            pi.evade = inp.evade;
+        }
 
-        const snapshot = {
-            hitstop: {
-                active: this.hitstopTimer > 0,
-                timer: this.hitstopTimer
-            },
-            players: Object.values(this.players).map(player => ({
+        // Reuse snapshot template structure to avoid object recreation each tick
+        this._snapshotTemplate.hitstop.active = this.hitstopTimer > 0;
+        this._snapshotTemplate.hitstop.timer = this.hitstopTimer;
+        
+        // Clear and reuse players array
+        const snapPlayers = this._snapshotTemplate.players;
+        snapPlayers.length = 0;
+        
+        for (let i = 0; i < playersArr.length; i++) {
+            const player = playersArr[i];
+            const gs = player.gameState;
+            
+            snapPlayers.push({
                 id: player.clientId,
-                x: player.gameState.position.x,
-                y: player.gameState.position.y,
-                vx: player.gameState.velocity.x,
-                vy: player.gameState.velocity.y,
-                hp: player.gameState.hp,
-                maxHp: player.gameState.maxHp,
-                state: player.gameState.state,
-                facing: player.gameState.facing,
-                statuses: (player.gameState.statuses || []).map(s => ({ ...s })),
-                isDefeated: player.gameState.isDefeated,
-                isAttacking: player.gameState.isAttacking || false,
-                isGuarding: player.gameState.isGuarding || false,
-                isDashing: player.gameState.isDashing || false,
-                dashCharges: player.gameState.dashCharges || 0,
-                onGround: player.gameState.onGround || false,
-                // Evade state
-                isEvading: player.gameState.isEvading || false,
-                // Input state for remote player hold logic
+                x: gs.position.x,
+                y: gs.position.y,
+                vx: gs.velocity.x,
+                vy: gs.velocity.y,
+                hp: gs.hp,
+                maxHp: gs.maxHp,
+                state: gs.state,
+                facing: gs.facing,
+                statuses: (gs.statuses || []).map(s => ({ ...s })),
+                isDefeated: gs.isDefeated,
+                isAttacking: gs.isAttacking || false,
+                isGuarding: gs.isGuarding || false,
+                isDashing: gs.isDashing || false,
+                dashCharges: gs.dashCharges || 0,
+                onGround: gs.onGround || false,
+                isEvading: gs.isEvading || false,
                 input: {
                     left: !!player.input?.left,
                     right: !!player.input?.right,
@@ -2972,7 +2996,6 @@ tick() {
                     abilityQ: !!player.input?.abilityQ,
                     abilityX: !!player.input?.abilityX
                 },
-                // Attack state for client animation
                 attackSequence: player.attackSequence || 0,
                 attackPhase: player.attackPhase || 'none',
                 attackFrameTimer: player.attackFrameTimer || 0,
@@ -2980,50 +3003,37 @@ tick() {
                 strikeActive: player.strikeActive || false,
                 attackCounter: player.attackCounter || 0,
                 chargeAttack: player.attackCharge || false,
-                // Slam state
                 isSlamAttacking: player.isSlamAttacking || false,
-                // Visual-only flag: client should hold slam sprite until player input
                 slamHold: !!player.slamHoldVisual,
-                // Dash attack state
                 dashAttackQueued: player.dashAttackQueued || false,
                 dashAttackActive: player.dashAttackActive || false,
-                // Combo state (authoritative, for UI rendering)
                 combo: (this.engine.combatState[player.clientId] || {}).combo || 0,
                 comboTimer: (this.engine.combatState[player.clientId] || {}).comboTimer || 0,
-                // Stagger state (authoritative - full snapshot for client rendering)
-                stagger: player.gameState.stagger || 0,
-                staggerThreshold: player.gameState.staggerThreshold || 1000,
-                staggerTimer: player.gameState.staggerTimer || 0,
-                staggerRecoveryTimer: player.gameState.staggerRecoveryTimer || 0,
-                staggerDuration: player.gameState.staggerDuration || 0,
-                // Hitstun / Blockstun / Whiff recovery timers (action lockout)
-                hitstunTimer: player.gameState.hitstunTimer || 0,
-                blockstunTimer: player.gameState.blockstunTimer || 0,
-                guardTimer: player.gameState.guardTimer || 0,
-                guardReleaseTimer: player.gameState.guardReleaseTimer || 0,
-                whiffRecoveryTimer: player.gameState.whiffRecoveryTimer || 0,
-                // Ability cooldowns (for UI countdown timers)
-                abilityCooldowns: { ...player.gameState.abilityCooldowns } || {},
-                // Parry sprite flag: active when player parried an attack
-                parrySpriteActive: !!player.gameState.parrySpriteActive,
-                // Character-specific ability resources
-                resources: { ...player.gameState.resources } || {},
-                // Installation Art phase flags for client animation
+                stagger: gs.stagger || 0,
+                staggerThreshold: gs.staggerThreshold || 1000,
+                staggerTimer: gs.staggerTimer || 0,
+                staggerRecoveryTimer: gs.staggerRecoveryTimer || 0,
+                staggerDuration: gs.staggerDuration || 0,
+                hitstunTimer: gs.hitstunTimer || 0,
+                blockstunTimer: gs.blockstunTimer || 0,
+                guardTimer: gs.guardTimer || 0,
+                guardReleaseTimer: gs.guardReleaseTimer || 0,
+                whiffRecoveryTimer: gs.whiffRecoveryTimer || 0,
+                abilityCooldowns: { ...gs.abilityCooldowns } || {},
+                parrySpriteActive: !!gs.parrySpriteActive,
+                resources: { ...gs.resources } || {},
                 installationArtActive: !!player.installationArtActive,
                 installationArtTimer: player.installationArtTimer || 0,
                 installationArtWindupPhase: !!player.installationArtWindupPhase,
                 installationArtExecutePhase: !!player.installationArtExecutePhase,
                 timeToHuntCasting: !!player.timeToHuntCasting,
                 timeToHuntCastTimer: player.timeToHuntCastTimer || 0,
-                // Deathedge animation state for client synchronization
                 deathedgeActive: !!player.deathedgeActive,
                 deathedgePhase: player.deathedgePhase || 0,
                 deathedgeTimer: player.deathedgeTimer || 0,
                 deathedgeFrameIndex: player.deathedgeFrameIndex || 0,
                 deathedgeTargetId: player.deathedgeTargetId || null,
-                // Ultimate availability based on character conditions
-                ultimateAvailable: !!(player.gameState.resources && player.gameState.resources.ultimateAvailable),
-                // Ultimate state (server-authoritative)
+                ultimateAvailable: !!(gs.resources && gs.resources.ultimateAvailable),
                 ultimateActive: !!player.ultimateActive,
                 ultimatePhase: player.ultimate ? player.ultimate.phase : 0,
                 ultimateTimer: player.ultimate ? player.ultimate.timer : 0,
@@ -3034,17 +3044,14 @@ tick() {
                 ultimateBackgroundDim: player.ultimate ? player.ultimate.backgroundDim : 0,
                 ultimateName: player.ultimate ? player.ultimate.name : '',
                 ultimateDialogue: player.ultimate ? player.ultimate.dialogue : '',
-                // Ultimate visual effects data
                 ultimateRedLines: player.ultimate ? player.ultimate.redLines || [] : [],
                 ultimateSkulls: player.ultimate ? player.ultimate.skulls || [] : [],
-                // Ultimate sprite for client animation
                 ultimateSprite: player.ultimate ? player.ultimate.currentSprite || '' : '',
-                // Disable camera momentum during ultimates (prevents free camera drift)
                 ultimateNoMomentum: player.ultimateActive === true
-            }))
-        };
+            });
+        }
 
-        this.io.to(this.room.id).emit('snapshot', snapshot);
+        this.io.to(this.room.id).emit('snapshot', this._snapshotTemplate);
     }
 
     /**

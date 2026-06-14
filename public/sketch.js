@@ -283,11 +283,11 @@ class UIButton {
         const glowCol = Array.isArray(strokeColor) ? `rgba(${strokeColor[0]}, ${strokeColor[1]}, ${strokeColor[2]}, 1)` : 'rgba(100, 200, 255, 1)';
         drawingContext.shadowBlur = 35;
         drawingContext.shadowColor = glowCol;
-        // Light up text slightly when hovering
+        // Light up text with red tint when hovering
         if (Array.isArray(textColor)) {
-          fill(Math.min(255, textColor[0] + 50), Math.min(255, textColor[1] + 50), Math.min(255, textColor[2] + 50));
+          fill(Math.min(255, textColor[0] + 80), Math.min(255, textColor[1] + 30), Math.min(255, textColor[2] + 30));
         } else {
-          fill(255);
+          fill(255, 200, 200);
         }
       }
     } else {
@@ -2379,14 +2379,14 @@ function drawModeSelectScreen() {
   
   push();
   textAlign(CENTER, CENTER);
-  textSize(52);
+  textSize(28);
   if (typeof Titles !== 'undefined' && Titles !== null) {
     textFont(Titles);
   }
   fill(255);
   stroke(0);
   strokeWeight(3);
-  text('GAME MODE', width / 2, 80);
+  text('GAME MODE', width / 2, 290);
   pop();
   
   push();
@@ -2396,12 +2396,12 @@ function drawModeSelectScreen() {
     textFont(Subheadings);
   }
   fill(200);
-  text('Choose your preferred game mode', width / 2, 150);
+  text('Choose your preferred game mode', width / 2, 315);
   pop();
   
   // Multiplayer button
   const multiplayerBtnX = width / 2 - 220;
-  const multiplayerBtnY = height / 2 + 60;
+  const multiplayerBtnY = height / 2 + 210;
   const btnW = 200;
   const btnH = 60;
   
@@ -4204,7 +4204,7 @@ function drawRoomSelection() {
   fill(255);
   stroke(0);
   strokeWeight(3);
-  text('FIND MATCH', width / 2, 50);
+  text('FIND MATCH', width / 2, 290);
   
   textSize(16);
   if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
@@ -4212,14 +4212,14 @@ function drawRoomSelection() {
   }
   fill(180);
   noStroke();
-  text('Available Rooms:', width / 2, 90);
+  text('Available Rooms:', width / 2, 315);
   
   const availRooms = availableRooms || [];
   const roomButtonWidth = 300;
   const roomButtonHeight = 50;
   const roomStartX = (width - roomButtonWidth) / 2;
-  const listStartY = 160;
-  const maxListHeight = height - 200;
+  const listStartY = 340;
+  const maxListHeight = height - 380;
   let roomY = listStartY;
   
   // Initialize scroll offset if not exists
@@ -4309,8 +4309,10 @@ function drawRoomSelection() {
     }
   }
   
-  // Create room button
-  const createY = roomY + 20;
+  pop(); // End clipping region
+  
+  // Create room button at bottom of screen (outside clipping region)
+  const createY = height - 60;
   const createBtn = new UIButton(roomStartX, createY, roomButtonWidth, roomButtonHeight, () => {
     if (typeof Network !== 'undefined' && Network.createRoom) {
       Network.createRoom();
@@ -4323,8 +4325,6 @@ function drawRoomSelection() {
     textSize: 14
   });
   preMatchButtons.push(createBtn);
-  
-  pop(); // End clipping region
   
   pop();
 }

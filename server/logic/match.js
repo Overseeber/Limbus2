@@ -1911,6 +1911,12 @@ tick() {
                 return;
             }
 
+            // AUTO-FACE: If defender is guarding, make them face the attacker
+            // This allows proper reaction to attacks and parrying
+            if (defender.gameState.isGuarding) {
+                this.faceClosestEnemy(defender);
+            }
+
             // Track this target as hit
             if (!attacker.hitTargetsThisAttack) {
                 attacker.hitTargetsThisAttack = [];

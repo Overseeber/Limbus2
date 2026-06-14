@@ -18,8 +18,9 @@ const VALENCINA_CONFIG = {
   maxHp: 3204,
   speed: 9,
   attackInterval: 1.0,
-  baseDamage: 21,
+  baseDamage: 4,
   comboDamage: 3,          // Per-combo bonus damage (restored from reference)
+  maxCombo: 5,             // Maximum combo count
   knockbackMultiplier: 1.0, // 100% knockback
   staggerThreshold: 1300,
   staggerLength: 5,

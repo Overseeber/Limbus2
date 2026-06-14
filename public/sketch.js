@@ -259,29 +259,50 @@ class UIButton {
 
     const hovered = this.enabled && this.contains(mouseX, mouseY);
     const active = hovered && mouseIsPressed;
-    const baseFill = style.fill ?? 80;
-    const baseStroke = style.stroke ?? 0;
-
-    let fillColor = this._brightenColor(baseFill, hovered ? 30 : 0);
-    let strokeColor = this._brightenColor(baseStroke, hovered ? 50 : 0);
-    let strokeWeightVal = style.strokeWeight != null ? style.strokeWeight : 2;
-
-    if (active) {
-      fillColor = this._brightenColor(fillColor, 40);
-      strokeColor = this._brightenColor(strokeColor, 80);
-      strokeWeightVal += 1;
-    }
-
+    
+    // Use original button colors for text
+    const textColor = style.text || 255;
+    const strokeColor = style.stroke ?? [100, 100, 100];
+    
     push();
-    stroke(strokeColor);
-    strokeWeight(strokeWeightVal);
-    fill(fillColor);
-    rect(this.x, this.y, this.w, this.h, style.radius || 6);
-    fill(style.text || 255);
+    
+    // Always have dark glow for readability - increased visibility
+    drawingContext.shadowBlur = 20;
+    drawingContext.shadowColor = 'rgba(0, 0, 0, 1)';
+    
+    // Set additional glow effect on hover/click
+    if (hovered) {
+      if (active) {
+        // Click glow color (different from hover) - more visible
+        drawingContext.shadowBlur = 40;
+        drawingContext.shadowColor = 'rgba(255, 100, 100, 1)';
+        // Light up text when clicking
+        fill(255, 255, 255);
+      } else {
+        // Hover glow color - use button stroke color, more visible
+        const glowCol = Array.isArray(strokeColor) ? `rgba(${strokeColor[0]}, ${strokeColor[1]}, ${strokeColor[2]}, 1)` : 'rgba(100, 200, 255, 1)';
+        drawingContext.shadowBlur = 35;
+        drawingContext.shadowColor = glowCol;
+        // Light up text slightly when hovering
+        if (Array.isArray(textColor)) {
+          fill(Math.min(255, textColor[0] + 50), Math.min(255, textColor[1] + 50), Math.min(255, textColor[2] + 50));
+        } else {
+          fill(255);
+        }
+      }
+    } else {
+      // Normal state - just dark glow
+      fill(textColor);
+    }
+    
     noStroke();
     textAlign(CENTER, CENTER);
     textSize(style.textSize || 14);
+    textFont('Subtitle');
     text(label, this.x + this.w / 2, this.y + this.h / 2);
+    
+    // Reset shadow
+    drawingContext.shadowBlur = 0;
     pop();
   }
 
@@ -1128,6 +1149,11 @@ const EDGE_HOLD_MS = 120; // >2 ticks at 50ms each
  * for EDGE_HOLD_MS to ensure the 20tps server always detects it.
  */
 function sendInputState() {
+    // Don't send inputs when pause menu is open
+    if (pauseMenuOpen || pauseSettingsOpen) {
+        return;
+    }
+    
     const now = performance.now();
     
     // Read raw input states
@@ -2290,11 +2316,6 @@ function draw() {
     drawCombatOver();
   }
 
-  // Draw UI vignette overlay only during combat (including ultimates)
-  if (battleState === BATTLE_STATES.BATTLE) {
-    drawVignette();
-  }
-
   // Draw HUD (on top of vignette)
   if (battleState !== BATTLE_STATES.LOBBY && battleState !== BATTLE_STATES.OPENING && battleState !== BATTLE_STATES.COMBAT_OVER && (typeof shouldHideGameplayUI !== 'function' || !shouldHideGameplayUI())) {
     if (window.ultraLowGraphics) {
@@ -2302,6 +2323,21 @@ function draw() {
     } else {
       drawHud();
     }
+  }
+
+  // Draw UI vignette overlay only during combat (including ultimates)
+  if (battleState === BATTLE_STATES.BATTLE) {
+    drawVignette();
+  }
+
+  // Draw ultimate UI overlay (damage counter, etc.) - above everything including vignette
+  if (typeof renderUltimateUI === 'function') {
+    renderUltimateUI();
+  }
+
+  // Draw pause menu button above vignette
+  if (typeof drawPauseMenuButton === 'function') {
+    drawPauseMenuButton();
   }
   
   // Draw tutorial overlay on top of everything if active
@@ -2335,33 +2371,23 @@ function drawModeSelectScreen() {
   const btnW = 200;
   const btnH = 60;
   
-  push();
-  stroke(80, 150, 200);
-  strokeWeight(3);
-  fill(50, 100, 150);
-  rect(multiplayerBtnX, multiplayerBtnY, btnW, btnH, 12);
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(24);
-  text('Multiplayer', multiplayerBtnX + btnW / 2, multiplayerBtnY + btnH / 2);
-  pop();
+  const multiplayerBtn = new UIButton(multiplayerBtnX, multiplayerBtnY, btnW, btnH, () => {
+    gameMode = 'multiplayer';
+    setBattleState(BATTLE_STATES.LOBBY);
+  });
+  multiplayerBtn.draw('Multiplayer', { stroke: [80, 150, 200], text: [80, 150, 200], textSize: 24 });
+  modeSelectButtons.push(multiplayerBtn);
   
   // CPU button
   const cpuBtnX = width / 2 + 20;
   const cpuBtnY = multiplayerBtnY;
   
-  push();
-  stroke(150, 80, 200);
-  strokeWeight(3);
-  fill(100, 50, 150);
-  rect(cpuBtnX, cpuBtnY, btnW, btnH, 12);
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(24);
-  text('Against CPU', cpuBtnX + btnW / 2, cpuBtnY + btnH / 2);
-  pop();
+  const cpuBtn = new UIButton(cpuBtnX, cpuBtnY, btnW, btnH, () => {
+    gameMode = 'cpu';
+    setBattleState(BATTLE_STATES.LOBBY);
+  });
+  cpuBtn.draw('Against CPU', { stroke: [150, 80, 200], text: [150, 80, 200], textSize: 24 });
+  modeSelectButtons.push(cpuBtn);
   
   push();
   textAlign(CENTER, CENTER);
@@ -2984,38 +3010,11 @@ console.log('myRoomState', myRoomState);
   }
   
   if (battleState === BATTLE_STATES.MODE_SELECT) {
-    const mx = mouseX;
-    const my = mouseY;
-    
-    // Multiplayer button
-    const multiplayerBtnX = width / 2 - 220;
-    const multiplayerBtnY = height / 2 + 60;
-    const btnW = 200;
-    const btnH = 60;
-    
-    if (mx > multiplayerBtnX && mx < multiplayerBtnX + btnW && my > multiplayerBtnY && my < multiplayerBtnY + btnH) {
-      gameMode = 'multiplayer';
-      setBattleState(BATTLE_STATES.LOBBY);
-      return;
-    }
-    
-    // CPU button
-    const cpuBtnX = width / 2 + 20;
-    const cpuBtnY = multiplayerBtnY;
-    
-    if (mx > cpuBtnX && mx < cpuBtnX + btnW && my > cpuBtnY && my < cpuBtnY + btnH) {
-      gameMode = 'cpu';
-      // Reset player slot for local play
-      players[0].character = 'VALENCINA';
-      players[0].ai = false;
-      players[0].controlled = true;
-      players[0].ready = false;
-      // Set opponent defaults
-      cpuOpponentCharacter = 'CALLISTO';
-      cpuOpponentAIEnabled = true;
-      // Use unified pre-match system directly
-      setBattleState(BATTLE_STATES.LOBBY);
-      return;
+    // Check mode select buttons
+    for (const btn of modeSelectButtons) {
+      if (btn.click(mouseX, mouseY)) {
+        return;
+      }
     }
   }
   
@@ -3025,39 +3024,9 @@ console.log('myRoomState', myRoomState);
       return;
     }
     
-    // Fallback to old lobby click handling for room selection (when not in a room)
-    if (!myRoomState) {
-      const mx = mouseX;
-      const my = mouseY;
-      
-      // Handle room selection and creation (old lobby behavior)
-      const availRooms = availableRooms || [];
-      const roomButtonWidth = 260;
-      const roomButtonHeight = 60;
-      const roomStartX = (width - roomButtonWidth) / 2;
-      let roomY = 150;
-      
-      // Check available room clicks
-      for (let i = 0; i < availRooms.length; i++) {
-        const roomData = availRooms[i];
-        const roomId = typeof roomData === 'string' ? roomData : roomData.id;
-        
-        if (mx > roomStartX && mx < roomStartX + roomButtonWidth && my > roomY && my < roomY + roomButtonHeight) {
-          if (typeof Network !== 'undefined' && Network.joinRoom) {
-            Network.joinRoom(roomId);
-          }
-          return;
-        }
-        
-        roomY += roomButtonHeight + 12;
-      }
-      
-      // Check create room button
-      const createButtonY = roomY + 50;
-      if (mx > roomStartX && mx < roomStartX + roomButtonWidth && my > createButtonY && my < createButtonY + roomButtonHeight) {
-        if (typeof Network !== 'undefined' && Network.createRoom) {
-          Network.createRoom();
-        }
+    // Check pre-match buttons (room selection, create room, etc.)
+    for (const btn of preMatchButtons) {
+      if (btn.click(mouseX, mouseY)) {
         return;
       }
     }
@@ -3811,18 +3780,18 @@ pop();
       const players = typeof roomData === 'string' ? 0 : (roomData.players || 0);
       const maxPlayers = typeof roomData === 'string' ? 2 : (roomData.maxPlayers || 2);
       
-      // Draw room button
-      fill(60, 100, 60);
-      stroke(100, 200, 100);
-      strokeWeight(2);
-      rect(roomStartX, roomY, roomButtonWidth, roomButtonHeight, 8);
+      const isFull = players >= maxPlayers;
       
-      // Room label
-      fill(100, 255, 100);
-      noStroke();
-      textAlign(CENTER, CENTER);
-      textSize(14);
-      text(`${roomId}`, width / 2, roomY + 20);
+      // Room button - using UIButton for consistent styling
+      const roomBtn = new UIButton(roomStartX, roomY, roomButtonWidth, roomButtonHeight, () => {
+        if (isFull) return;
+        if (typeof Network !== 'undefined' && Network.joinRoom) {
+          Network.joinRoom(roomId);
+        }
+      });
+      roomBtn.enabled = !isFull;
+      roomBtn.draw(`${roomId}`, { stroke: isFull ? [150, 50, 50] : [100, 200, 100], text: isFull ? [150, 100, 100] : [100, 255, 100], textSize: 14 });
+      preMatchButtons.push(roomBtn);
       
       // Draw player count squares
       const squareSize = 16;
@@ -3851,19 +3820,16 @@ pop();
   fill(150);
   text('Create New Room:', width / 2, roomY + 20);
   
-  // Create room button (centered)
-  fill(100, 100, 150);
-  stroke(150, 150, 255);
-  strokeWeight(2);
+  // Create room button (centered) - using UIButton for consistent styling
   const createButtonX = (width - roomButtonWidth) / 2;
   const createButtonY = roomY + 50;
-  rect(createButtonX, createButtonY, roomButtonWidth, roomButtonHeight, 8);
-  
-  fill(150, 150, 255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(14);
-  text('Create New Room', width / 2, createButtonY + roomButtonHeight / 2);
+  const createBtn = new UIButton(createButtonX, createButtonY, roomButtonWidth, roomButtonHeight, () => {
+    if (typeof Network !== 'undefined' && Network.createRoom) {
+      Network.createRoom();
+    }
+  });
+  createBtn.draw('Create New Room', { stroke: [150, 150, 255], text: [150, 150, 255], textSize: 14 });
+  preMatchButtons.push(createBtn);
   
   pop();
 }

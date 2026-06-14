@@ -113,7 +113,6 @@ function drawHud() {
   if (window.allFighters && window.allFighters.length >= 2) {
     drawMultiPlayerHuds();
   }
-  drawPauseMenuButton();
 }
 
 // ==========================
@@ -598,31 +597,32 @@ function drawPauseMenu() {
   textAlign(CENTER, TOP);
   textSize(24);
   text('PAUSED', width / 2, menuY + 20);
+  
   const options = ['SETTINGS', 'FORFEIT MATCH'];
   const optionHeight = 50;
   const optionStartY = menuY + 60;
+  
+  // Clear and rebuild pause menu buttons
+  if (typeof pauseMenuButtons !== 'undefined') {
+    pauseMenuButtons = [];
+  }
+  
   options.forEach((option, index) => {
     const optionY = optionStartY + (index * optionHeight);
     const isSelected = index === pauseMenuOption;
-    if (isSelected) {
-      fill(60, 60, 80, 200);
-      stroke(100, 150, 255);
-    } else {
-      fill(40, 40, 40, 200);
-      stroke(255, 50);
+    
+    // Use UIButton for consistent styling
+    const btn = new UIButton(menuX + 20, optionY, menuWidth - 40, 40, () => {
+      pauseMenuOption = index;
+    });
+    const btnColor = isSelected ? [100, 150, 255] : [200, 200, 200];
+    btn.draw(option, { stroke: btnColor, text: btnColor, textSize: 16 });
+    
+    if (typeof pauseMenuButtons !== 'undefined') {
+      pauseMenuButtons.push(btn);
     }
-    strokeWeight(1);
-    rect(menuX + 20, optionY, menuWidth - 40, 40, 8);
-    if (isSelected) {
-      fill(100, 150, 255);
-    } else {
-      fill(200);
-    }
-    noStroke();
-    textAlign(CENTER, CENTER);
-    textSize(16);
-    text(option, width / 2, optionY + 20);
   });
+  
   fill(150);
   textSize(12);
   text('Use UP/DOWN to select, ENTER to confirm, ESC to close', width / 2, menuY + menuHeight - 20);
@@ -632,6 +632,8 @@ function drawPauseMenu() {
 // Settings panel button bounds - stored for click handling in mousePressed
 let settingsPanelDebugBtn = null; // { x, y, w, h }
 let settingsPanelUlgBtn = null; // Ultra Low Graphics toggle button bounds
+// Pause menu buttons array
+let pauseMenuButtons = [];
 
 function drawSettingsPanel() {
   const panelWidth = 500;
@@ -670,25 +672,19 @@ function drawSettingsPanel() {
   // Store button bounds for click handling in mousePressed()
   settingsPanelDebugBtn = { x: btnX, y: btnY, w: btnW, h: btnH };
   
-  push();
-  if (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled) {
-    fill(60, 180, 60);
-    stroke(100, 255, 100);
-  } else {
-    fill(60, 60, 60);
-    stroke(100, 100, 100);
-  }
-  strokeWeight(2);
-  rect(btnX, btnY, btnW, btnH, 6);
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(13);
-  const label = (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled) 
+  // Use UIButton for consistent styling
+  const debugBtnColor = (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled) 
+    ? [100, 255, 100] 
+    : [100, 100, 100];
+  const debugBtn = new UIButton(btnX, btnY, btnW, btnH, () => {
+    if (typeof setDebugGraphics === 'function') {
+      setDebugGraphics();
+    }
+  });
+  const debugLabel = (typeof debugGraphicsEnabled !== 'undefined' && debugGraphicsEnabled) 
     ? 'DEBUG: ON' 
     : 'DEBUG: OFF';
-  text(label, btnX + btnW / 2, btnY + btnH / 2);
-  pop();
+  debugBtn.draw(debugLabel, { stroke: debugBtnColor, text: debugBtnColor, textSize: 13 });
   
   // Impact Visuals toggle button
   const impX = gfxX;
@@ -700,23 +696,13 @@ function drawSettingsPanel() {
   const impBtnW = 180;
   const impBtnH = 28;
 
-  push();
+  // Use UIButton for consistent styling
   const impEnabled = typeof graphicsSettings !== 'undefined' && graphicsSettings.enableImpactVisuals;
-  if (impEnabled) {
-    fill(60, 180, 60);
-    stroke(100, 255, 100);
-  } else {
-    fill(60, 60, 60);
-    stroke(100, 100, 100);
-  }
-  strokeWeight(2);
-  rect(impBtnX, impBtnY, impBtnW, impBtnH, 6);
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(13);
-  text(impEnabled ? 'IMPACT VFX: ON' : 'IMPACT VFX: OFF', impBtnX + impBtnW / 2, impBtnY + impBtnH / 2);
-  pop();
+  const impBtnColor = impEnabled ? [100, 255, 100] : [100, 100, 100];
+  const impBtn = new UIButton(impBtnX, impBtnY, impBtnW, impBtnH, () => {
+    toggleImpactVisuals();
+  });
+  impBtn.draw(impEnabled ? 'IMPACT VFX: ON' : 'IMPACT VFX: OFF', { stroke: impBtnColor, text: impBtnColor, textSize: 13 });
 
   // Ultra Low Graphics toggle button
   const ulgX = gfxX;
@@ -729,25 +715,14 @@ function drawSettingsPanel() {
   // Store button bounds for click handling
   settingsPanelUlgBtn = { x: ulgBtnX, y: ulgBtnY, w: ulgBtnW, h: ulgBtnH };
   
-  push();
-  if (window.ultraLowGraphics) {
-    fill(200, 60, 60);
-    stroke(255, 100, 100);
-  } else {
-    fill(60, 60, 60);
-    stroke(100, 100, 100);
-  }
-  strokeWeight(2);
-  rect(ulgBtnX, ulgBtnY, ulgBtnW, ulgBtnH, 6);
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(13);
-  const ulgLabel = window.ultraLowGraphics 
-    ? 'ULTRA LOW: ON' 
-    : 'ULTRA LOW: OFF';
-  text(ulgLabel, ulgBtnX + ulgBtnW / 2, ulgBtnY + ulgBtnH / 2);
-  pop();
+  // Use UIButton for consistent styling
+  const ulgBtnColor = window.ultraLowGraphics ? [255, 100, 100] : [100, 100, 100];
+  const ulgBtn = new UIButton(ulgBtnX, ulgBtnY, ulgBtnW, ulgBtnH, () => {
+    window.ultraLowGraphics = !window.ultraLowGraphics;
+    console.log('[ULG] Ultra Low Graphics:', window.ultraLowGraphics ? 'ON' : 'OFF');
+  });
+  const ulgLabel = window.ultraLowGraphics ? 'ULTRA LOW: ON' : 'ULTRA LOW: OFF';
+  ulgBtn.draw(ulgLabel, { stroke: ulgBtnColor, text: ulgBtnColor, textSize: 13 });
   
   fill(180);
   textSize(12);

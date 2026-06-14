@@ -25,8 +25,9 @@ const CALLISTO_CONFIG = {
   maxHp: 2819,
   speed: 9,
   attackInterval: 0.75,
-  baseDamage: 27,
-  comboDamage: 4,           // Bonus damage per combo stack
+  baseDamage: 6,
+  comboDamage: 6,           // Bonus damage per combo stack
+  maxCombo: 4,              // Maximum combo count
   knockbackMultiplier: 1.0,
   staggerThreshold: 1409,
   staggerLength: 6,

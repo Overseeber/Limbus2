@@ -600,7 +600,9 @@ class GameplayEngine {
   addCombo(id) {
     const s = this.combatState[id];
     if (!s) return 0;
-    s.combo = Math.min((s.combo || 0) + 1, MAX_COMBO);
+    const config = this.getCharacterConfig(s.characterKey);
+    const maxCombo = config?.maxCombo || MAX_COMBO;
+    s.combo = Math.min((s.combo || 0) + 1, maxCombo);
     s.comboTimer = COMBO_DURATION;
     s.lastAttackHit = true;
     return s.combo;

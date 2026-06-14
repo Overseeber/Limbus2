@@ -17,8 +17,9 @@ const DIHUI_CONFIG = {
   maxHp: 1918,
   speed: 9,
   attackInterval: 1.0,
-  baseDamage: 5,
-  comboDamage: 5,           // Per-combo bonus damage: Damage = BaseDamage + (ComboDamage × ComboCount)
+  baseDamage: 2,
+  comboDamage: 1,           // Per-combo bonus damage: Damage = BaseDamage + (ComboDamage × ComboCount)
+  maxCombo: 12,             // Maximum combo count
   knockbackMultiplier: 0.0, // 0% knockback
   staggerThreshold: 959,
   staggerLength: 4,

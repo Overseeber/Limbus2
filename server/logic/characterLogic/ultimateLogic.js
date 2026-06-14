@@ -930,38 +930,10 @@ function updateDihuiUltimate(fighter, ult, enemies, dt) {
       
         // On first entry, spawn dline instances and deal damage
       if (!ult.dlineSpawned) {
-        // Sum all bladetrail afterimages from all enemies
-        let totalAfterimage = 0;
-        targetEnemies.forEach(e => {
-          if (e && e.statuses) {
-            const ba = e.statuses.find(s => s.type === 'Bladetrail Afterimage');
-            if (ba) totalAfterimage += ba.count;
-          }
-        });
-        ult.dlineCount = Math.min(Math.floor(totalAfterimage / 3)+1, 33);
         ult.dlineSpawned = true;
-        // Dlines spawn at target position (+-50 x pos, +-50 y pos) at random scale (1-3), random rotation
-        targetEnemies.forEach(e => {
-          if (e && !e.isDefeated) {
-            for (let i = 0; i < Math.ceil(ult.dlineCount / Math.max(targetEnemies.filter(te => !te.isDefeated).length, 1)); i++) {
-              const offsetX = random(-50, 50);
-              const offsetY = random(-50, 50);
-              const randomScale = random(1, 3);
-              const randomRotation = random(-Math.PI, Math.PI);
-              ult.slashEvents.push({
-                type: 'dline',
-                frame: 1,
-                x: e.position.x + offsetX,
-                y: e.position.y + offsetY,
-                scale: randomScale,
-                rotation: randomRotation,
-                attachedToTarget: true
-              });
-            }
-          }
-        });
-        // Spawn an additional 10 dlines at random positions around arena at random scale (1-3), random rotation
-        for (let i = 0; i < 10; i++) {
+        
+        // Spawn 20 dline instances at random positions around arena at random scale (1-3), random rotation
+        for (let i = 0; i < 20; i++) {
           const arenaX = random(100, ARENA_WIDTH - 100);
           const arenaY = random(100, ARENA_HEIGHT - 100);
           const randomScale = random(1, 3);

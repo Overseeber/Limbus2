@@ -151,6 +151,40 @@ class Fighter {
     return this.introAnimationData.sprites[this.introAnimationIndex];
   }
 
+  reset() {
+    // Reset all combat state
+    this.pos = { x: 0, y: 0 };
+    this.vel = { x: 0, y: 0 };
+    this.facing = 1;
+    this.state = 'idle';
+    this.hp = this.maxHp;
+    this.isDefeated = false;
+    this.isAttacking = false;
+    this.isGuarding = false;
+    this.isDashing = false;
+    this.isEvading = false;
+    this.isSlamAttacking = false;
+    this.slamHoldPosition = false;
+    this.slamLandingHitbox = null;
+    this.combo = 0;
+    this.dashCharges = 3;
+    this.statuses = [];
+    this.ultimateActive = false;
+    this.ultimatePhase = 0;
+    this.ultimateTimer = 0;
+    this.ultimateDlinesSpawned = false;
+    this.ultimateSlashSpawned = false;
+    this.slashEffects = [];
+    this.isPlayingIntro = false;
+    this.introAnimationIndex = 0;
+    this.introAnimationTimer = 0;
+    this.introAnimationData = null;
+    
+    // Track dba visual effects for blade trail afterimage
+    this.bladetrailDbaEffects = [];
+    this.lastBladetrailCount = 0;
+  }
+
   /**
    * Apply state from server (authoritative update)
    * Called when server broadcasts game state or ability results
@@ -1283,12 +1317,13 @@ class Fighter {
 
   spawnSlashEffect(slashType, targetOffset = null) {
     // Cap slash effects to prevent performance issues
-    if (this.slashEffects.length >= 6) {
-      return; // Don't spawn more than 6 effects
-    }
-    
-    // Check if this is a cbsk effect (Installation Art slash entities)
     const isCbskEffect = ['cbsk1', 'cbsk2', 'cbsk3'].includes(slashType);
+    const isDline = slashType === 'dline';
+    const maxEffects = isDline ? 50 : 6;
+    
+    if (this.slashEffects.length >= maxEffects) {
+      return; // Don't spawn more than max effects
+    }
     
     // Spawn slash effect that shares character position and fades out
     const effect = {
@@ -1296,11 +1331,12 @@ class Fighter {
       // If a world position is provided, draw the effect at that world position
       pos: (targetOffset && targetOffset.worldPos) ? { x: targetOffset.worldPos.x, y: targetOffset.worldPos.y } : { x: this.pos.x, y: this.pos.y },
       facing: this.facing,
-      timer: isCbskEffect ? 5.0 : 0.4, // 5 seconds for cbsk effects, 0.4 for normal slashes
+      timer: (targetOffset && targetOffset.timer) ? targetOffset.timer : (isCbskEffect ? 5.0 : (isDline ? 3.0 : 0.4)), // Use custom timer, default to 3.0s for dline
       targetOffset: targetOffset,
       owner: this,
       rotation: targetOffset && targetOffset.rotation ? targetOffset.rotation : null,
-      groundY: (targetOffset && (targetOffset.groundY !== undefined)) ? targetOffset.groundY : null
+      groundY: (targetOffset && (targetOffset.groundY !== undefined)) ? targetOffset.groundY : null,
+      scale: targetOffset && targetOffset.scale ? targetOffset.scale : 1
     };
     
     this.slashEffects.push(effect);
@@ -1406,6 +1442,10 @@ class Fighter {
             // Apply rotation if set (used by dline effects)
             if (effect.rotation) {
               rotate(effect.rotation);
+            }
+            // Apply scale if set (used by dline effects)
+            if (effect.scale) {
+              scale(effect.scale, effect.scale);
             }
             drawSpriteScaled(effect.type, 0, 0, scaleFactor);
             pop();
@@ -3040,6 +3080,9 @@ addCombo(attacker) {
   }
 
   drawStatusEffects() {
+    // Draw dba visual effects for blade trail afterimage (even if no other statuses)
+    this.drawBladetrailDbaEffects();
+    
     if (this.statuses.length === 0) return;
     
     const baseY = this.pos.y + 10;
@@ -3080,6 +3123,77 @@ addCombo(attacker) {
         textSize(8);
         textAlign(RIGHT, CENTER);
         text(status.count, x + 15, y+80);
+        pop();
+      });
+    }
+  }
+
+  drawBladetrailDbaEffects() {
+    // Initialize arrays if not set
+    if (!this.bladetrailDbaEffects) {
+      this.bladetrailDbaEffects = [];
+    }
+    if (typeof this.lastBladetrailCount === 'undefined') {
+      this.lastBladetrailCount = 0;
+    }
+    
+    // Check blade trail afterimage count on THIS fighter
+    const baStatus = this.statuses ? this.statuses.find(s => s.type === 'Bladetrail Afterimage') : null;
+    const currentCount = baStatus ? baStatus.count : 0;
+    
+    // Calculate target dba count (every 2 stacks = 1 dba, max 7)
+    const targetDbaCount = Math.min(Math.floor(currentCount / 2), 7);
+    
+    // If count changed, update dba effects
+    if (currentCount !== this.lastBladetrailCount) {
+      this.lastBladetrailCount = currentCount;
+      
+      // Draw dba on THIS fighter (the one with bladetrail afterimage)
+      if (currentCount > 0) {
+        // Add new dba effects if needed
+        while (this.bladetrailDbaEffects.length < targetDbaCount) {
+          const offsetX = random(-50, 50);
+          const offsetY = random(-50, 50);
+          const randomRotation = random(-Math.PI, Math.PI);
+          this.bladetrailDbaEffects.push({
+            x: this.pos.x + offsetX,
+            y: this.pos.y + offsetY,
+            rotation: randomRotation,
+            owner: this
+          });
+        }
+        
+        // Remove excess dba effects
+        while (this.bladetrailDbaEffects.length > targetDbaCount) {
+          this.bladetrailDbaEffects.pop();
+        }
+      } else {
+        // No bladetrail afterimage, clear all dba effects
+        this.bladetrailDbaEffects = [];
+      }
+    }
+    
+    // Update dba positions to follow THIS fighter
+    if (this.bladetrailDbaEffects.length > 0) {
+      this.bladetrailDbaEffects.forEach((dba, index) => {
+        // Keep the original offset but update base position to this fighter
+        const offsetX = dba.x - (this.bladetrailDbaEffects[index].lastOwnerX || this.pos.x);
+        const offsetY = dba.y - (this.bladetrailDbaEffects[index].lastOwnerY || this.pos.y);
+        dba.x = this.pos.x + offsetX;
+        dba.y = this.pos.y + offsetY;
+        this.bladetrailDbaEffects[index].lastOwnerX = this.pos.x;
+        this.bladetrailDbaEffects[index].lastOwnerY = this.pos.y;
+      });
+    }
+    
+    // Draw dba effects (scaled down 3x)
+    if (this.bladetrailDbaEffects.length > 0) {
+      this.bladetrailDbaEffects.forEach(dba => {
+        push();
+        translate(dba.x, dba.y);
+        rotate(dba.rotation);
+        scale(1/3, 1/3); // Scale down to 1/3 size
+        drawSprite('dba', 0, 0);
         pop();
       });
     }

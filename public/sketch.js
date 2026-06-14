@@ -1684,21 +1684,36 @@ function handleUltimateSlashEvent(event) {
   const fighter = window.allFighters.find(f => f.clientId === event.fighterId);
   if (!fighter) return;
   
+  // Check if this is a dline effect with world position
+  const isDline = event.slashType === 'dline';
+  
   // Spawn the slash effect using the fighter's spawnSlashEffect method
   if (typeof fighter.spawnSlashEffect === 'function') {
-    fighter.spawnSlashEffect(event.slashType, { x: event.offsetX || 0, y: event.offsetY || 0 });
+    if (isDline && event.worldX !== undefined && event.worldY !== undefined) {
+      // Dline with world position - use longer timer for fade
+      fighter.spawnSlashEffect(event.slashType, {
+        worldPos: { x: event.worldX, y: event.worldY },
+        scale: event.scale || 1,
+        rotation: event.rotation || 0,
+        timer: 3.0 // Longer timer for dline to fade properly
+      });
+    } else {
+      fighter.spawnSlashEffect(event.slashType, { x: event.offsetX || 0, y: event.offsetY || 0 });
+    }
   } else {
     // Fallback: manually add slash effect
     if (!fighter.slashEffects) fighter.slashEffects = [];
-    fighter.slashEffects.push({
+    const effect = {
       type: event.slashType,
-      pos: { x: fighter.pos.x, y: fighter.pos.y },
+      pos: isDline && event.worldX !== undefined ? { x: event.worldX, y: event.worldY } : { x: fighter.pos.x, y: fighter.pos.y },
       facing: fighter.facing,
-      timer: 0.4,
+      timer: isDline ? 3.0 : 0.4, // Longer timer for dline
       targetOffset: { x: event.offsetX || 0, y: event.offsetY || 0 },
       owner: fighter,
-      rotation: null
-    });
+      rotation: event.rotation || null
+    };
+    if (event.scale) effect.scale = event.scale;
+    fighter.slashEffects.push(effect);
   }
 
   applyNetworkScreenShake(event);

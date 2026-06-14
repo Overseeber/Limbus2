@@ -3128,7 +3128,11 @@ tick() {
                         slashType: slashEvent.type,
                         offsetX: slashEvent.offsetX || 0,
                         offsetY: slashEvent.offsetY || 0,
-                        frame: slashEvent.frame || 0
+                        frame: slashEvent.frame || 0,
+                        worldX: slashEvent.x,
+                        worldY: slashEvent.y,
+                        scale: slashEvent.scale,
+                        rotation: slashEvent.rotation
                     });
                 });
             }

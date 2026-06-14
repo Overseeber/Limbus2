@@ -2057,6 +2057,26 @@ function startUnpauseCountdown() {
   unpauseCountdownTimer = 3.0;
 }
 
+// Start pause mode - freezes the game, shows paused overlay
+function startPause() {
+  // Only pause during battle state
+  if (battleState !== BATTLE_STATES.BATTLE) return;
+  pauseMenuOpen = true;
+  pauseMenuOption = 0;
+  battlePaused = true;
+  pauseStartTime = Date.now();
+}
+
+// Close settings and return to pause menu (does NOT start countdown)
+function closeSettingsToPauseMenu() {
+  pauseSettingsOpen = false;
+}
+
+// Exit pause entirely - starts countdown to resume
+function exitPauseWithCountdown() {
+  startUnpauseCountdown();
+}
+
 // Update the unpause countdown each frame
 function updateUnpauseCountdown(dt) {
   if (!unpauseCountdownActive) return;
@@ -2948,11 +2968,11 @@ function keyPressed() {
       return;
     }
     if (keyCode === ESCAPE) {
-      // Close settings first, otherwise close pause menu
+      // Close settings first - return to pause menu (do NOT start countdown)
       if (pauseSettingsOpen) {
         pauseSettingsOpen = false;
       } else {
-        // Start unpause countdown when closing pause menu
+        // Start unpause countdown only when closing the main pause menu
         startUnpauseCountdown();
       }
       return;
@@ -2964,8 +2984,34 @@ function keyPressed() {
   if (battleState === BATTLE_STATES.BATTLE && keyCode === ESCAPE) {
     // Only open pause if not already in countdown
     if (unpauseCountdownActive) return;
+    // Set battle paused immediately to freeze game simulation
+    battlePaused = true;
     pauseMenuOpen = true;
     pauseMenuOption = 0;
+    return;
+  }
+  
+  // Open settings menu from lobby/pre-match screens  
+  if ((battleState === BATTLE_STATES.LOBBY || battleState === BATTLE_STATES.MODE_SELECT) && keyCode === ESCAPE) {
+    // Settings can be opened from pre-match screens too
+    // For now just a no-op since we don't have a settings button on those screens
+    return;
+  }
+  
+  // Toggle settings with F1 key - always accessible after main menu
+  if (keyCode === 112) { // F1
+    if (battleState === BATTLE_STATES.BATTLE) {
+      if (pauseSettingsOpen) {
+        pauseSettingsOpen = false;
+      } else {
+        battlePaused = true;
+        pauseMenuOpen = true;
+        pauseMenuOption = 0;
+      }
+    } else if (battleState === BATTLE_STATES.LOBBY || battleState === BATTLE_STATES.MODE_SELECT || battleState === BATTLE_STATES.SUMMARY) {
+      // Open settings directly when not in battle (no pause needed)
+      pauseSettingsOpen = !pauseSettingsOpen;
+    }
     return;
   }
   
@@ -3143,6 +3189,7 @@ console.log('myRoomState', myRoomState);
 
     // Click on the pause/menu button
     if (mx > buttonX && mx < buttonX + buttonSize && my > buttonY && my < buttonY + buttonSize) {
+      battlePaused = true;
       pauseMenuOpen = true;
       pauseMenuOption = 0;
       return;
@@ -4605,13 +4652,16 @@ function drawPreMatchCharacterSelect() {
   });
   preMatchButtons.push(backBtn);
   
-  // Character name display (top-center)
+  // Character name display (top-center) - use Titles font
   const charData = window.CHARACTERS && window.CHARACTERS[currentViewedCharacter];
   const charName = charData ? charData.name : currentViewedCharacter;
   
   push();
   textAlign(CENTER, TOP);
   textSize(32);
+  if (typeof Titles !== 'undefined' && Titles !== null) {
+    textFont(Titles);
+  }
   fill(255);
   stroke(0);
   strokeWeight(3);
@@ -4632,44 +4682,49 @@ function drawPreMatchCharacterInspect() {
   // Draw kit/passive information
   drawInspectInfo();
   
-  const buttonW = 120;
-  const buttonH = 45;
-  const buttonY = height - 100;
   const centerX = width / 2;
   const buttonGap = 15;
   
-  // Active Page button
-  const activeBtn = new UIButton(centerX - buttonW - buttonGap / 2, buttonY, buttonW, buttonH, () => {
+  // Top area buttons: Active Page, Select, Passive Page arranged horizontally
+  const topButtonW = 140;
+  const topButtonH = 45;
+  const topButtonY = 30;
+  
+  // Active Page button (left)
+  const activeBtn = new UIButton(centerX - topButtonW - buttonGap / 2 - topButtonW / 2, topButtonY, topButtonW, topButtonH, () => {
     inspectPage = 'active';
   });
-  activeBtn.draw('ACTIVE PAGE', {
+  activeBtn.draw('ACTIVE KIT', {
     stroke: inspectPage === 'active' ? [100, 200, 100] : [120, 120, 150],
     fill: inspectPage === 'active' ? [50, 100, 50] : [40, 40, 60],
-    text: 255
+    text: 255,
+    textSize: 14
   });
   preMatchButtons.push(activeBtn);
   
-  // Passive Page button
-  const passiveBtn = new UIButton(centerX + buttonGap / 2, buttonY, buttonW, buttonH, () => {
-    inspectPage = 'passive';
-  });
-  passiveBtn.draw('PASSIVE PAGE', {
-    stroke: inspectPage === 'passive' ? [100, 200, 100] : [120, 120, 150],
-    fill: inspectPage === 'passive' ? [50, 100, 50] : [40, 40, 60],
-    text: 255
-  });
-  preMatchButtons.push(passiveBtn);
-  
-  // Select button (bottom-center, above page buttons)
-  const selectBtn = new UIButton(centerX - 80, buttonY - 60, 160, 45, () => {
+  // Select button (center)
+  const selectBtn = new UIButton(centerX - 80, topButtonY, 160, topButtonH, () => {
     selectCharacter(currentViewedCharacter);
   });
   selectBtn.draw('SELECT', {
     stroke: [100, 200, 100],
     fill: [50, 100, 50],
-    text: 255
+    text: 255,
+    textSize: 16
   });
   preMatchButtons.push(selectBtn);
+  
+  // Passive Page button (right)
+  const passiveBtn = new UIButton(centerX + buttonGap / 2 + topButtonW / 2, topButtonY, topButtonW, topButtonH, () => {
+    inspectPage = 'passive';
+  });
+  passiveBtn.draw('PASSIVE KIT', {
+    stroke: inspectPage === 'passive' ? [100, 200, 100] : [120, 120, 150],
+    fill: inspectPage === 'passive' ? [50, 100, 50] : [40, 40, 60],
+    text: 255,
+    textSize: 14
+  });
+  preMatchButtons.push(passiveBtn);
   
   // Back button (top-left)
   const backBtn = new UIButton(20, 20, 100, 35, () => {
@@ -4684,18 +4739,7 @@ function drawPreMatchCharacterInspect() {
   });
   preMatchButtons.push(backBtn);
   
-  // Character name display (top-center)
-  const charData = window.CHARACTERS && window.CHARACTERS[currentViewedCharacter];
-  const charName = charData ? charData.name : currentViewedCharacter;
-  
-  push();
-  textAlign(CENTER, TOP);
-  textSize(32);
-  fill(255);
-  stroke(0);
-  strokeWeight(3);
-  text(charName, centerX, 30);
-  pop();
+  // Character name is NOT drawn in inspect mode - the kit/passive buttons are in the top area instead
 }
 
 /**

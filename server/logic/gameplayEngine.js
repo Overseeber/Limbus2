@@ -498,9 +498,14 @@ class GameplayEngine {
         case 'Overheat':
         case 'Acceleration Round':
         case 'Shin (心) - Valencina':
-          // Unique passive statuses should only expire by explicit count depletion,
-          // not by generic duration/timer decay.
-          return s.count > 0;
+          // Unique passive statuses should NEVER be filtered out by processStatuses.
+          // Their lifecycle is managed by the character-specific logic (updatePrecognition/updateOverheat
+          // in valencina.js) which handles transitions between Precognition and Overheat.
+          // Keeping them in the array even at count=0 ensures the character logic can detect
+          // when a transition needs to occur (e.g., Precognition→Overheat or Overheat→Precognition).
+          // If processStatuses removes them early, the transition logic never fires and Valencina
+          // ends up with BOTH missing - the bug being fixed.
+          return true;
         default:
           s.timer += dt;
           if (typeof s.remainingTime === 'number') {

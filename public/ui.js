@@ -568,10 +568,24 @@ function drawPauseMenu() {
   rect(0, 0, width, height);
   pop();
   
+  // Draw "PAUSED" in center of screen with Subheadings font
+  push();
+  fill(0, 0, 0, 80);
+  noStroke();
+  rect(0, 0, width, height);
+  fill(255, 200);
+  textAlign(CENTER, CENTER);
+  textSize(60);
+  if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
+    textFont(Subheadings);
+  }
+  text('PAUSED', width / 2, height / 2 - 60);
+  pop();
+  
   // If countdown is active, show countdown instead of menu
   if (typeof unpauseCountdownActive !== 'undefined' && unpauseCountdownActive) {
     push();
-    fill(0, 0, 0, 200);
+    fill(0, 0, 0, 80);
     noStroke();
     rect(0, 0, width, height);
     fill(255);
@@ -596,6 +610,7 @@ function drawPauseMenu() {
   noStroke();
   textAlign(CENTER, TOP);
   textSize(24);
+  textFont(Subheadings || undefined);
   text('PAUSED', width / 2, menuY + 20);
   
   const options = ['SETTINGS', 'FORFEIT MATCH'];

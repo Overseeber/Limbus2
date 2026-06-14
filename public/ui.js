@@ -690,9 +690,37 @@ function drawSettingsPanel() {
   text(label, btnX + btnW / 2, btnY + btnH / 2);
   pop();
   
+  // Impact Visuals toggle button
+  const impX = gfxX;
+  const impY = gfxY + 36;
+  text('- Impact VFX:', impX, impY);
+
+  const impBtnX = impX + 110;
+  const impBtnY = impY - 4;
+  const impBtnW = 180;
+  const impBtnH = 28;
+
+  push();
+  const impEnabled = typeof graphicsSettings !== 'undefined' && graphicsSettings.enableImpactVisuals;
+  if (impEnabled) {
+    fill(60, 180, 60);
+    stroke(100, 255, 100);
+  } else {
+    fill(60, 60, 60);
+    stroke(100, 100, 100);
+  }
+  strokeWeight(2);
+  rect(impBtnX, impBtnY, impBtnW, impBtnH, 6);
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(13);
+  text(impEnabled ? 'IMPACT VFX: ON' : 'IMPACT VFX: OFF', impBtnX + impBtnW / 2, impBtnY + impBtnH / 2);
+  pop();
+
   // Ultra Low Graphics toggle button
   const ulgX = gfxX;
-  const ulgY = gfxY + 36;
+  const ulgY = impY + 36;
   const ulgBtnX = ulgX + 110;
   const ulgBtnY = ulgY - 4;
   const ulgBtnW = 180;

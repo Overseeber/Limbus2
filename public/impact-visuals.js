@@ -1,5 +1,4 @@
 // ==========================
-// ==========================
 // 💥 IMPACT VISUAL SYSTEM (OPTIMIZED)
 // ==========================
 
@@ -40,6 +39,17 @@ function fastRandInt(n) {
   return Math.floor(fastRand() * n);
 }
 
+/**
+ * Toggle impact visuals on/off.
+ * Can be called from settings panel.
+ */
+function toggleImpactVisuals() {
+  graphicsSettings.enableImpactVisuals = !graphicsSettings.enableImpactVisuals;
+  if (!graphicsSettings.enableImpactVisuals) {
+    clearImpactVisuals();
+  }
+}
+
 // Impact visual class for individual particle effects
 class ImpactVisual {
   constructor(type, x, y, tint, rotation = 0) {
@@ -51,46 +61,47 @@ class ImpactVisual {
     this.active = true;
     this.alpha = 255;
 
-    // Per-type state
+    // Per-type state — all sizes scaled x2 for more visible impact
+    // (x2 applied to base sizes, speeds unchanged to keep duration natural)
     switch (type) {
       case 'spark': {
         this.spriteName = SPARK_SPRITES[fastRandInt(3)];
-        this.size = fastRandRange(16, 28);
-        this.sizeSpeed = fastRandRange(60, 120);
+        this.size = fastRandRange(32, 56);          // was 16-28 (x2)
+        this.sizeSpeed = fastRandRange(60, 120);     // same speed
         break;
       }
       case 'flash': {
         this.spriteName = FLASH_SPRITES[fastRandInt(3)];
         this.size = 0;
-        this.maxSize = fastRandRange(40, 70);
-        this.expandSpeed = fastRandRange(120, 200);
-        this.fadeSpeed = fastRandRange(2.0, 3.5);
+        this.maxSize = fastRandRange(80, 140);       // was 40-70 (x2)
+        this.expandSpeed = fastRandRange(240, 400);  // was 120-200 (x2)
+        this.fadeSpeed = fastRandRange(2.0, 3.5);    // same
         break;
       }
       case 'wave': {
         this.spriteName = WAVE_SPRITES[fastRandInt(3)];
         this.size = 0;
-        this.maxSize = fastRandRange(50, 90);
-        this.expandSpeed = fastRandRange(100, 180);
+        this.maxSize = fastRandRange(100, 180);      // was 50-90 (x2)
+        this.expandSpeed = fastRandRange(200, 360);  // was 100-180 (x2)
         this.fadeSpeed = fastRandRange(2.0, 3.0);
         break;
       }
       case 'slash': {
         this.spriteName = 'slash';
         this.width = 0;
-        this.height = fastRandRange(30, 50);
-        this.maxWidth = fastRandRange(120, 200);
-        this.expandSpeed = fastRandRange(300, 500);
-        this.contractSpeed = fastRandRange(60, 120);
+        this.height = fastRandRange(60, 100);        // was 30-50 (x2)
+        this.maxWidth = fastRandRange(240, 400);     // was 120-200 (x2)
+        this.expandSpeed = fastRandRange(600, 1000); // was 300-500 (x2)
+        this.contractSpeed = fastRandRange(120, 240);// was 60-120 (x2)
         break;
       }
       case 'heavyimpact': {
         this.spriteName = 'heavyimpact';
         this.width = 0;
-        this.height = fastRandRange(40, 60);
-        this.maxWidth = fastRandRange(180, 280);
-        this.expandSpeed = fastRandRange(400, 600);
-        this.contractSpeed = fastRandRange(80, 140);
+        this.height = fastRandRange(80, 120);        // was 40-60 (x2)
+        this.maxWidth = fastRandRange(360, 560);     // was 180-280 (x2)
+        this.expandSpeed = fastRandRange(800, 1200); // was 400-600 (x2)
+        this.contractSpeed = fastRandRange(160, 280);// was 80-140 (x2)
         break;
       }
     }
@@ -178,7 +189,6 @@ class ImpactVisual {
     } else if (this.type !== 'spark') {
       tint(255, 255, 255, this.alpha);
     } else {
-      // Sparks: white with full alpha, no tint
       tint(255, 255, 255, this.alpha);
     }
 
@@ -187,16 +197,12 @@ class ImpactVisual {
 
     // Draw based on type
     if (this.type === 'spark') {
-      // Sparks: use uniform size
       image(img, 0, 0, this.size, this.size, cached.sx, cached.sy, cached.sw, cached.sh);
     } else if (this.type === 'flash') {
-      // Flash: uniform expand
       image(img, 0, 0, this.size, this.size, cached.sx, cached.sy, cached.sw, cached.sh);
     } else if (this.type === 'wave') {
-      // Wave: uniform expand
       image(img, 0, 0, this.size, this.size, cached.sx, cached.sy, cached.sw, cached.sh);
     } else if (this.type === 'slash' || this.type === 'heavyimpact') {
-      // Slash/Heavy: lengthwise expand, heightwise contract
       image(img, 0, 0, this.width, this.height, cached.sx, cached.sy, cached.sw, cached.sh);
     }
 
@@ -211,7 +217,7 @@ class ImpactVisual {
  * @param {number} x - World X position of the hit
  * @param {number} y - World Y position of the hit
  * @param {string} attackerCharKey - Character key of the attacker (for tint)
- * @param {boolean} isBlocking - Whether the target is blocking
+ * @param {boolean} isBlocking - Whether the target is blocking (if true, slash not drawn)
  * @param {boolean} isSlamOrUltimateOrThirdHit - Whether this is a slam/ultimate/3rd hit (heavy impact)
  */
 function spawnImpactVisuals(x, y, attackerCharKey, isBlocking = false, isSlamOrUltimateOrThirdHit = false) {
@@ -238,7 +244,8 @@ function spawnImpactVisuals(x, y, attackerCharKey, isBlocking = false, isSlamOrU
     activeImpactVisuals.push(visual);
   }
 
-  // Spawn impact slash if target is NOT blocking (tinted)
+  // Spawn impact slash + heavyimpact if target is NOT blocking (tinted)
+  // Parry is also a defensive state — slash is NOT drawn on parry either
   if (!isBlocking) {
     for (let i = 0; i < random(1, 3); i++) {
       const visual = new ImpactVisual('slash', x, y, tint, random(-PI * 0.25, PI * 0.25));
@@ -253,6 +260,41 @@ function spawnImpactVisuals(x, y, attackerCharKey, isBlocking = false, isSlamOrU
       }
     }
   }
+}
+
+/**
+ * Spawn impact visuals for a parry event.
+ * The defender (parrier) provides the tint color, but the visual
+ * appears on the attacker's (parried fighter's) position.
+ * Slash portion is NOT drawn on parry (consistent with blocking).
+ *
+ * @param {number} x - World X position (parried fighter location)
+ * @param {number} y - World Y position
+ * @param {string} defenderCharKey - Character key of the one who parried (tint source)
+ */
+function spawnParryImpactVisuals(x, y, defenderCharKey) {
+  if (!graphicsSettings.enableImpactVisuals) return;
+
+  const tint = IMPACT_TINTS[defenderCharKey] || DEFAULT_TINT;
+
+  // Sparks (not tinted) - fewer for parry since it's a brief event
+  for (let i = 0; i < random(2, 4); i++) {
+    const visual = new ImpactVisual('spark', x, y, tint, random(-PI, PI));
+    activeImpactVisuals.push(visual);
+  }
+
+  // Flash (tinted with defender's color)
+  for (let i = 0; i < random(2, 3); i++) {
+    const visual = new ImpactVisual('flash', x, y, tint, random(-PI, PI));
+    activeImpactVisuals.push(visual);
+  }
+
+  // Impact wave (tinted with defender's color) — no slash on parry
+  for (let i = 0; i < random(1, 2); i++) {
+    const visual = new ImpactVisual('wave', x, y, tint, random(-PI, PI));
+    activeImpactVisuals.push(visual);
+  }
+  // Intentionally no slash/heavyimpact — parry is a defensive action, no blade cuts through
 }
 
 // Update all active impact visuals

@@ -1759,8 +1759,19 @@ function handleHitNetworkEvent(event) {
       target.pos.x,
       target.pos.y,
       attacker ? attacker.characterKey : 'DEFAULT',
-      !!event.wasGuarded,
+      !!event.wasGuarded || !!event.wasParried,
       isSlamOrUltimateOrThirdHit
+    );
+  }
+
+  // 💥 Spawn parry impact visuals on parry (defender's color at attacker's position)
+  if (event.wasParried && typeof spawnParryImpactVisuals === 'function') {
+    const defender = window.allFighters.find(f => f.clientId === event.targetId);
+    // The parried fighter (attacker) is at the target position - draw defender's color on attacker
+    spawnParryImpactVisuals(
+      target.pos.x,
+      target.pos.y,
+      defender ? defender.characterKey : (attacker ? attacker.characterKey : 'DEFAULT')
     );
   }
 
@@ -3106,6 +3117,20 @@ console.log('myRoomState', myRoomState);
           return;
         }
       }
+      // Check if the impact visuals toggle button was clicked
+      if (typeof toggleImpactVisuals === 'function') {
+        // The impact button is at the same position as the ULG button but 36px above
+        // We need to check its bounds: same x/w as debug button, y = debugBtn.y + 36
+        const impBtnX = settingsPanelDebugBtn ? settingsPanelDebugBtn.x : 0;
+        const impBtnY = settingsPanelDebugBtn ? settingsPanelDebugBtn.y + 36 : 0;
+        const impBtnW = settingsPanelDebugBtn ? settingsPanelDebugBtn.w : 180;
+        const impBtnH = settingsPanelDebugBtn ? settingsPanelDebugBtn.h : 28;
+        if (mx > impBtnX && mx < impBtnX + impBtnW && my > impBtnY && my < impBtnY + impBtnH) {
+          toggleImpactVisuals();
+          return;
+        }
+      }
+
       // Check if the ultra low graphics toggle button was clicked
       if (typeof settingsPanelUlgBtn !== 'undefined' && settingsPanelUlgBtn) {
         const ulgBtn = settingsPanelUlgBtn;

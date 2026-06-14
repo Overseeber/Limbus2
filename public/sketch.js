@@ -298,7 +298,9 @@ class UIButton {
     noStroke();
     textAlign(CENTER, CENTER);
     textSize(style.textSize || 14);
-    textFont('Subtitle');
+    if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
+      textFont(Subheadings);
+    }
     text(label, this.x + this.w / 2, this.y + this.h / 2);
     
     // Reset shadow
@@ -2362,11 +2364,25 @@ function draw() {
 }
 
 function drawModeSelectScreen() {
-  background(20);
+  // Use menu.png as background
+  if (window.menuBackground && window.menuBackground.width > 0) {
+    push();
+    imageMode(CENTER);
+    const scale = Math.max(width / window.menuBackground.width, height / window.menuBackground.height);
+    const drawW = window.menuBackground.width * scale;
+    const drawH = window.menuBackground.height * scale;
+    image(window.menuBackground, width / 2, height / 2, drawW, drawH);
+    pop();
+  } else {
+    background(20);
+  }
   
   push();
   textAlign(CENTER, CENTER);
   textSize(52);
+  if (typeof Titles !== 'undefined' && Titles !== null) {
+    textFont(Titles);
+  }
   fill(255);
   stroke(0);
   strokeWeight(3);
@@ -2376,6 +2392,9 @@ function drawModeSelectScreen() {
   push();
   textAlign(CENTER, CENTER);
   textSize(18);
+  if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
+    textFont(Subheadings);
+  }
   fill(200);
   text('Choose your preferred game mode', width / 2, 150);
   pop();
@@ -2407,6 +2426,9 @@ function drawModeSelectScreen() {
   push();
   textAlign(CENTER, CENTER);
   textSize(14);
+  if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
+    textFont(Subheadings);
+  }
   fill(150);
   text('Play online with other players', multiplayerBtnX + btnW / 2, multiplayerBtnY + btnH + 30);
   text('Practice against AI opponent', cpuBtnX + btnW / 2, cpuBtnY + btnH + 30);
@@ -3007,6 +3029,30 @@ function keyReleased() {
   }
 }
 
+function mouseWheel(event) {
+  // Handle scrolling for room selection
+  if (battleState === BATTLE_STATES.LOBBY && !myRoomState && gameMode === 'multiplayer') {
+    const availRooms = availableRooms || [];
+    const roomButtonHeight = 50;
+    const maxListHeight = height - 200;
+    const totalRoomHeight = availRooms.length * (roomButtonHeight + 20) + 70;
+    
+    // Only scroll if content exceeds visible area
+    if (totalRoomHeight > maxListHeight) {
+      const scrollSpeed = 30;
+      window.roomScrollOffset += event.delta > 0 ? scrollSpeed : -scrollSpeed;
+      
+      // Clamp scroll offset
+      const minOffset = Math.min(0, maxListHeight - totalRoomHeight);
+      const maxOffset = 0;
+      window.roomScrollOffset = Math.max(minOffset, Math.min(maxOffset, window.roomScrollOffset));
+      
+      // Prevent default browser scrolling
+      return false;
+    }
+  }
+}
+
 function mousePressed() {
   console.log('MOUSE PRESSED FIRED');
   console.log('battleState', battleState);
@@ -3287,9 +3333,15 @@ function drawCharacterPreview() {
   push();
   textAlign(LEFT, TOP);
   textSize(28);
+  if (typeof Titles !== 'undefined' && Titles !== null) {
+    textFont(Titles);
+  }
   fill(255);
   text(data.name || key, previewX + 18, previewY + 18);
   textSize(14);
+  if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
+    textFont(Subheadings);
+  }
   fill(180);
   text(data.title || 'Combat specialist', previewX + 18, previewY + 52);
   pop();
@@ -3672,6 +3724,9 @@ pop();
       push();
       textAlign(CENTER, CENTER);
       textSize(14);
+      if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
+        textFont(Subheadings);
+      }
       if (slot.ready) {
         fill(100, 255, 100);
         text('✓ READY', x + (columnWidth - 20) / 2, y + 140);
@@ -3905,6 +3960,17 @@ function drawCharacterArtBackground() {
     const drawH = artImage.height * scale;
     image(artImage, width / 2, height / 2, drawW, drawH);
     pop();
+    
+    // Draw bottomvin.png directly on top of character art
+    if (window.bottomVignette && window.bottomVignette.width > 0) {
+      push();
+      imageMode(CENTER);
+      const vScale = Math.max(width / window.bottomVignette.width, height / window.bottomVignette.height);
+      const vDrawW = window.bottomVignette.width * vScale;
+      const vDrawH = window.bottomVignette.height * vScale;
+      image(window.bottomVignette, width / 2, height / 2, vDrawW, vDrawH);
+      pop();
+    }
   } else {
     // Fallback to solid color background
     push();
@@ -4086,12 +4152,28 @@ function drawPreMatchLobby() {
  * Draw room selection when not in a room (multiplayer mode)
  */
 function drawRoomSelection() {
+  // Use menu.png as background
+  if (window.menuBackground && window.menuBackground.width > 0) {
+    push();
+    imageMode(CENTER);
+    const scale = Math.max(width / window.menuBackground.width, height / window.menuBackground.height);
+    const drawW = window.menuBackground.width * scale;
+    const drawH = window.menuBackground.height * scale;
+    image(window.menuBackground, width / 2, height / 2, drawW, drawH);
+    pop();
+  } else {
+    background(20);
+  }
+  
   push();
   
   // Connection status
   if (typeof Network !== 'undefined' && !Network.isConnected) {
     textAlign(CENTER, CENTER);
     textSize(18);
+    if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
+      textFont(Subheadings);
+    }
     fill(255, 220, 100);
     noStroke();
     text('Connecting to server...', width / 2, 120);
@@ -4116,12 +4198,18 @@ function drawRoomSelection() {
   
   textAlign(CENTER, CENTER);
   textSize(28);
+  if (typeof Titles !== 'undefined' && Titles !== null) {
+    textFont(Titles);
+  }
   fill(255);
   stroke(0);
   strokeWeight(3);
   text('FIND MATCH', width / 2, 50);
   
   textSize(16);
+  if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
+    textFont(Subheadings);
+  }
   fill(180);
   noStroke();
   text('Available Rooms:', width / 2, 90);
@@ -4130,11 +4218,42 @@ function drawRoomSelection() {
   const roomButtonWidth = 300;
   const roomButtonHeight = 50;
   const roomStartX = (width - roomButtonWidth) / 2;
-  let roomY = 120;
+  const listStartY = 160;
+  const maxListHeight = height - 200;
+  let roomY = listStartY;
+  
+  // Initialize scroll offset if not exists
+  if (typeof window.roomScrollOffset === 'undefined') {
+    window.roomScrollOffset = 0;
+  }
+  
+  // Calculate total height needed for room list
+  const totalRoomHeight = availRooms.length * (roomButtonHeight + 20) + 70;
+  
+  // Draw scrollable area background with rectangular outline
+  push();
+  stroke(150, 150, 150);
+  strokeWeight(2);
+  noFill();
+  rect(roomStartX - 10, listStartY - 10, roomButtonWidth + 20, maxListHeight, 5);
+  pop();
+  
+  // Apply clipping for scrollable area
+  push();
+  // Create clipping region
+  clip(() => {
+    rect(roomStartX - 10, listStartY - 10, roomButtonWidth + 20, maxListHeight);
+  });
+  
+  // Apply scroll offset
+  translate(0, window.roomScrollOffset);
   
   if (availRooms.length === 0) {
     fill(130);
     textSize(14);
+    if (typeof Subheadings !== 'undefined' && Subheadings !== null) {
+      textFont(Subheadings);
+    }
     text('No rooms available — create one!', width / 2, roomY + 20);
     roomY += 50;
   } else {
@@ -4145,6 +4264,14 @@ function drawRoomSelection() {
       const maxPlayers = typeof roomData === 'string' ? 2 : (roomData.maxPlayers || 2);
       
       const isFull = players >= maxPlayers;
+      
+      // Draw rectangular outline for room slot
+      push();
+      stroke(isFull ? [200, 100, 100] : [100, 200, 100]);
+      strokeWeight(2);
+      noFill();
+      rect(roomStartX, roomY, roomButtonWidth, roomButtonHeight, 5);
+      pop();
       
       // Room button - full rooms are red/disabled and won't join
       const roomBtn = new UIButton(roomStartX, roomY, roomButtonWidth, roomButtonHeight, () => {
@@ -4196,6 +4323,8 @@ function drawRoomSelection() {
     textSize: 14
   });
   preMatchButtons.push(createBtn);
+  
+  pop(); // End clipping region
   
   pop();
 }

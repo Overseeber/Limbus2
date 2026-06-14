@@ -139,6 +139,8 @@ const ASSET_LOADER = {
     assets.push('data/UI/uivin.png');
     assets.push('data/UI/battleui.png');
     assets.push('data/UI/status.png');
+    assets.push('data/UI/menu.png');
+    assets.push('data/UI/bottomvin.png');
     
     // Character art assets for pre-match flow
     assets.push('data/UI/Vals.png');
@@ -237,6 +239,16 @@ const ASSET_LOADER = {
     window.uiVignette = loadImage('data/UI/uivin.png', () => {
       this._onMenuAssetLoaded();
     }, (err) => console.error('Failed to load UI vignette image:', err));
+    
+    // Load menu background
+    window.menuBackground = loadImage('data/UI/menu.png', () => {
+      this._onMenuAssetLoaded();
+    }, (err) => console.error('Failed to load menu background image:', err));
+    
+    // Load bottom vignette for character art
+    window.bottomVignette = loadImage('data/UI/bottomvin.png', () => {
+      this._onMenuAssetLoaded();
+    }, (err) => console.error('Failed to load bottom vignette image:', err));
     
     // Load battle UI atlas
     atlases.battleui = loadImage('data/UI/battleui.png', () => {

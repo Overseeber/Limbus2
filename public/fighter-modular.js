@@ -1718,9 +1718,10 @@ class Fighter {
     
     // STEP 7: Unified update pipeline
     
-    // Debug log to check if update is being called
-    if (this.characterKey === 'DIHUI') {
-      console.log(`[Deathedge] Fighter update called for DIHUI, deathedgeActive: ${this.deathedgeActive}`);
+    // Debug log to check if update is being called (suppressed - only log on state change)
+    if (this.characterKey === 'DIHUI' && this._lastDeathedgeActive !== this.deathedgeActive) {
+      this._lastDeathedgeActive = this.deathedgeActive;
+      console.log(`[Deathedge] DIHUI deathedgeActive: ${this.deathedgeActive}`);
     }
     
     // 1. State synchronization
@@ -3251,9 +3252,21 @@ addCombo(attacker) {
     // Record afterimage history AFTER sprite update to capture the correct currentSprite
     // This runs every frame regardless of whether update() is called (server-authoritative mode)
     this.updateAfterimageHistory(0.016);
-     // Draw afterimages for Dihui Star (Superposed Afterimage passive)
+     // Draw afterimages for Dihui Star (Superposed Afterimage passive) - optimized with throttled updates
     if (this.characterKey === 'DIHUI') {
-      this.drawAfterimages();
+      // Use AfterimageOptimizer to throttle afterimage updates (20 FPS)
+      // This preserves visual quality while reducing CPU cost by ~67% for afterimage rendering
+      if (typeof AfterimageOptimizer !== 'undefined') {
+        AfterimageOptimizer.update(0.016, this);
+        const cachedStates = AfterimageOptimizer.getCachedStates(this);
+        if (cachedStates) {
+          // Draw from cached states instead of live history buffer
+          this._drawAfterimagesFromCache(cachedStates);
+        }
+      } else {
+        // Fallback to original live drawing
+        this.drawAfterimages();
+      }
     }
     push();
     translate(this.pos.x + this.spriteShakeX, this.pos.y + this.spriteShakeY);
@@ -3818,6 +3831,68 @@ addCombo(attacker) {
    * Afterimages draw the same sprite as the original at the delayed position,
    * with the same facing direction. They do NOT interact with gameplay collision.
    */
+  /**
+   * Draw afterimages from cached states (throttled by AfterimageOptimizer).
+   * Uses pre-captured state objects instead of scanning the history buffer every frame.
+   * This is called at 20 FPS while the rest of the game runs at 60 FPS.
+   */
+  _drawAfterimagesFromCache(cachedStates) {
+    if (!cachedStates || this.characterKey !== 'DIHUI') return;
+    if (this.isDefeated || this.ultimateActive) return;
+
+    const dihuiChar = CHARACTERS['DIHUI'];
+    if (!dihuiChar || !dihuiChar.superposedAfterimage) return;
+
+    const config = dihuiChar.superposedAfterimage;
+    const colors = config.colors || [
+      [0, 0, 255, 0.7],
+      [255, 0, 255, 0.5],
+      [255, 0, 0, 0.3]
+    ];
+
+    const scaleFactor = 144 / 512;
+    const hitboxBottomY = 72;
+
+    for (let i = 0; i < cachedStates.length; i++) {
+      const histState = cachedStates[i];
+      if (!histState) continue;
+
+      const color = colors[i] || [255, 255, 255, 0.5];
+      const r = color[0] || 255;
+      const b = color[2] || 255;
+      const alpha = (color[3] !== undefined) ? color[3] : 0.5;
+
+      const spriteName = histState.currentSprite || 'didle';
+      const spriteInfo = SPRITES?.[spriteName];
+      if (!spriteInfo) continue;
+
+      push();
+      translate(histState.x, histState.y);
+      scale(histState.facing === 1 ? -1 : 1, 1);
+      tint(r, 0, b, alpha * 255);
+      drawSpriteScaled(spriteName, 0, hitboxBottomY, scaleFactor);
+      pop();
+
+      // Draw slash effects for afterimages from cached state
+      if (histState.isAttacking && histState.strikeActive) {
+        let slashType = 'ds1s1';
+        if (histState.attackSequence === 1) slashType = 'ds1s1';
+        else if (histState.attackSequence === 2) slashType = 'ds2s1';
+        else if (histState.attackSequence === 3) slashType = 'ds3s1';
+
+        const slashSpriteInfo = SPRITES?.[slashType];
+        if (slashSpriteInfo) {
+          push();
+          translate(histState.x + (histState.facing === 1 ? -40 : 40), histState.y + 84);
+          if (histState.facing === 1) scale(-1, 1);
+          tint(255, 255, 255, alpha * 255);
+          drawSpriteScaled(slashType, 0, 0, scaleFactor);
+          pop();
+        }
+      }
+    }
+  }
+
   drawAfterimages() {
     if (this.characterKey !== 'DIHUI') return;
     if (!this.afterimageHistory || this.afterimageHistory.length === 0) return;

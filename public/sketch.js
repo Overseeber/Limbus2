@@ -506,6 +506,17 @@ function setup() {//test
   document.oncontextmenu = () => false;
   // Don't initialize fighters here - let character select handle it
 
+  // Initialize performance optimizations
+  if (typeof ShadowRenderer !== 'undefined') {
+    ShadowRenderer.init(700); // Default spawn Y
+  }
+  if (typeof CameraCache !== 'undefined') {
+    CameraCache.invalidate();
+  }
+  if (typeof AfterimageOptimizer !== 'undefined') {
+    AfterimageOptimizer.reset();
+  }
+  
   // Network room handlers
   if (typeof Network !== 'undefined') {
     // Set a callback for when the network connects - main menu will update its prompt
@@ -2223,14 +2234,17 @@ function draw() {
       beginCamera(displayCameraZoom, true);
       drawArena();
       
-      // Draw shadows (above floor, below characters)
-      if (window.shadowImg && window.allFighters) {
+      // Draw shadows (above floor, below characters) - optimized batch
+      if (typeof ShadowRenderer !== 'undefined') {
+        ShadowRenderer.batchDrawAll();
+      } else if (window.shadowImg && window.allFighters) {
+        // Fallback: original shadow rendering
         window.allFighters.forEach(fighter => {
-          const groundY = fighter.spawnY - 34; // Ground level (moved up 100 pixels)
+          const groundY = fighter.spawnY - 34;
           push();
           imageMode(CENTER);
-          tint(255, 200); // Slight transparency
-          const shadowScale = 0.5; // Smaller scale
+          tint(255, 200);
+          const shadowScale = 0.5;
           image(window.shadowImg, fighter.pos.x, groundY, 
                 window.shadowImg.width * shadowScale, 
                 window.shadowImg.height * shadowScale);

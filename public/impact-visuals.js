@@ -213,6 +213,7 @@ class ImpactVisual {
 /**
  * Spawn impact visuals at a given position.
  * Called when damage is dealt to an opponent.
+ * Uses object pooling (ImpactVisualPool) to reduce GC pressure.
  *
  * @param {number} x - World X position of the hit
  * @param {number} y - World Y position of the hit
@@ -223,39 +224,65 @@ class ImpactVisual {
 function spawnImpactVisuals(x, y, attackerCharKey, isBlocking = false, isSlamOrUltimateOrThirdHit = false) {
   // Respect graphics settings
   if (!graphicsSettings.enableImpactVisuals) return;
+  
+  // Cap total active visuals to prevent performance degradation
+  if (activeImpactVisuals.length >= graphicsSettings.maxActiveVisuals) return;
 
   const tint = IMPACT_TINTS[attackerCharKey] || DEFAULT_TINT;
+  const usePool = typeof ImpactVisualPool !== 'undefined';
+  
+  // Pre-compute random values once to reduce Math.random calls
+  const numSparks = 3 + Math.floor(Math.random() * 3); // 3-5
+  const numFlashes = 2 + Math.floor(Math.random() * 2); // 2-3
+  const numWaves = 1 + Math.floor(Math.random() * 2); // 1-2
+  const numSlashes = isBlocking ? 0 : (1 + Math.floor(Math.random() * 2)); // 1-2 or 0
+  const numHeavy = (!isBlocking && isSlamOrUltimateOrThirdHit) ? (1 + Math.floor(Math.random() * 2)) : 0; // 1-2 or 0
+  
+  // Pre-allocate rotations array to avoid random() calls in loop
+  const total = numSparks + numFlashes + numWaves + numSlashes + numHeavy;
+  
+  // Track if we'll exceed the cap
+  if (activeImpactVisuals.length + total > graphicsSettings.maxActiveVisuals) return;
 
-  // Always spawn sparks (not tinted)
-  for (let i = 0; i < random(3, 6); i++) {
-    const visual = new ImpactVisual('spark', x, y, tint, random(-PI, PI));
+  // Spawn sparks (not tinted)
+  for (let i = 0; i < numSparks; i++) {
+    const visual = usePool
+      ? ImpactVisualPool.acquire('spark', x, y, tint, Math.random() * Math.PI * 2 - Math.PI)
+      : new ImpactVisual('spark', x, y, tint, Math.random() * Math.PI * 2 - Math.PI);
     activeImpactVisuals.push(visual);
   }
 
-  // Always spawn flash (tinted)
-  for (let i = 0; i < random(2, 4); i++) {
-    const visual = new ImpactVisual('flash', x, y, tint, random(-PI, PI));
+  // Spawn flash (tinted)
+  for (let i = 0; i < numFlashes; i++) {
+    const visual = usePool
+      ? ImpactVisualPool.acquire('flash', x, y, tint, Math.random() * Math.PI * 2 - Math.PI)
+      : new ImpactVisual('flash', x, y, tint, Math.random() * Math.PI * 2 - Math.PI);
     activeImpactVisuals.push(visual);
   }
 
-  // Always spawn impact wave (tinted)
-  for (let i = 0; i < random(1, 3); i++) {
-    const visual = new ImpactVisual('wave', x, y, tint, random(-PI, PI));
+  // Spawn impact wave (tinted)
+  for (let i = 0; i < numWaves; i++) {
+    const visual = usePool
+      ? ImpactVisualPool.acquire('wave', x, y, tint, Math.random() * Math.PI * 2 - Math.PI)
+      : new ImpactVisual('wave', x, y, tint, Math.random() * Math.PI * 2 - Math.PI);
     activeImpactVisuals.push(visual);
   }
 
-  // Spawn impact slash + heavyimpact if target is NOT blocking (tinted)
-  // Parry is also a defensive state — slash is NOT drawn on parry either
+  // Spawn impact slash if target is NOT blocking
   if (!isBlocking) {
-    for (let i = 0; i < random(1, 3); i++) {
-      const visual = new ImpactVisual('slash', x, y, tint, random(-PI * 0.25, PI * 0.25));
+    for (let i = 0; i < numSlashes; i++) {
+      const visual = usePool
+        ? ImpactVisualPool.acquire('slash', x, y, tint, Math.random() * Math.PI * 0.5 - Math.PI * 0.25)
+        : new ImpactVisual('slash', x, y, tint, Math.random() * Math.PI * 0.5 - Math.PI * 0.25);
       activeImpactVisuals.push(visual);
     }
 
-    // Spawn heavy impact only for specific cases (tinted)
+    // Spawn heavy impact only for specific cases
     if (isSlamOrUltimateOrThirdHit) {
-      for (let i = 0; i < random(1, 3); i++) {
-        const visual = new ImpactVisual('heavyimpact', x, y, tint, random(-PI * 0.2, PI * 0.2));
+      for (let i = 0; i < numHeavy; i++) {
+        const visual = usePool
+          ? ImpactVisualPool.acquire('heavyimpact', x, y, tint, Math.random() * Math.PI * 0.4 - Math.PI * 0.2)
+          : new ImpactVisual('heavyimpact', x, y, tint, Math.random() * Math.PI * 0.4 - Math.PI * 0.2);
         activeImpactVisuals.push(visual);
       }
     }
